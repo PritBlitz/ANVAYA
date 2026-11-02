@@ -31,6 +31,7 @@ function operation(r: RouteDoc): Json {
   if (r.query) params.push(...queryParams(r.query));
   if (r.idempotency) params.push({ name: 'Idempotency-Key', in: 'header', required: r.idempotency === 'required', schema: { type: 'string', minLength: 8, maxLength: 255, pattern: '^[A-Za-z0-9._:-]+$' } });
   if (!r.public && r.method !== 'get') params.push({ name: 'X-CSRF-Token', in: 'header', required: true, schema: { type: 'string' }, description: 'Value of the anvaya_csrf cookie' });
+  if (r.workspaceHeader) params.push({ name: 'X-Workspace-Id', in: 'header', required: false, schema: { type: 'string', format: 'uuid' }, description: 'Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)' });
   params.push({ name: 'X-Request-Id', in: 'header', required: false, schema: { type: 'string' } });
   if (r.sse) params.push({ name: 'Last-Event-ID', in: 'header', required: false, schema: { type: 'string' } });
 

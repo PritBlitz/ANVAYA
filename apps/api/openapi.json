@@ -3886,12 +3886,22 @@
           {
             "name": "workspace_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
           },
           {
             "name": "X-Request-Id",
@@ -4062,7 +4072,6 @@
                   }
                 },
                 "required": [
-                  "workspace_id",
                   "installation_id",
                   "state",
                   "code"
@@ -4179,12 +4188,22 @@
           {
             "name": "workspace_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
           },
           {
             "name": "X-Request-Id",
@@ -4671,7 +4690,7 @@
           {
             "name": "workspace_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string",
               "format": "uuid",
@@ -4690,6 +4709,16 @@
                 "disconnected"
               ]
             }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
           },
           {
             "name": "X-Request-Id",
@@ -4826,6 +4855,16 @@
             "description": "Value of the anvaya_csrf cookie"
           },
           {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
+          },
+          {
             "name": "X-Request-Id",
             "in": "header",
             "required": false,
@@ -4863,7 +4902,6 @@
                   }
                 },
                 "required": [
-                  "workspace_id",
                   "installation_id",
                   "external_repository_id"
                 ],
@@ -5965,13 +6003,13 @@
         }
       }
     },
-    "/repositories/{repositoryId}/file": {
+    "/repositories/{repositoryId}/files/content": {
       "get": {
         "tags": [
           "Indexing"
         ],
         "summary": "File content at an indexed commit (citations)",
-        "operationId": "get_repositories_repositoryId_file",
+        "operationId": "get_repositories_repositoryId_files_content",
         "parameters": [
           {
             "name": "repositoryId",
@@ -6000,6 +6038,15 @@
                   "pattern": "^[0-9a-f]{40}$"
                 }
               ]
+            }
+          },
+          {
+            "name": "commit_sha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
             }
           },
           {
@@ -6908,6 +6955,16 @@
             "description": "Value of the anvaya_csrf cookie"
           },
           {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
+          },
+          {
             "name": "X-Request-Id",
             "in": "header",
             "required": false,
@@ -6937,9 +6994,6 @@
                     ]
                   }
                 },
-                "required": [
-                  "workspace_id"
-                ],
                 "additionalProperties": false
               }
             }
@@ -7953,7 +8007,7 @@
         "tags": [
           "Tasks"
         ],
-        "summary": "List tasks",
+        "summary": "List tasks (with repository_full_name and latest_run)",
         "operationId": "get_tasks",
         "parameters": [
           {
@@ -7979,7 +8033,7 @@
           {
             "name": "workspace_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string",
               "format": "uuid",
@@ -8011,6 +8065,16 @@
                 "archived"
               ]
             }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
           },
           {
             "name": "X-Request-Id",
@@ -8758,12 +8822,245 @@
         }
       }
     },
+    "/runs": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "List workspace runs (repeat status= to filter by several)",
+        "operationId": "get_runs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "repository_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "task_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "queued",
+                    "retrieving_context",
+                    "investigating",
+                    "planning",
+                    "awaiting_plan_approval",
+                    "preparing_workspace",
+                    "implementing",
+                    "verifying",
+                    "reviewing",
+                    "awaiting_pr_approval",
+                    "creating_pr",
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "timed_out",
+                    "rejected",
+                    "completed_without_pr"
+                  ]
+                },
+                {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "retrieving_context",
+                      "investigating",
+                      "planning",
+                      "awaiting_plan_approval",
+                      "preparing_workspace",
+                      "implementing",
+                      "verifying",
+                      "reviewing",
+                      "awaiting_pr_approval",
+                      "creating_pr",
+                      "completed",
+                      "failed",
+                      "cancelled",
+                      "timed_out",
+                      "rejected",
+                      "completed_without_pr"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Alternative to workspace_id; if both are sent they must match (400 WORKSPACE_MISMATCH)"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/{runId}": {
       "get": {
         "tags": [
           "Runs"
         ],
-        "summary": "Run detail",
+        "summary": "Run detail (with approvals and pull_request)",
         "operationId": "get_runs_runId",
         "parameters": [
           {

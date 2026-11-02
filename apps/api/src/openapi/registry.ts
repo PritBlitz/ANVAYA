@@ -11,7 +11,7 @@ import { createKnowledgeBody, listKnowledgeQuery } from '../knowledge/knowledge.
 import { createRepositoryBody, listRepositoriesQuery, queueIndexBody, updateRepositoryBody } from '../repositories/repositories.schemas.js';
 import { dispositionBody, prApprovalBody, pullRequestBody } from '../review/review.service.js';
 import { cancelBody, sseQuery } from '../runs/runs.controller.js';
-import { createTaskBody, editPlanBody, listTasksQuery, planApprovalBody, planSchema, startRunBody, updateTaskBody } from '../runs/run.schemas.js';
+import { createTaskBody, editPlanBody, listRunsQuery, listTasksQuery, planApprovalBody, planSchema, startRunBody, updateTaskBody } from '../runs/run.schemas.js';
 import {
   acceptInvitationBody,
   changeRoleBody,
@@ -41,6 +41,8 @@ export interface RouteDoc {
   paginated?: boolean;
   idempotency?: 'optional' | 'required';
   sse?: boolean;
+  /** Accepts `X-Workspace-Id` as an alternative to an explicit `workspace_id` (GAP-02). */
+  workspaceHeader?: boolean;
 }
 
 const runId = { description: 'Run id' };
@@ -83,16 +85,16 @@ export const ROUTES: RouteDoc[] = [
   { method: 'get', path: '/workspaces/{workspaceId}/audit-events', tag: 'Audit', summary: 'Audit history (admin+)', status: 200, query: auditQuery, paginated: true },
 
   // GitHub
-  { method: 'get', path: '/integrations/github/install-url', tag: 'GitHub', summary: 'GitHub App install URL with a bound single-use state', status: 200, query: workspaceQuery },
+  { method: 'get', path: '/integrations/github/install-url', tag: 'GitHub', summary: 'GitHub App install URL with a bound single-use state', status: 200, query: workspaceQuery, workspaceHeader: true },
   { method: 'post', path: '/integrations/github/complete', tag: 'GitHub', summary: 'Complete the installation handshake', status: 200, body: completeInstallationBody },
-  { method: 'get', path: '/integrations/github/installations', tag: 'GitHub', summary: 'List connected installations', status: 200, query: workspaceQuery },
+  { method: 'get', path: '/integrations/github/installations', tag: 'GitHub', summary: 'List connected installations', status: 200, query: workspaceQuery, workspaceHeader: true },
   { method: 'get', path: '/integrations/github/installations/{id}/repositories', tag: 'GitHub', summary: 'Repositories granted by an installation', status: 200, query: availableReposQuery },
   { method: 'delete', path: '/integrations/github/installations/{id}', tag: 'GitHub', summary: 'Disconnect installation', status: 204 },
   { method: 'post', path: '/webhooks/github', tag: 'GitHub', summary: 'Receive signed GitHub webhooks (HMAC on raw body)', public: true, status: 202 },
 
   // Repositories & indexing
-  { method: 'get', path: '/repositories', tag: 'Repositories', summary: 'List repositories', status: 200, query: listRepositoriesQuery, paginated: true },
-  { method: 'post', path: '/repositories', tag: 'Repositories', summary: 'Register a repository from an installation', status: 201, body: createRepositoryBody, idempotency: 'optional' },
+  { method: 'get', path: '/repositories', tag: 'Repositories', summary: 'List repositories', status: 200, query: listRepositoriesQuery, paginated: true, workspaceHeader: true },
+  { method: 'post', path: '/repositories', tag: 'Repositories', summary: 'Register a repository from an installation', status: 201, body: createRepositoryBody, idempotency: 'optional', workspaceHeader: true },
   { method: 'get', path: '/repositories/{repositoryId}', tag: 'Repositories', summary: 'Repository details', status: 200 },
   { method: 'patch', path: '/repositories/{repositoryId}', tag: 'Repositories', summary: 'Update repository settings (admin+)', status: 200, body: updateRepositoryBody },
   { method: 'delete', path: '/repositories/{repositoryId}', tag: 'Repositories', summary: 'Disconnect repository and delete index data', status: 204 },
@@ -100,14 +102,14 @@ export const ROUTES: RouteDoc[] = [
   { method: 'get', path: '/repositories/{repositoryId}/index-status', tag: 'Indexing', summary: 'Index status, coverage and limitations', status: 200 },
   { method: 'get', path: '/repositories/{repositoryId}/snapshots', tag: 'Indexing', summary: 'Indexed snapshots', status: 200, query: paginationQuery, paginated: true },
   { method: 'get', path: '/repositories/{repositoryId}/tree', tag: 'Indexing', summary: 'Directory listing at an indexed commit', status: 200, query: treeQuery },
-  { method: 'get', path: '/repositories/{repositoryId}/file', tag: 'Indexing', summary: 'File content at an indexed commit (citations)', status: 200, query: fileQuery },
+  { method: 'get', path: '/repositories/{repositoryId}/files/content', tag: 'Indexing', summary: 'File content at an indexed commit (citations)', status: 200, query: fileQuery },
   { method: 'post', path: '/repositories/{repositoryId}/search', tag: 'Indexing', summary: 'Hybrid lexical + semantic search', status: 200, body: searchBody },
 
   // AI
   { method: 'post', path: '/repositories/{repositoryId}/questions', tag: 'AI', summary: 'Grounded repository question', status: 200, body: askBody },
   { method: 'get', path: '/workspaces/{workspaceId}/ai-policy', tag: 'AI', summary: 'Read provider policy', status: 200 },
   { method: 'patch', path: '/workspaces/{workspaceId}/ai-policy', tag: 'AI', summary: 'Update provider policy (admin+)', status: 200, body: updateAiPolicyBody },
-  { method: 'post', path: '/ai/providers/health-check', tag: 'AI', summary: 'Check a provider permitted by policy', status: 200, body: healthCheckBody },
+  { method: 'post', path: '/ai/providers/health-check', tag: 'AI', summary: 'Check a provider permitted by policy', status: 200, body: healthCheckBody, workspaceHeader: true },
   { method: 'get', path: '/workspaces/{workspaceId}/usage', tag: 'AI', summary: 'Usage summary', status: 200, query: usageQuery },
 
   // Knowledge
@@ -118,12 +120,13 @@ export const ROUTES: RouteDoc[] = [
 
   // Tasks & runs
   { method: 'post', path: '/repositories/{repositoryId}/tasks', tag: 'Tasks', summary: 'Create task (manual or GitHub issue)', status: 201, body: createTaskBody, idempotency: 'optional' },
-  { method: 'get', path: '/tasks', tag: 'Tasks', summary: 'List tasks', status: 200, query: listTasksQuery, paginated: true },
+  { method: 'get', path: '/tasks', tag: 'Tasks', summary: 'List tasks (with repository_full_name and latest_run)', status: 200, query: listTasksQuery, paginated: true, workspaceHeader: true },
   { method: 'get', path: '/tasks/{taskId}', tag: 'Tasks', summary: 'Task detail', status: 200 },
   { method: 'patch', path: '/tasks/{taskId}', tag: 'Tasks', summary: 'Update task metadata', status: 200, body: updateTaskBody },
   { method: 'post', path: '/tasks/{taskId}/runs', tag: 'Runs', summary: 'Start workflow run (budgets clamped to policy)', status: 202, body: startRunBody, idempotency: 'optional' },
   { method: 'get', path: '/tasks/{taskId}/runs', tag: 'Runs', summary: 'List task runs', status: 200, query: paginationQuery, paginated: true },
-  { method: 'get', path: '/runs/{runId}', tag: 'Runs', summary: 'Run detail', status: 200 },
+  { method: 'get', path: '/runs', tag: 'Runs', summary: 'List workspace runs (repeat status= to filter by several)', status: 200, query: listRunsQuery, paginated: true, workspaceHeader: true },
+  { method: 'get', path: '/runs/{runId}', tag: 'Runs', summary: 'Run detail (with approvals and pull_request)', status: 200 },
   { method: 'get', path: '/runs/{runId}/events', tag: 'Runs', summary: 'SSE event stream with Last-Event-ID replay', status: 200, query: sseQuery, sse: true },
   { method: 'post', path: '/runs/{runId}/cancel', tag: 'Runs', summary: 'Cancel run', status: 200, body: cancelBody },
   { method: 'post', path: '/runs/{runId}/retry', tag: 'Runs', summary: 'Retry a failed/timed-out/cancelled run', status: 202, idempotency: 'optional' },
