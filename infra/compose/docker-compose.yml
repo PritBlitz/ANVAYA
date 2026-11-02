@@ -1,0 +1,98 @@
+# Local development dependencies for the Anvaya backend.
+# Ports are bound to 127.0.0.1 only. Credentials here are local-only placeholders.
+name: anvaya-dev
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: anvaya
+      POSTGRES_PASSWORD: anvaya_local_only
+      POSTGRES_DB: anvaya
+    ports:
+      - "127.0.0.1:${ANVAYA_PG_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anvaya -d anvaya"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    ports:
+      - "127.0.0.1:${ANVAYA_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # --- Full stack (optional): docker compose --profile app up -d --build ---
+  # Local-development credentials only. The containerized worker runs with
+  # EXECUTION_DRIVER=disabled: the host Docker socket is never mounted into
+  # application containers (CLAUDE.md §10). Run the execution plane separately.
+  ai-service:
+    profiles: ["app"]
+    build: ../../services/ai-service
+    environment:
+      NODE_ENV: development
+      AI_SERVICE_TOKEN: local-dev-ai-service-token-change-me
+      EMBEDDING_PROVIDER: ${ANVAYA_EMBEDDING_PROVIDER:-mock}
+      OLLAMA_BASE_URL: ${ANVAYA_OLLAMA_URL:-http://host.docker.internal:11434}
+    ports:
+      - "127.0.0.1:8001:8001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    profiles: ["app"]
+    build: ../../apps/api
+    command: ["sh", "-c", "node dist/database/migrate.cli.js && node dist/main.js"]
+    environment: &api-env
+      NODE_ENV: development
+      PORT: "3001"
+      DATABASE_URL: postgres://anvaya:anvaya_local_only@postgres:5432/anvaya
+      REDIS_URL: redis://redis:6379/0
+      WEB_ORIGINS: http://localhost:3000
+      WEB_APP_URL: http://localhost:3000
+      PUBLIC_API_URL: http://localhost:3001
+      COOKIE_SECURE: "false"
+      AUTH_DEV_LOGIN_ENABLED: "true"
+      AI_SERVICE_URL: http://ai-service:8001
+      AI_SERVICE_TOKEN: local-dev-ai-service-token-change-me
+      STORAGE_DIR: /app/storage
+      EXECUTION_DRIVER: disabled
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - storage:/app/storage
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      ai-service: { condition: service_started }
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  worker:
+    profiles: ["app"]
+    build: ../../apps/api
+    command: ["node", "dist/main.worker.js"]
+    # The worker has no HTTP server; the image's API healthcheck does not apply.
+    healthcheck:
+      disable: true
+    environment: *api-env
+    volumes:
+      - storage:/app/storage
+    depends_on:
+      api: { condition: service_started }
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  pgdata:
+  storage:
