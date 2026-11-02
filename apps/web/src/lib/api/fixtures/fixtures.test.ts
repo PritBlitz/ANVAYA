@@ -470,3 +470,18 @@ describe("fixture adapter contract", () => {
     expect(received.at(-1)).toBe("run.completed");
   });
 });
+
+describe("list paging", () => {
+  it("collects every page up to the bound", async () => {
+    const { collectPages } = await import("../queries");
+    const pages = [
+      { items: [1, 2], next_cursor: "a" },
+      { items: [3], next_cursor: "b" },
+      { items: [4], next_cursor: null },
+    ];
+    let calls = 0;
+    expect(await collectPages(async () => pages[calls++]!)).toEqual([1, 2, 3, 4]);
+    calls = 0;
+    expect(await collectPages(async () => pages[calls++]!, 2)).toEqual([1, 2, 3]);
+  });
+});
