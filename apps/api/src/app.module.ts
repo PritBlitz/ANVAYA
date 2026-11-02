@@ -14,6 +14,7 @@ import { WebhookProcessor } from './github/webhook.processor.js';
 import { WebhooksController } from './github/webhooks.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { MetricsController } from './health/metrics.controller.js';
+import { CodeIntelController } from './indexing/code-intel.controller.js';
 import { IndexingController } from './indexing/indexing.controller.js';
 import { IndexingModule } from './indexing/indexing.module.js';
 import { AiClientModule } from './ai/ai-client.js';
@@ -52,6 +53,7 @@ import { WorkspacesService } from './workspaces/workspaces.service.js';
     WebhooksController,
     RepositoriesController,
     IndexingController,
+    CodeIntelController,
     AiController,
     KnowledgeController,
     TasksController,

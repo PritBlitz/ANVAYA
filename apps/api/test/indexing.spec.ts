@@ -283,6 +283,78 @@ describe('repository indexing and retrieval', () => {
     });
   });
 
+  describe('code intelligence', () => {
+    const base = () => `/repositories/${repoUuid}`;
+
+    it('searches symbols by name and kind with cursor pagination', async () => {
+      const res = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&q=token&kind=function`).expect(200);
+      const names = res.body.data.map((s: { name: string }) => s.name);
+      expect(names).toContain('issueToken');
+      for (const s of res.body.data) expect(s).toMatchObject({ kind: 'function', commit_sha: SHA1 });
+      const issue = res.body.data.find((s: { name: string }) => s.name === 'issueToken');
+      expect(issue).toMatchObject({ path: 'src/auth/token.ts', start_line: expect.any(Number), end_line: expect.any(Number) });
+
+      const all: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&limit=2${cursor ? `&cursor=${cursor}` : ''}`).expect(200);
+        all.push(...page.body.data.map((s: { id: string }) => s.id));
+        cursor = page.body.meta.page?.next_cursor ?? null;
+      } while (cursor);
+      expect(new Set(all).size).toBe(all.length);
+      const full = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&limit=100`).expect(200);
+      expect(all.length).toBe(full.body.data.length);
+    });
+
+    it('never lists symbols from excluded files and filters by path', async () => {
+      const all = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&limit=100`).expect(200);
+      const paths = new Set(all.body.data.map((s: { path: string }) => s.path));
+      expect(paths.has('config/keys.ts')).toBe(false);
+      expect(paths.has('src/legacy/old.ts')).toBe(false);
+      const dir = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&path=billing/`).expect(200);
+      expect(dir.body.data.length).toBeGreaterThan(0);
+      for (const s of dir.body.data) expect(s.path).toBe('billing/invoice.py');
+      await as(viewer, 'get', `${base()}/symbols?cursor=not-a-cursor`).expect(422);
+    });
+
+    it('returns a symbol with resolved outgoing and incoming references', async () => {
+      const list = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&q=issueToken`).expect(200);
+      const issue = list.body.data.find((s: { name: string }) => s.name === 'issueToken');
+      const detail = await as(viewer, 'get', `${base()}/symbols/${issue.id}?snapshot=${SHA1}`).expect(200);
+      expect(detail.body.data.symbol).toMatchObject({ id: issue.id, name: 'issueToken' });
+      const callers = detail.body.data.incoming.filter((r: { type: string }) => r.type === 'calls');
+      expect(callers.length).toBeGreaterThan(0);
+      expect(callers[0]).toMatchObject({ source: { path: 'src/auth/token.ts' }, line: expect.any(Number) });
+
+      const refresh = (await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&q=refreshAccessToken`).expect(200)).body.data[0];
+      const out = await as(viewer, 'get', `${base()}/symbols/${refresh.id}?snapshot=${SHA1}`).expect(200);
+      const verify = out.body.data.outgoing.find((r: { target_name: string }) => r.target_name === 'verify');
+      expect(verify).toMatchObject({ type: 'calls', target: { path: 'src/auth/jwt.ts', name: 'verify' } });
+      await as(viewer, 'get', `${base()}/symbols/${randomUUID()}?snapshot=${SHA1}`).expect(404);
+    });
+
+    it('builds a file-level dependency map with external packages', async () => {
+      const res = await as(viewer, 'get', `${base()}/dependency-map?snapshot=${SHA1}`).expect(200);
+      const map = res.body.data;
+      expect(map.commit_sha).toBe(SHA1);
+      expect(map.edges).toContainEqual(expect.objectContaining({ source: 'src/auth/token.ts', target: 'src/auth/jwt.ts', count: 1 }));
+      expect(map.external).toContainEqual(expect.objectContaining({ name: 'stripe', importer_count: 1 }));
+      const nodePaths = map.nodes.map((n: { path: string }) => n.path);
+      expect(nodePaths).toContain('src/auth/jwt.ts');
+      expect(nodePaths).not.toContain('config/keys.ts');
+      expect(map.nodes.find((n: { path: string }) => n.path === 'src/auth/jwt.ts')).toMatchObject({ imported_by: 1 });
+
+      const scoped = await as(viewer, 'get', `${base()}/dependency-map?snapshot=${SHA1}&path=billing`).expect(200);
+      expect(scoped.body.data.edges).toEqual([]);
+      expect(scoped.body.data.nodes.map((n: { path: string }) => n.path)).toEqual(['billing/invoice.py']);
+    });
+
+    it('conceals code intelligence from other tenants', async () => {
+      await as(outsider, 'get', `${base()}/symbols`).expect(404);
+      await as(outsider, 'get', `${base()}/dependency-map`).expect(404);
+    });
+  });
+
   describe('incremental re-index on push', () => {
     const changed = TOKEN_TS.replace("throw new Error('refresh token expired');", "throw new TokenExpiredError('refresh token expired');");
 
