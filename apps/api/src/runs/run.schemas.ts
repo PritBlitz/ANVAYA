@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { canonicalJson, sha256Hex } from '../common/crypto.js';
 import { paginationQuery } from '../common/http.js';
+import type { RunStatus } from '../database/types.js';
 import { pathPattern } from '../repositories/repositories.schemas.js';
+import { TRANSITIONS } from './state-machine.js';
 
 const shortText = z.string().trim().min(1).max(500);
 const relPath = pathPattern.refine((p) => !p.includes('*'), 'must be a file path, not a pattern');
@@ -98,8 +100,21 @@ export const updateTaskBody = z
   .strict()
   .refine((b) => Object.keys(b).length > 0, 'at least one field is required');
 
+const runStatusEnum = z.enum(Object.keys(TRANSITIONS) as [RunStatus, ...RunStatus[]]);
+
+/** `GET /runs` (GAP-05): `status` may repeat (`?status=a&status=b`). */
+export const listRunsQuery = paginationQuery.extend({
+  workspace_id: z.uuid().optional(),
+  repository_id: z.uuid().optional(),
+  task_id: z.uuid().optional(),
+  status: z
+    .union([runStatusEnum, z.array(runStatusEnum).max(20)])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])),
+});
+
 export const listTasksQuery = paginationQuery.extend({
-  workspace_id: z.uuid(),
+  workspace_id: z.uuid().optional(),
   repository_id: z.uuid().optional(),
   status: z.enum(['open', 'active', 'completed', 'failed', 'cancelled', 'archived']).optional(),
 });

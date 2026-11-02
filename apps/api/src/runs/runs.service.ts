@@ -12,7 +12,7 @@ import { QueueService } from '../queue/queues.js';
 import { AccessService } from '../workspaces/access.service.js';
 import { runBudgetLimitsSchema } from '../workspaces/workspaces.schemas.js';
 import { RunEventsService } from './run-events.service.js';
-import { DEFAULT_RUN_BUDGET, editPlanBody, planApprovalBody, planHash, planSchema, type RunBudget, startRunBody } from './run.schemas.js';
+import { DEFAULT_RUN_BUDGET, editPlanBody, type listRunsQuery, planApprovalBody, planHash, planSchema, type RunBudget, startRunBody } from './run.schemas.js';
 import { RunTransitionsService } from './run-transitions.service.js';
 import { HUMAN_STATES, isTerminal, WORKER_STATES } from './state-machine.js';
 
@@ -145,10 +145,60 @@ export class RunsService {
     return toPage(rows, limit, ({ cursor_us: _c, ...r }) => runView(r));
   }
 
+  /** Workspace-wide run list (GAP-05), newest first, with task/repository labels for list views. */
+  async listForWorkspace(userId: string, workspaceId: string, q: Omit<z.infer<typeof listRunsQuery>, 'workspace_id'>): Promise<Page<unknown>> {
+    await this.access.requireWorkspace(userId, workspaceId);
+    const cursor = decodeCursor(q.cursor);
+    let query = this.database.db
+      .selectFrom('workflow_runs as r')
+      .innerJoin('engineering_tasks as t', 't.id', 'r.task_id')
+      .innerJoin('repositories as repo', 'repo.id', 'r.repository_id')
+      .selectAll('r')
+      .select(['t.title as task_title', 'repo.full_name as repository_full_name'])
+      .select(cursorUs('r.created_at').as('cursor_us'))
+      .where('r.organization_id', '=', workspaceId);
+    if (q.repository_id) query = query.where('r.repository_id', '=', q.repository_id);
+    if (q.task_id) query = query.where('r.task_id', '=', q.task_id);
+    if (q.status?.length) query = query.where('r.status', 'in', q.status);
+    if (cursor) query = query.where(beforeCursor('r.created_at', 'r.id', cursor));
+    const rows = await query.orderBy('r.created_at', 'desc').orderBy('r.id', 'desc').limit(q.limit + 1).execute();
+    return toPage(rows, q.limit, ({ cursor_us: _c, task_title, repository_full_name, ...r }) => ({ ...runView(r), task_title, repository_full_name }));
+  }
+
   async get(userId: string, runId: string) {
     const { run } = await this.access.requireRun(userId, runId);
-    const plan = await this.latestPlan(runId);
-    return { ...runView(run), plan_hash: plan?.content_hash ?? null, plan_version: plan?.version ?? null, data_disclosure: (run.checkpoint.data_disclosure) ?? null };
+    const [plan, labels, approvals, pr] = await Promise.all([
+      this.latestPlan(runId),
+      this.database.db
+        .selectFrom('engineering_tasks as t')
+        .innerJoin('repositories as repo', 'repo.id', 't.repository_id')
+        .select(['t.title as task_title', 'repo.full_name as repository_full_name'])
+        .where('t.id', '=', run.task_id)
+        .executeTakeFirstOrThrow(),
+      this.database.db
+        .selectFrom('approvals')
+        .select(['id', 'approval_type', 'decision', 'subject_hash', 'comment', 'user_id', 'created_at'])
+        .where('run_id', '=', runId)
+        .orderBy('created_at')
+        .orderBy('id')
+        .execute(),
+      this.database.db
+        .selectFrom('pull_requests')
+        .select(['id', 'pr_number', 'pr_url', 'head_branch', 'base_branch', 'created_at'])
+        .where('run_id', '=', runId)
+        .orderBy('created_at', 'desc')
+        .limit(1)
+        .executeTakeFirst(),
+    ]);
+    return {
+      ...runView(run),
+      ...labels,
+      plan_hash: plan?.content_hash ?? null,
+      plan_version: plan?.version ?? null,
+      data_disclosure: run.checkpoint.data_disclosure ?? null,
+      approvals: approvals.map((a) => ({ ...a, created_at: a.created_at.toISOString() })),
+      pull_request: pr ? { ...pr, created_at: pr.created_at.toISOString() } : null,
+    };
   }
 
   async cancel(userId: string, runId: string, reason?: string) {

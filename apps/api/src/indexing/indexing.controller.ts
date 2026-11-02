@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { sql } from 'kysely';
 import { z } from 'zod';
-import { Errors } from '../common/errors.js';
+import { AppError, Errors } from '../common/errors.js';
 import { Idempotent } from '../common/idempotency.js';
 import { decodeCursor, paginationQuery, toPage, UuidParamPipe, ZodPipe } from '../common/http.js';
 import { RateLimit } from '../common/rate-limit.js';
@@ -36,6 +36,8 @@ export const searchBody = z
 export const treeQuery = z.object({ snapshot: snapshotParam, path: z.string().max(1024).default('') });
 export const fileQuery = z.object({
   snapshot: snapshotParam,
+  /** Alias for `snapshot` with a full commit SHA (GAP-04). If both are sent they must agree. */
+  commit_sha: z.string().regex(/^[0-9a-f]{40}$/).optional(),
   path: z.string().min(1).max(1024),
   start_line: z.coerce.number().int().min(1).optional(),
   end_line: z.coerce.number().int().min(1).optional(),
@@ -228,12 +230,15 @@ export class IndexingController {
   }
 
   /** File content at the indexed commit, for citation viewing. Excluded files are never served. */
-  @Get('file')
+  @Get('files/content')
   async file(@CurrentUser() user: AuthUser, @Param('repositoryId', new UuidParamPipe('Repository')) id: string, @Query(new ZodPipe(fileQuery)) q: z.infer<typeof fileQuery>) {
     const { repository } = await this.access.requireRepository(user.id, id);
-    const snap = await this.retrieval.resolveSnapshot(repository, q.snapshot);
+    if (q.commit_sha && q.snapshot !== 'latest' && q.snapshot !== q.commit_sha) {
+      throw Errors.validation({ issues: [{ path: 'commit_sha', message: 'must match snapshot when both are sent', code: 'invalid_value' }] });
+    }
+    const snap = await this.retrieval.resolveSnapshot(repository, q.commit_sha ?? q.snapshot);
     const path = normalizePath(q.path);
-    if (!path) throw Errors.notFound('File');
+    if (!path) throw Errors.badRequest('The path is not a valid repository-relative path.');
     const f = await this.database.db
       .selectFrom('repository_files')
       .select(['path', 'content_hash', 'language', 'line_count', 'is_excluded', 'exclusion_reason', 'parse_status'])
@@ -241,7 +246,7 @@ export class IndexingController {
       .where('path', '=', path)
       .executeTakeFirst();
     if (!f) throw Errors.notFound('File');
-    if (f.is_excluded) throw Errors.conflict('FILE_EXCLUDED', 'This file was excluded from indexing.', { reason: f.exclusion_reason });
+    if (f.is_excluded) throw new AppError(403, 'FILE_EXCLUDED', 'This file was excluded from indexing.', { reason: f.exclusion_reason });
     const blob = await this.storage.get(blobKey(id, f.content_hash));
     if (!blob) throw Errors.unavailable('CONTENT_UNAVAILABLE', 'File content is not available in storage.');
     const lines = blob.toString('utf8').split(/\r?\n/);
