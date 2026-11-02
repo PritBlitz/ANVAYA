@@ -9,6 +9,7 @@
  * (optional fields, `string` for enums) so the UI degrades gracefully on additions.
  */
 import type { paths } from "./generated/openapi";
+import type * as T from "./types";
 import type * as W from "./wire";
 
 type Success<R> = R extends { 200: infer X }
@@ -124,4 +125,29 @@ export type ContractChecks = [
     Fits<Data<"/runs/{runId}/findings/{findingId}/disposition", "post">, W.WFindingDisposition>
   >,
   Expect<Fits<Data<"/runs/{runId}/pull-request", "post">, W.WPullRequest>>,
+];
+
+/**
+ * Exact enum checks for values the UI branches on. A new server value the UI doesn't
+ * know about fails typecheck here, so status/label maps can't silently miss it.
+ */
+type Subset<Server, Ui> = [Server] extends [Ui] ? true : { unknown_to_ui: Exclude<Server, Ui> };
+type RunStatusOf = Data<"/runs/{runId}", "get">["status"];
+type ModeOf = Data<"/workspaces/{workspaceId}/ai-policy", "get">["default_mode"];
+type IndexingOf = Item<Data<"/repositories", "get">>["indexing_status"];
+type SeverityOf = Item<Data<"/runs/{runId}/review", "get">["deterministic_findings"]>["severity"];
+type FindingStatusOf = Item<Data<"/runs/{runId}/review", "get">["ai_findings"]>["status"];
+type SymbolKindOf = Item<Data<"/repositories/{repositoryId}/symbols", "get">>["kind"];
+type CitationSourceOf = Item<
+  Data<"/repositories/{repositoryId}/questions", "post">["citations"]
+>["source"];
+
+export type EnumChecks = [
+  Expect<Subset<RunStatusOf, T.RunStatus>>,
+  Expect<Subset<ModeOf, T.InferenceMode>>,
+  Expect<Subset<IndexingOf, T.IndexingStatus>>,
+  Expect<Subset<SeverityOf, T.Severity>>,
+  Expect<Subset<FindingStatusOf, T.FindingStatus>>,
+  Expect<Subset<SymbolKindOf, T.SymbolKind>>,
+  Expect<Subset<CitationSourceOf, T.Citation["source"]>>,
 ];
