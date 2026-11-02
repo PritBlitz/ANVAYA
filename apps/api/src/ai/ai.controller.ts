@@ -1,6 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { UuidParamPipe, ZodPipe } from '../common/http.js';
+import { paginationQuery, UuidParamPipe, ZodPipe } from '../common/http.js';
 import { Errors } from '../common/errors.js';
 import { RateLimit } from '../common/rate-limit.js';
 import { resolveWorkspaceId, WorkspaceHeader } from '../common/workspace-scope.js';
@@ -77,5 +77,21 @@ export class AiController {
   @RateLimit({ bucket: 'ai', max: 30, windowSeconds: 60 })
   ask(@CurrentUser() user: AuthUser, @Param('repositoryId', new UuidParamPipe('Repository')) repositoryId: string, @Body(new ZodPipe(askBody)) body: z.infer<typeof askBody>) {
     return this.questions.ask(user.id, repositoryId, body);
+  }
+  /** The caller's own question history for a repository, newest first (B-8). */
+  @Get('repositories/:repositoryId/questions')
+  history(@CurrentUser() user: AuthUser, @Param('repositoryId', new UuidParamPipe('Repository')) repositoryId: string, @Query(new ZodPipe(paginationQuery)) q: z.infer<typeof paginationQuery>) {
+    return this.questions.history(user.id, repositoryId, q);
+  }
+
+  @Get('questions/:questionId')
+  question(@CurrentUser() user: AuthUser, @Param('questionId', new UuidParamPipe('Question')) questionId: string) {
+    return this.questions.getQuestion(user.id, questionId);
+  }
+
+  @Delete('questions/:questionId')
+  @HttpCode(204)
+  async deleteQuestion(@CurrentUser() user: AuthUser, @Param('questionId', new UuidParamPipe('Question')) questionId: string): Promise<void> {
+    await this.questions.deleteQuestion(user.id, questionId);
   }
 }

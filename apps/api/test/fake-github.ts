@@ -29,6 +29,14 @@ export interface TokenGrant {
   repositoryIds: number[] | null;
 }
 
+export interface FakeProfile {
+  id: number;
+  login: string;
+  name?: string;
+  publicEmail?: string | null;
+  emails: Array<{ email: string; primary: boolean; verified: boolean }> | 'forbidden';
+}
+
 /**
  * In-process fake of the GitHub REST API surface Anvaya uses. App JWTs are
  * cryptographically verified against the generated key pair so tests exercise
@@ -44,6 +52,9 @@ export class FakeGithub {
   /** OAuth code → installation ids visible to that user. */
   readonly oauthCodes = new Map<string, number[]>();
   private readonly userTokens = new Map<string, number[]>();
+  /** OAuth code → signed-in GitHub profile; `emails: 'forbidden'` simulates a missing "Email addresses" permission. */
+  readonly oauthProfiles = new Map<string, FakeProfile>();
+  private readonly tokenProfiles = new Map<string, FakeProfile>();
   private readonly installationTokens = new Map<string, TokenGrant>();
   readonly grants: TokenGrant[] = [];
   readonly pulls: Array<{ repoId: number; number: number; id: number; title: string; head: string; base: string; body: string; commitSha: string; files: Record<string, string | null> }> = [];
@@ -78,11 +89,26 @@ export class FakeGithub {
 
     app.post('/login/oauth/access_token', (req: Request, res: Response) => {
       const body = req.body as { code?: string; client_secret?: string };
-      const visible = body.code ? this.oauthCodes.get(body.code) : undefined;
+      const profile = body.code ? this.oauthProfiles.get(body.code) : undefined;
+      const visible = body.code ? (this.oauthCodes.get(body.code) ?? (profile ? [] : undefined)) : undefined;
       if (!visible || body.client_secret !== 'test-client-secret') return void res.json({ error: 'bad_verification_code' });
       const token = `gho_${randomBytes(18).toString('hex')}`;
       this.userTokens.set(token, visible);
+      if (profile) this.tokenProfiles.set(token, profile);
       res.json({ access_token: token, token_type: 'bearer' });
+    });
+
+    app.get('/user', (req, res) => {
+      const p = this.tokenProfiles.get(bearer(req) ?? '');
+      if (!p) return void res.status(401).json({ message: 'Bad credentials' });
+      res.json({ id: p.id, login: p.login, name: p.name ?? null, avatar_url: null, email: p.publicEmail ?? null });
+    });
+
+    app.get('/user/emails', (req, res) => {
+      const p = this.tokenProfiles.get(bearer(req) ?? '');
+      if (!p) return void res.status(401).json({ message: 'Bad credentials' });
+      if (p.emails === 'forbidden') return void res.status(403).json({ message: 'Resource not accessible by integration' });
+      res.json(p.emails);
     });
 
     app.get('/user/installations', (req, res) => {

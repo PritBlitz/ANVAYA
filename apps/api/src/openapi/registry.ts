@@ -6,6 +6,7 @@ import { auditQuery } from '../audit/audit.controller.js';
 import { paginationQuery } from '../common/http.js';
 import { availableReposQuery, completeInstallationBody, workspaceQuery } from '../github/integrations.controller.js';
 import { callbackQuery, devLoginBody } from '../identity/auth.controller.js';
+import { dependencyMapQuery, symbolDetailQuery, symbolsQuery } from '../indexing/code-intel.controller.js';
 import { fileQuery, searchBody, treeQuery } from '../indexing/indexing.controller.js';
 import { createKnowledgeBody, listKnowledgeQuery } from '../knowledge/knowledge.controller.js';
 import { createRepositoryBody, listRepositoriesQuery, queueIndexBody, updateRepositoryBody } from '../repositories/repositories.schemas.js';
@@ -105,8 +106,16 @@ export const ROUTES: RouteDoc[] = [
   { method: 'get', path: '/repositories/{repositoryId}/files/content', tag: 'Indexing', summary: 'File content at an indexed commit (citations)', status: 200, query: fileQuery },
   { method: 'post', path: '/repositories/{repositoryId}/search', tag: 'Indexing', summary: 'Hybrid lexical + semantic search', status: 200, body: searchBody },
 
+  // Code intelligence (GAP-15)
+  { method: 'get', path: '/repositories/{repositoryId}/symbols', tag: 'Code intelligence', summary: 'Search parsed symbols (keyset pagination by name)', status: 200, query: symbolsQuery, paginated: true },
+  { method: 'get', path: '/repositories/{repositoryId}/symbols/{symbolId}', tag: 'Code intelligence', summary: 'Symbol with outgoing and incoming references', status: 200, query: symbolDetailQuery },
+  { method: 'get', path: '/repositories/{repositoryId}/dependency-map', tag: 'Code intelligence', summary: 'File-level import graph with external packages', status: 200, query: dependencyMapQuery },
+
   // AI
-  { method: 'post', path: '/repositories/{repositoryId}/questions', tag: 'AI', summary: 'Grounded repository question', status: 200, body: askBody },
+  { method: 'post', path: '/repositories/{repositoryId}/questions', tag: 'AI', summary: 'Grounded repository question (code and knowledge-note evidence; saved to history)', status: 200, body: askBody },
+  { method: 'get', path: '/repositories/{repositoryId}/questions', tag: 'AI', summary: "The caller's own question history, newest first", status: 200, query: paginationQuery, paginated: true },
+  { method: 'get', path: '/questions/{questionId}', tag: 'AI', summary: 'One of your saved questions', status: 200 },
+  { method: 'delete', path: '/questions/{questionId}', tag: 'AI', summary: 'Delete one of your saved questions', status: 204 },
   { method: 'get', path: '/workspaces/{workspaceId}/ai-policy', tag: 'AI', summary: 'Read provider policy', status: 200 },
   { method: 'patch', path: '/workspaces/{workspaceId}/ai-policy', tag: 'AI', summary: 'Update provider policy (admin+)', status: 200, body: updateAiPolicyBody },
   { method: 'post', path: '/ai/providers/health-check', tag: 'AI', summary: 'Check a provider permitted by policy', status: 200, body: healthCheckBody, workspaceHeader: true },

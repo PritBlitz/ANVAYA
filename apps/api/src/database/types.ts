@@ -181,6 +181,41 @@ export interface CodeChunksTable {
   created_at: Generated<Date>;
 }
 
+export interface KnowledgeChunksTable {
+  id: Generated<string>;
+  document_id: string;
+  organization_id: string;
+  repository_id: string;
+  chunk_index: number;
+  start_line: number;
+  end_line: number;
+  content: string;
+  content_hash: string;
+  /** pgvector literal, e.g. '[0.1,0.2,...]'. */
+  embedding: string | null;
+  embedding_model: string | null;
+  embedding_version: string | null;
+  search_vector: ColumnType<string, never, never>;
+  created_at: Generated<Date>;
+}
+
+export interface RepositoryQuestionsTable {
+  id: Generated<string>;
+  organization_id: string;
+  repository_id: string;
+  user_id: string;
+  question: string;
+  answer: string;
+  insufficient_evidence: boolean;
+  citations: Json<unknown[]>;
+  limitations: Json<string[]>;
+  provider: string | null;
+  model: string | null;
+  mode: string | null;
+  commit_sha: string | null;
+  created_at: Generated<Date>;
+}
+
 export interface SymbolsTable {
   id: Generated<string>;
   repository_id: string;
@@ -512,6 +547,8 @@ export interface Database {
   symbols: SymbolsTable;
   symbol_relationships: SymbolRelationshipsTable;
   knowledge_documents: KnowledgeDocumentsTable;
+  knowledge_chunks: KnowledgeChunksTable;
+  repository_questions: RepositoryQuestionsTable;
   engineering_tasks: EngineeringTasksTable;
   workflow_runs: WorkflowRunsTable;
   run_state_transitions: RunStateTransitionsTable;

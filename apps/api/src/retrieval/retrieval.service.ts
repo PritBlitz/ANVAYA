@@ -46,6 +46,8 @@ export interface RetrievedChunk {
 
 export interface RetrievalResult {
   results: RetrievedChunk[];
+  /** The query embedding, when one was computed (lets callers search other corpora without re-embedding). Internal; never serialized. */
+  queryEmbedding?: { vector: number[]; model: string; version: string } | null;
   retrieval: {
     snapshot_id: string;
     commit_sha: string;
@@ -121,6 +123,7 @@ export class RetrievalService {
     const semantic = new Map<string, { rank: number; score: number }>();
     let semanticStatus: RetrievalResult['retrieval']['semantic'] = mode === 'lexical' ? 'disabled' : 'ok';
     let semanticReason: string | null = null;
+    let queryEmbedding: RetrievalResult['queryEmbedding'] = null;
 
     if (mode !== 'semantic') {
       const terms = lexicalTerms(q.query);
@@ -141,6 +144,7 @@ export class RetrievalService {
       try {
         const emb = await this.ai.embed([q.query], 'query');
         const modelTag = `${emb.model}@${emb.model_version}`;
+        queryEmbedding = { vector: emb.embeddings[0]!, model: emb.model, version: emb.model_version };
         if (snap.embedding_model && snap.embedding_model !== modelTag) {
           semanticStatus = 'unavailable';
           semanticReason = `query embedding model ${modelTag} does not match the index (${snap.embedding_model}); re-index required`;
@@ -213,6 +217,7 @@ export class RetrievalService {
 
     return {
       results,
+      queryEmbedding,
       retrieval: {
         snapshot_id: snap.id,
         commit_sha: snap.commit_sha,

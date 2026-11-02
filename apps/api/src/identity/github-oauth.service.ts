@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { randomToken } from '../common/crypto.js';
-import { AppError, Errors } from '../common/errors.js';
+import { Errors } from '../common/errors.js';
 import { logger } from '../common/logger.js';
 import { AppConfig } from '../config/config.js';
 import type { ExternalIdentity } from './users.service.js';
 
 const tokenResponse = z.object({ access_token: z.string().min(1) }).or(z.object({ error: z.string(), error_description: z.string().optional() }));
-const githubUser = z.object({ id: z.number().int(), login: z.string(), name: z.string().nullable().optional(), avatar_url: z.string().nullable().optional() });
+const githubUser = z.object({ id: z.number().int(), login: z.string(), name: z.string().nullable().optional(), avatar_url: z.string().nullable().optional(), email: z.string().nullable().optional() });
 const githubEmails = z.array(z.object({ email: z.string(), primary: z.boolean(), verified: z.boolean() }));
 
 const log = logger('github-oauth');
@@ -72,31 +72,43 @@ export class GithubOAuthService {
     const auth = { Authorization: `Bearer ${token.data.access_token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     const [userRes, emailsRes] = await Promise.all([
       this.request(new URL('/user', this.config.env.GITHUB_API_URL), { headers: auth }),
-      this.request(new URL('/user/emails', this.config.env.GITHUB_API_URL), { headers: auth }),
+      this.request(new URL('/user/emails', this.config.env.GITHUB_API_URL), { headers: auth }, { allowFailure: true }),
     ]);
-    // A GitHub App can only read /user/emails with the "Email addresses: read" account permission.
-    if (emailsRes.status === 403 || emailsRes.status === 404) {
-      log.warn({ status: emailsRes.status }, 'github app lacks the "Email addresses" account permission');
-      throw new AppError(502, 'GITHUB_EMAIL_PERMISSION_MISSING', 'The GitHub App needs the "Email addresses" (read-only) account permission.');
-    }
-    if (!userRes.ok || !emailsRes.ok) {
-      log.warn({ user_status: userRes.status, emails_status: emailsRes.status }, 'github profile request failed');
-      throw Errors.upstream('GITHUB_BAD_RESPONSE', 'Unexpected response from GitHub.');
-    }
     const user = githubUser.safeParse(await userRes.json());
-    const emails = githubEmails.safeParse(await emailsRes.json());
-    if (!user.success || !emails.success) throw Errors.upstream('GITHUB_BAD_RESPONSE', 'Unexpected response from GitHub.');
-    const primary = emails.data.find((e) => e.primary && e.verified);
-    if (!primary) throw Errors.forbidden('Your GitHub account needs a verified primary email address.');
+    if (!user.success) throw Errors.upstream('GITHUB_BAD_RESPONSE', 'Unexpected response from GitHub.');
     return {
       subject: `github:${user.data.id}`,
-      email: primary.email,
+      email: await this.resolveEmail(user.data, emailsRes),
       displayName: user.data.name ?? user.data.login,
       avatarUrl: user.data.avatar_url ?? null,
     };
   }
 
-  private async request(url: URL, init: RequestInit): Promise<Response> {
+  /**
+   * The verified primary address when GitHub lets us read it. A GitHub App can
+   * only read /user/emails with the "Email addresses: read" account permission;
+   * without it we fall back to the public profile address and finally to the
+   * account's GitHub noreply address, so sign-in never depends on that setting.
+   * The identity itself is keyed on the immutable GitHub user id, not the email.
+   */
+  private async resolveEmail(user: z.infer<typeof githubUser>, emailsRes: Response): Promise<string> {
+    if (emailsRes.ok) {
+      const emails = githubEmails.safeParse(await emailsRes.json());
+      if (!emails.success) throw Errors.upstream('GITHUB_BAD_RESPONSE', 'Unexpected response from GitHub.');
+      const primary = emails.data.find((e) => e.primary && e.verified);
+      if (primary) return primary.email;
+      throw Errors.forbidden('Your GitHub account needs a verified primary email address.');
+    }
+    if (emailsRes.status !== 403 && emailsRes.status !== 404) {
+      log.warn({ emails_status: emailsRes.status }, 'github email request failed');
+      throw Errors.upstream('GITHUB_ERROR', `GitHub responded with status ${emailsRes.status}.`);
+    }
+    log.warn({ status: emailsRes.status }, 'github app lacks the "Email addresses" account permission; using a fallback address');
+    if (user.email) return user.email;
+    return `${user.id}+${user.login}@users.noreply.github.com`;
+  }
+
+  private async request(url: URL, init: RequestInit, opts: { allowFailure?: boolean } = {}): Promise<Response> {
     let res: Response;
     try {
       res = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000), redirect: 'error' });
@@ -104,7 +116,7 @@ export class GithubOAuthService {
       log.warn({ err: (err as Error).message, host: url.host }, 'github request failed');
       throw Errors.upstream('GITHUB_UNAVAILABLE', 'GitHub could not be reached.');
     }
-    if (!res.ok) throw Errors.upstream('GITHUB_ERROR', `GitHub responded with status ${res.status}.`);
+    if (!res.ok && !opts.allowFailure) throw Errors.upstream('GITHUB_ERROR', `GitHub responded with status ${res.status}.`);
     return res;
   }
 }
