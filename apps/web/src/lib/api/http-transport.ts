@@ -1,4 +1,6 @@
 import { RUN_EVENT_TYPES, type RunEventPayload } from "./types";
+
+const TERMINAL_EVENTS = new Set<string>(["run.completed", "run.failed", "run.cancelled"]);
 import {
   buildQueryString,
   type EventStreamHandlers,
@@ -99,6 +101,9 @@ export class HttpTransport implements Transport {
           return; // ignore malformed frames rather than crashing the timeline
         }
         handlers.onEvent({ id: message.lastEventId, type, payload });
+        // The server closes the stream after a terminal event. Close our side too, or
+        // EventSource would reconnect every `retry` interval forever.
+        if (TERMINAL_EVENTS.has(type)) source.close();
       };
       source.addEventListener(type, listener);
       return [type, listener] as const;

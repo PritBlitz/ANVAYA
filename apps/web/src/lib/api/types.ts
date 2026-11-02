@@ -18,8 +18,8 @@ export type ISODateTime = string;
 
 export interface ResponseMeta {
   request_id?: string;
-  /** Cursor pagination (API_SPEC §1). GAP-09: location of next_cursor is assumed. */
-  next_cursor?: string | null;
+  /** Cursor pagination (backend: meta.page). */
+  page?: { next_cursor: string | null; has_more: boolean };
 }
 
 export interface SuccessEnvelope<T> {
@@ -104,7 +104,11 @@ export interface Invitation {
   id: UUID;
   email: string;
   role: WorkspaceRole;
+  status: "pending" | "accepted" | "revoked" | "expired";
+  expires_at: ISODateTime | null;
   created_at: ISODateTime;
+  /** Returned only when the invitation is created; share it with the invitee. */
+  accept_url?: string;
 }
 
 // ── Git integrations and repositories (API_SPEC §3) ──────────────────────
@@ -122,10 +126,21 @@ export interface GitInstallation {
   created_at: ISODateTime;
 }
 
+/** Server-issued GitHub App install URL with a single-use, server-held state (GAP-14). */
+export interface GitHubInstallUrl {
+  url: string;
+  state: string;
+  expires_in_seconds: number;
+}
+
 export interface CompleteInstallationRequest {
+  /** Optional: the server-held state already identifies the workspace. */
+  workspace_id?: UUID;
   installation_id: number;
-  setup_action?: string;
-  state?: string;
+  state: string;
+  /** GitHub appends `code` because the App requests user authorization during install. */
+  code: string;
+  setup_action?: "install" | "update" | "request";
 }
 
 /** GAP-03: repositories visible to an installation that are not yet registered. */
@@ -135,7 +150,7 @@ export interface AvailableRepository {
   owner: string;
   name: string;
   default_branch: string | null;
-  visibility: RepositoryVisibility;
+  visibility: RepositoryVisibility | null;
   installation_id: UUID;
 }
 
@@ -153,7 +168,8 @@ export const INDEXING_STATUSES = [
 export type IndexingStatus = (typeof INDEXING_STATUSES)[number];
 
 export interface RepositorySettings {
-  excluded_paths?: string[];
+  exclude_paths?: string[];
+  verification_profiles?: string[];
 }
 
 export interface Repository {
@@ -178,6 +194,8 @@ export interface Repository {
 export interface RegisterRepositoryRequest {
   installation_id: UUID;
   external_repository_id: number;
+  /** Queue the initial index in the same request. */
+  index?: boolean;
 }
 
 export interface UpdateRepositoryRequest {
@@ -224,6 +242,8 @@ export interface IndexStatus {
   limitations: string[];
   errors: { path: string | null; message: string }[];
   embedding_model: string | null;
+  /** True while an indexing job is queued or running (poll while true). */
+  active: boolean;
 }
 
 export interface TreeEntry {
@@ -231,15 +251,22 @@ export interface TreeEntry {
   name: string;
   type: "file" | "directory";
   language?: string | null;
-  byte_size?: number;
+  byte_size?: number | null;
+  line_count?: number | null;
   is_excluded?: boolean;
   exclusion_reason?: string | null;
+  /** Directories only: number of files below, when known. */
+  file_count?: number;
+  /** Directories are listed lazily: undefined means "not loaded yet". */
   children?: TreeEntry[];
 }
 
+/** One directory level of the snapshot (GET /repositories/:id/tree?path=). */
 export interface FileTree {
   commit_sha: string;
+  path: string;
   entries: TreeEntry[];
+  truncated: boolean;
 }
 
 /** GAP-04: proposed GET /repositories/:id/files/content?path=&commit_sha= */
@@ -250,6 +277,9 @@ export interface FileContent {
   language: string | null;
   content: string;
   line_count: number;
+  /** Range actually returned (large files are capped per request). */
+  start_line?: number;
+  end_line?: number;
   truncated: boolean;
 }
 
@@ -297,20 +327,24 @@ export interface Citation {
 export interface AskQuestionRequest {
   question: string;
   snapshot?: "latest" | string;
+  mode?: InferenceMode;
 }
 
-/** GAP-06: API_SPEC lists required content but not field names. */
 export interface QuestionAnswer {
-  id?: UUID;
   question: string;
   answer: string;
+  /** True when retrieval found nothing usable; the model was not called. */
+  insufficient_evidence: boolean;
   citations: Citation[];
-  provider: string;
-  model: string;
+  /** Null when no model was called. */
+  provider: string | null;
+  model: string | null;
   mode: InferenceMode;
   limitations: string[];
+  /** Present when a hosted provider was used (FR-AI-008). */
+  data_disclosure: { provider: string; data_categories: string[] } | null;
   retrieval: {
-    chunks_considered: number;
+    chunks_considered: number | null;
     chunks_used: number;
     token_estimate: number | null;
     latency_ms: number | null;
@@ -345,6 +379,7 @@ export interface CreateKnowledgeRequest {
   source_type: Extract<KnowledgeSourceType, "engineering_note" | "decision" | "architecture">;
   title: string;
   content: string;
+  source_url?: string;
 }
 
 // ── Tasks and runs (API_SPEC §5) ─────────────────────────────────────────
@@ -382,12 +417,17 @@ export interface EngineeringTask {
   updated_at: ISODateTime;
 }
 
-export interface CreateTaskRequest {
-  source_type: TaskSourceType;
-  title: string;
-  description: string;
-  external_number?: number;
-}
+/**
+ * Task creation. GitHub-issue tasks send only the issue number: the server imports the
+ * title and body (as untrusted context). PR and failing-check sources are not yet
+ * supported by the API.
+ */
+export type CreateTaskRequest =
+  | { source_type: "manual"; title: string; description: string; labels?: string[] }
+  | { source_type: "github_issue"; external_number: number; labels?: string[] };
+
+/** Sources the API currently accepts for creation. */
+export const CREATABLE_TASK_SOURCES = ["manual", "github_issue"] as const;
 
 export interface UpdateTaskRequest {
   title?: string;
@@ -466,16 +506,26 @@ export interface WorkflowRun extends RunSummary {
   ended_at: ISODateTime | null;
   error_code: string | null;
   error_summary: string | null;
-  /** GAP-09: denormalised context for the run workspace header. */
-  task?: Pick<EngineeringTask, "id" | "title" | "repository_id" | "repository_full_name">;
+  /** Run header context. Title/repository name may be null until the API embeds them (R1). */
+  task: {
+    id: UUID;
+    title: string | null;
+    repository_id: UUID;
+    repository_full_name: string | null;
+  };
   base_branch?: string | null;
+  plan_hash?: string | null;
+  retry_of_run_id?: UUID | null;
+  /** Present when a hosted provider is used (FR-AI-008). */
+  data_disclosure?: { provider: string; data_categories: string[] } | null;
   pull_request?: PullRequest | null;
   /** GAP-19: approvals recorded on this run, needed to render the PR gate after reload. */
   approvals?: Approval[];
 }
 
 export interface StartRunRequest {
-  mode: InferenceMode;
+  /** Omit to use the workspace's default mode. */
+  mode?: InferenceMode;
   base_branch: string;
   budgets?: Partial<RunBudgets>;
 }
@@ -582,25 +632,38 @@ export interface RunPlan {
   investigation: Investigation | null;
   plan_hash: string;
   version: number;
+  /** Derived: approval decision if any, else whether a human edited it. */
   state: PlanState;
+  source: "agent" | "user_edit";
+  /** Only while the run awaits plan approval. */
+  editable: boolean;
   updated_at: ISODateTime;
-  decided_by?: User | null;
-  decision_comment?: string | null;
+  approval: Approval | null;
 }
 
 export type ApprovalDecision = "approved" | "rejected";
 
-export interface ApprovalRequest {
+/** Plan and PR approvals are bound to the exact plan/patch hash being approved (SECURITY §8). */
+export interface PlanApprovalRequest {
   decision: ApprovalDecision;
   comment?: string;
+  plan_hash: string;
+}
+
+export interface PrApprovalRequest {
+  decision: ApprovalDecision;
+  comment?: string;
+  patch_hash: string;
 }
 
 export interface Approval {
-  id: UUID;
-  approval_type: "plan" | "pull_request" | "other";
+  id: UUID | null;
+  approval_type: "plan" | "pull_request";
   decision: ApprovalDecision;
   comment: string | null;
   user_id: UUID;
+  /** Hash of the plan or patch the decision was made on. */
+  subject_hash: string | null;
   created_at: ISODateTime;
 }
 
@@ -614,17 +677,24 @@ export interface ChangedFile {
   status: ChangedFileStatus;
   additions: number;
   deletions: number;
+  /** Developer agent's explanation of this change (AI-written). */
+  explanation?: string | null;
 }
 
-/** GAP-18: GET /runs/:id/diff */
 export interface RunDiff {
+  patch_id: UUID | null;
   patch_hash: string;
+  /** Repair attempt that produced this patch (1 = first). */
+  attempt: number;
   base_commit_sha: string;
-  patch_status: "proposed" | "validated" | "applied" | "rejected";
+  /** AI-written summary of the patch. */
+  summary: string | null;
   changed_files: ChangedFile[];
   additions: number;
   deletions: number;
   unified_diff: string;
+  /** The diff was cut to a size limit; download the patch artifact for the rest. */
+  truncated: boolean;
 }
 
 export type VerificationStatus = "passed" | "failed" | "timed_out" | "skipped" | "error";
@@ -638,13 +708,18 @@ export interface VerificationResult {
   duration_ms: number | null;
   /** Bounded, redacted output tail. */
   output_excerpt?: string | null;
-  created_at: ISODateTime;
+  output_truncated?: boolean;
+  /** Repair attempt this result belongs to. */
+  attempt?: number;
+  created_at: ISODateTime | null;
 }
 
 export interface VerificationReport {
   results: VerificationResult[];
   /** Profiles configured but unavailable for this repository (FR-VER-005). */
-  unavailable: { profile_id: string; reason: string }[];
+  unavailable: { profile_id: string; reason: string; kind?: "unsupported" | "sandbox_error" }[];
+  /** Count of unavailable profiles (may exceed `unavailable.length` if reasons aren't listed). */
+  unavailable_count: number;
   /** AI-written explanation of failures. Never determines pass/fail. */
   ai_summary?: string | null;
 }
@@ -677,7 +752,7 @@ export interface ReviewFinding {
   };
   confidence?: "low" | "medium" | "high" | null;
   status: FindingStatus;
-  created_at: ISODateTime;
+  created_at: ISODateTime | null;
 }
 
 export interface ReviewReport {
@@ -685,91 +760,111 @@ export interface ReviewReport {
   summary?: string | null;
 }
 
-export type FindingDispositionDecision = "accept" | "dismiss" | "fix";
-
 export interface FindingDispositionRequest {
-  disposition: FindingDispositionDecision;
+  status: Exclude<FindingStatus, "open">;
   comment?: string;
 }
 
 export interface CreatePullRequestRequest {
   title: string;
-  body: string;
-  base_branch: string;
+  /** The server appends an evidence section (verification, findings, approver). */
+  body?: string;
+  base_branch?: string;
 }
 
 export interface PullRequest {
   id: UUID;
-  provider: "github";
   pr_number: number;
   pr_url: string;
   head_branch: string;
   base_branch: string;
-  created_at: ISODateTime;
+  created_at: ISODateTime | null;
 }
 
 // ── AI policy, usage, audit (API_SPEC §7) ────────────────────────────────
 
-/** GAP-16: shape of the provider policy. */
+export const DATA_CATEGORIES = [
+  "source_code",
+  "documentation",
+  "issue_text",
+  "diffs",
+  "test_output",
+] as const;
+export type DataCategory = (typeof DATA_CATEGORIES)[number];
+
+/** Workspace AI policy (local-first; cloud is opt-in with disclosure). */
 export interface AiPolicy {
   default_mode: InferenceMode;
-  cloud_inference_enabled: boolean;
-  allowed_providers: string[];
-  local_provider: { name: string; model: string; embedding_model: string };
-  cloud_provider: { name: string; model: string } | null;
-  data_categories_disclosed: string[];
-  budgets: RunBudgets;
-  monthly_budget_microunits: number | null;
-  updated_at: ISODateTime;
-  updated_by: UUID | null;
+  allowed_modes: InferenceMode[];
+  cloud: {
+    enabled: boolean;
+    provider: string | null;
+    model: string | null;
+    data_categories: DataCategory[];
+  };
+  limits: { max_input_tokens: number; max_output_tokens: number; request_timeout_seconds: number };
 }
 
-export type UpdateAiPolicyRequest = Partial<
-  Pick<
-    AiPolicy,
-    "default_mode" | "cloud_inference_enabled" | "budgets" | "monthly_budget_microunits"
-  >
->;
+export interface UpdateAiPolicyRequest {
+  default_mode?: InferenceMode;
+  allowed_modes?: InferenceMode[];
+  cloud?: Partial<AiPolicy["cloud"]>;
+  limits?: Partial<AiPolicy["limits"]>;
+  /** Required when enabling cloud inference (422 DATA_DISCLOSURE_REQUIRED otherwise). */
+  acknowledge_data_disclosure?: boolean;
+}
+
+/** Server-side default run budget ceilings when a workspace sets none. */
+export const DEFAULT_RUN_BUDGET_LIMITS: RunBudgets = {
+  max_steps: 8,
+  max_input_tokens: 6000,
+  max_output_tokens: 1024,
+  max_duration_seconds: 900,
+  max_changed_files: 8,
+  max_repair_attempts: 1,
+};
 
 export interface ProviderHealth {
-  provider: string;
-  model: string;
   mode: InferenceMode;
-  status: "healthy" | "degraded" | "unavailable";
-  latency_ms: number | null;
-  message: string | null;
+  provider: string | null;
+  available: boolean;
+  models: string[];
+  detail: string | null;
   checked_at: ISODateTime;
 }
 
-/** GAP-16 */
+export interface UsageAggregate {
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_microunits: number | null;
+  avg_duration_ms: number;
+}
+
 export interface UsageSummary {
   period_start: ISODateTime;
-  period_end: ISODateTime;
-  totals: {
-    runs: number;
-    questions: number;
-    input_tokens: number;
-    output_tokens: number;
-    estimated_cost_microunits: number;
-    local_share: number; // 0..1
-  };
-  by_provider: {
-    provider: string;
-    model: string;
-    mode: InferenceMode;
-    input_tokens: number;
-    output_tokens: number;
-    estimated_cost_microunits: number;
-    requests: number;
-  }[];
-  daily: { date: string; input_tokens: number; output_tokens: number; runs: number }[];
-  budget: { limit_microunits: number | null; used_microunits: number };
+  period_end: ISODateTime | null;
+  totals: UsageAggregate & { local_share: number };
+  requests_by_mode: { local: number; mock: number; hosted: number };
+  by_provider: (UsageAggregate & { provider: string; model: string; mode: InferenceMode })[];
+  by_operation: (UsageAggregate & { operation: string })[];
+  /** Daily series; null until the API provides it (requested as R3). */
+  daily:
+    | {
+        date: string;
+        input_tokens: number;
+        output_tokens: number;
+        requests: number;
+        estimated_cost_microunits?: number | null;
+      }[]
+    | null;
 }
 
 export interface AuditEvent {
   id: UUID;
   actor_user_id: UUID | null;
-  actor_display: string | null; // GAP-09
+  /** Actor's email (null for system actors). */
+  actor_display: string | null;
   actor_type: "user" | "system" | "worker" | "provider";
   action: string;
   resource_type: string | null;
@@ -781,8 +876,10 @@ export interface AuditEvent {
 
 export interface AuditListParams extends PageParams {
   action?: string;
-  actor?: string;
-  since?: ISODateTime;
+  actor_user_id?: UUID;
+  resource_type?: string;
+  from?: ISODateTime;
+  to?: ISODateTime;
 }
 
 // ── SSE run events (API_SPEC §8) ─────────────────────────────────────────
@@ -813,16 +910,24 @@ export type RunEventType = (typeof RUN_EVENT_TYPES)[number];
  * Every event carries run_id + timestamp (API_SPEC §8 example). Additional fields are
  * GAP-10 and treated as optional so the UI degrades gracefully.
  */
+/**
+ * SSE payload (backend: docs/backend/API_CONTRACT_NOTES.md §8). Every event carries
+ * run_id + timestamp; other keys depend on the event type. `status` is a run status on
+ * run.* events and a check status on verification.completed.
+ */
 export interface RunEventPayload {
   run_id: UUID;
   timestamp: ISODateTime;
-  status?: RunStatus;
+  status?: string;
+  from?: string;
   stage?: string;
-  agent_type?: string;
-  tool_name?: string;
+  /** agent.* events */
+  agent?: string;
+  /** tool.* events */
+  tool?: string;
   approval_type?: "plan" | "pull_request";
-  message?: string;
-  error_code?: string;
+  error_code?: string | null;
+  error_summary?: string | null;
   [key: string]: unknown;
 }
 

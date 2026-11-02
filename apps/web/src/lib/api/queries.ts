@@ -1,8 +1,14 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 import { useWorkspaceId } from "@/lib/workspace/context";
 import { isActiveRun } from "@/lib/domain/status";
+import { runBudgetLimits } from "./mappers";
 import { api } from "./runtime";
 import type * as T from "./types";
 
@@ -16,6 +22,7 @@ export const qk = {
   ws: (ws: string) => ["ws", ws] as const,
   workspace: (ws: string) => ["ws", ws, "detail"] as const,
   members: (ws: string) => ["ws", ws, "members"] as const,
+  invitations: (ws: string) => ["ws", ws, "invitations"] as const,
   aiPolicy: (ws: string) => ["ws", ws, "ai-policy"] as const,
   usage: (ws: string) => ["ws", ws, "usage"] as const,
   audit: (ws: string, params: object) => ["ws", ws, "audit", params] as const,
@@ -25,8 +32,8 @@ export const qk = {
   repositories: (ws: string) => ["ws", ws, "repositories"] as const,
   repository: (ws: string, id: string) => ["ws", ws, "repositories", id] as const,
   indexStatus: (ws: string, id: string) => ["ws", ws, "repositories", id, "index-status"] as const,
-  tree: (ws: string, id: string, sha: string | null) =>
-    ["ws", ws, "repositories", id, "tree", sha] as const,
+  tree: (ws: string, id: string, path: string) =>
+    ["ws", ws, "repositories", id, "tree", path] as const,
   file: (ws: string, id: string, path: string, sha: string | null) =>
     ["ws", ws, "repositories", id, "file", path, sha] as const,
   search: (ws: string, id: string, req: T.SearchRequest) =>
@@ -64,9 +71,30 @@ export function useWorkspaces(options?: Opts<T.Workspace[]>) {
   });
 }
 
+/** Raw workspace (settings incl. run budget ceilings). */
+export function useWorkspaceSettings() {
+  const ws = useWorkspaceId();
+  return useQuery({ queryKey: qk.workspace(ws), queryFn: () => api.workspaces.getRaw(ws) });
+}
+
+/** Run budget ceilings: workspace limits over the server defaults. */
+export function useRunBudgetLimits() {
+  const settings = useWorkspaceSettings();
+  return { ...settings, data: settings.data ? runBudgetLimits(settings.data) : undefined };
+}
+
 export function useMembers() {
   const ws = useWorkspaceId();
   return useQuery({ queryKey: qk.members(ws), queryFn: () => api.workspaces.members(ws) });
+}
+
+export function useInvitations(enabled = true) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: qk.invitations(ws),
+    queryFn: () => api.workspaces.invitations(ws),
+    enabled,
+  });
 }
 
 export function useAiPolicy() {
@@ -134,20 +162,24 @@ export function useIndexStatus(id: string) {
   return useQuery({
     queryKey: qk.indexStatus(ws, id),
     queryFn: () => api.repositories.indexStatus(id),
-    refetchInterval: (q) => {
-      const s = q.state.data?.indexing_status;
-      return s === "queued" || s === "indexing" ? 1500 : false;
-    },
+    // Poll while an indexing job is active (backend: active_job non-null).
+    refetchInterval: (q) => (q.state.data?.active ? 1500 : false),
   });
 }
 
-export function useTree(id: string, commitSha: string | null, enabled = true) {
+/**
+ * Lazily loaded tree: one query per directory level ("" is the root). A level at a
+ * snapshot never changes, so levels are cached for the session.
+ */
+export function useTreeLevels(id: string, paths: string[], enabled = true) {
   const ws = useWorkspaceId();
-  return useQuery({
-    queryKey: qk.tree(ws, id, commitSha),
-    queryFn: () => api.repositories.tree(id, commitSha ? { snapshot: commitSha } : undefined),
-    enabled,
-    staleTime: 5 * 60_000,
+  return useQueries({
+    queries: paths.map((path) => ({
+      queryKey: qk.tree(ws, id, path),
+      queryFn: () => api.repositories.tree(id, path),
+      enabled,
+      staleTime: 10 * 60_000,
+    })),
   });
 }
 

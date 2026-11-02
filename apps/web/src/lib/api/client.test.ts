@@ -96,18 +96,39 @@ describe("ApiClient", () => {
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
-  it("maps list endpoints to pages with next_cursor", async () => {
+  it("maps list endpoints to pages using meta.page", async () => {
+    const wireTask = {
+      id: "1",
+      workspace_id: "w",
+      repository_id: "r",
+      created_by: "u",
+      source_type: "manual",
+      external_number: null,
+      title: "T",
+      description: "D",
+      status: "open",
+      labels: [],
+      created_at: "2026-11-02T00:00:00Z",
+      updated_at: "2026-11-02T00:00:00Z",
+      latest_run: null,
+      repository_full_name: "acme/api",
+    };
     const { transport, calls } = fakeTransport(() => ({
       status: 200,
-      body: { data: [{ id: "1" }], meta: { next_cursor: "25" } },
+      body: { data: [wireTask], meta: { page: { next_cursor: "abc", has_more: true } } },
       requestId: null,
     }));
-    const api = createEndpoints(new ApiClient(transport));
-    await expect(api.tasks.list({ limit: 25, status: "open" })).resolves.toEqual({
-      items: [{ id: "1" }],
-      next_cursor: "25",
+    const client = new ApiClient(transport);
+    client.setWorkspace("w");
+    const api = createEndpoints(client);
+    const page = await api.tasks.list({ limit: 25, status: "open" });
+    expect(page.next_cursor).toBe("abc");
+    expect(page.items[0]).toMatchObject({
+      id: "1",
+      repository_full_name: "acme/api",
+      latest_run: null,
     });
-    expect(calls[0]!.query).toMatchObject({ limit: 25, status: "open" });
+    expect(calls[0]!.query).toMatchObject({ limit: 25, status: "open", workspace_id: "w" });
     await api.repositories.get("a/b");
     expect(calls[1]!.path).toBe("/repositories/a%2Fb");
   });
