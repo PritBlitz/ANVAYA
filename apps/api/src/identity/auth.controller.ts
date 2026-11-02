@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { constantTimeEqual } from '../common/crypto.js';
 import { Errors } from '../common/errors.js';
 import { RAW_RESPONSE, UuidParamPipe, ZodPipe } from '../common/http.js';
+import { logger } from '../common/logger.js';
 import { RateLimit } from '../common/rate-limit.js';
 import { AppConfig } from '../config/config.js';
 import { type AuthedRequest, type AuthSession, type AuthUser, CurrentSession, CurrentUser, Public } from './auth.decorators.js';
@@ -28,6 +29,7 @@ export const callbackQuery = z.object({
 export const loginQuery = z.object({ return_to: z.string().max(512).optional() });
 
 const OAUTH_COOKIE = 'anvaya_oauth';
+const authLog = logger('auth');
 const DEFAULT_RETURN_TO = '/app';
 
 /**
@@ -117,6 +119,8 @@ export class AuthController {
     const [state, verifier, encodedReturnTo] = raw.split('.');
     const returnTo = safeReturnTo(encodedReturnTo ? Buffer.from(encodedReturnTo, 'base64url').toString('utf8') : undefined, web);
     if (q.error || !q.code || !q.state || !state || !verifier || !constantTimeEqual(state, q.state)) {
+      // Reasons only; never the code, state or verifier values.
+      authLog.warn({ github_error: q.error ?? null, has_code: Boolean(q.code), has_cookie: Boolean(state && verifier), state_matches: Boolean(state && q.state && constantTimeEqual(state, q.state)) }, 'github sign-in callback rejected');
       res.redirect(302, `${web}/login?error=oauth_failed`);
       return RAW_RESPONSE;
     }
@@ -128,7 +132,9 @@ export class AuthController {
       await this.audit.record({ organizationId: null, actorUserId: user.id, action: 'auth.login', resourceType: 'session', resourceId: issued.sessionId, metadata: { method: 'github' } });
       res.redirect(302, `${new URL(web).origin}${returnTo}`);
     } catch (err) {
-      const code = (err as { code?: string }).code === 'EMAIL_IN_USE' ? 'email_in_use' : 'oauth_failed';
+      const errCode = (err as { code?: string }).code;
+      authLog.warn({ code: errCode ?? 'UNEXPECTED', message: (err as Error).message }, 'github sign-in failed');
+      const code = errCode === 'EMAIL_IN_USE' ? 'email_in_use' : errCode === 'GITHUB_EMAIL_PERMISSION_MISSING' ? 'github_email_permission' : 'oauth_failed';
       res.redirect(302, `${web}/login?error=${code}`);
     }
     return RAW_RESPONSE;

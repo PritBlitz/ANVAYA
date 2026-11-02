@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { randomToken } from '../common/crypto.js';
-import { Errors } from '../common/errors.js';
+import { AppError, Errors } from '../common/errors.js';
 import { logger } from '../common/logger.js';
 import { AppConfig } from '../config/config.js';
 import type { ExternalIdentity } from './users.service.js';
@@ -74,6 +74,15 @@ export class GithubOAuthService {
       this.request(new URL('/user', this.config.env.GITHUB_API_URL), { headers: auth }),
       this.request(new URL('/user/emails', this.config.env.GITHUB_API_URL), { headers: auth }),
     ]);
+    // A GitHub App can only read /user/emails with the "Email addresses: read" account permission.
+    if (emailsRes.status === 403 || emailsRes.status === 404) {
+      log.warn({ status: emailsRes.status }, 'github app lacks the "Email addresses" account permission');
+      throw new AppError(502, 'GITHUB_EMAIL_PERMISSION_MISSING', 'The GitHub App needs the "Email addresses" (read-only) account permission.');
+    }
+    if (!userRes.ok || !emailsRes.ok) {
+      log.warn({ user_status: userRes.status, emails_status: emailsRes.status }, 'github profile request failed');
+      throw Errors.upstream('GITHUB_BAD_RESPONSE', 'Unexpected response from GitHub.');
+    }
     const user = githubUser.safeParse(await userRes.json());
     const emails = githubEmails.safeParse(await emailsRes.json());
     if (!user.success || !emails.success) throw Errors.upstream('GITHUB_BAD_RESPONSE', 'Unexpected response from GitHub.');
