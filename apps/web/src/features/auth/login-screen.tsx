@@ -23,6 +23,19 @@ const TRAIL = [
   { icon: <GitPullRequest />, label: "Pull request opened", detail: "#482 after human approval" },
 ];
 
+/** Codes the API appends as `/login?error=` after a failed GitHub sign-in. */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  github_email_permission:
+    "The GitHub App is missing the “Email addresses” permission, so Anvaya can’t read your verified email. Ask an organization admin to grant it, then try again.",
+  email_in_use:
+    "That email address is already linked to a different Anvaya account. Sign in with that account instead.",
+  oauth_failed: "GitHub sign-in didn’t complete. Please try again.",
+};
+
+function signInErrorMessage(code: string): string {
+  return SIGN_IN_ERRORS[code] ?? "Sign-in didn’t complete. Please try again.";
+}
+
 export function LoginScreen() {
   const params = useSearchParams();
   const router = useRouter();
@@ -133,7 +146,7 @@ export function LoginScreen() {
               role="alert"
               className="mt-5 rounded-md border border-danger-border bg-danger-soft px-3 py-2 text-sm text-danger"
             >
-              Sign-in didn&apos;t complete. Please try again.
+              {signInErrorMessage(error)}
             </p>
           )}
 
