@@ -152,6 +152,36 @@ test("search and grounded Q&A open cited lines", async ({ page }) => {
   await expect(page.getByText("No supporting evidence")).toBeVisible();
 });
 
+test("the Content-Security-Policy blocks nothing the app needs", async ({ page }) => {
+  const violations: string[] = [];
+  page.on("console", (m) => {
+    if (/Content Security Policy/i.test(m.text())) violations.push(m.text());
+  });
+  await page.addInitScript(() => {
+    document.addEventListener("securitypolicyviolation", (e) =>
+      console.error(`Content Security Policy violation: ${e.violatedDirective} ${e.blockedURI}`),
+    );
+  });
+  const res = await page.goto("/");
+  expect(res?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  await signIn(page);
+  for (const path of [
+    "/w/acme/repositories",
+    "/w/acme/runs",
+    "/w/acme/settings",
+    "/w/acme/usage",
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+  }
+  await page.goto("/w/acme/repositories");
+  await page.getByRole("link", { name: "acme/payments-api" }).click();
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  await page.getByRole("treeitem", { name: "README.md" }).click();
+  await expect(page.getByRole("region", { name: /^Source of/ })).toBeVisible();
+  expect(violations).toEqual([]);
+});
+
 test("Q&A cites knowledge notes and keeps a private history", async ({ page }) => {
   await signIn(page);
   await page.goto("/w/acme/repositories");

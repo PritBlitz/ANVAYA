@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/zod-config";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";

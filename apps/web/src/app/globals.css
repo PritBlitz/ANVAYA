@@ -221,6 +221,13 @@
   --color-diff-del-gutter: var(--diff-del-gutter);
   --color-diff-del-fg: var(--diff-del-fg);
   --color-chart-1: var(--chart-1);
+  /* Syntax tokens reuse text-safe semantic colours, so AA holds in both themes. */
+  --color-syn-keyword: var(--link);
+  --color-syn-string: var(--success);
+  --color-syn-comment: var(--fg-subtle);
+  --color-syn-number: var(--warning);
+  --color-syn-type: var(--info);
+  --color-syn-fn: var(--ai);
   --color-wine: var(--wine-600);
   --color-sand: var(--sand-200);
 

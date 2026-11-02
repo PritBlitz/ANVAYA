@@ -80,6 +80,7 @@ function ResultCard({
         terms={terms}
         maxHeight={240}
         label={`Snippet from ${result.file_path}`}
+        language={result.language}
       />
       <div className="flex items-center justify-between gap-3 border-t border-border px-3.5 py-1.5 text-2xs text-fg-subtle">
         <span className="truncate">

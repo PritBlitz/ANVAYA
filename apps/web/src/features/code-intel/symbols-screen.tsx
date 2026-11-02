@@ -79,6 +79,7 @@ function SymbolPreview({ repo, symbol }: { repo: Repository; symbol: CodeSymbol 
         startLine={symbol.start_line}
         maxHeight={360}
         label={`Source of ${symbol.qualified_name}`}
+        language={symbol.language}
       />
       {snippet?.clipped && (
         <p className="border-t border-border px-3.5 py-1.5 text-2xs text-fg-subtle">

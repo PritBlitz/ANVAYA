@@ -4,6 +4,7 @@ import { Check, Link2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { splitLines, segmentMatches, type LineRange } from "@/lib/code";
+import { TOKEN_CLASS, tokenizeLines, type Token } from "@/lib/syntax";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -20,8 +21,11 @@ export function CodeView({
   maxHeight,
   onLineClick,
   label,
+  language,
 }: {
   content: string;
+  /** Enables syntax highlighting for known languages (FD-8). */
+  language?: string | null;
   highlight?: LineRange | null;
   startLine?: number;
   terms?: string[];
@@ -31,6 +35,7 @@ export function CodeView({
   label?: string;
 }) {
   const lines = useMemo(() => splitLines(content), [content]);
+  const tokens = useMemo(() => tokenizeLines(lines, language), [lines, language]);
   const containerRef = useRef<HTMLDivElement>(null);
   const gutterWidth = String(startLine + lines.length).length;
 
@@ -84,17 +89,7 @@ export function CodeView({
                   {n}
                 </td>
                 <td className="pr-4 pl-4 whitespace-pre text-fg">
-                  {terms.length
-                    ? segmentMatches(text, terms).map((seg, j) =>
-                        seg.match ? (
-                          <mark key={j} className="rounded-xs bg-highlight-border/60 text-fg">
-                            {seg.text}
-                          </mark>
-                        ) : (
-                          <span key={j}>{seg.text}</span>
-                        ),
-                      )
-                    : text || " "}
+                  <LineContent text={text} tokens={tokens?.[i]} terms={terms} />
                 </td>
               </tr>
             );
@@ -103,6 +98,42 @@ export function CodeView({
       </table>
     </div>
   );
+}
+
+/** One line as text nodes: syntax tokens, with search terms marked inside them. */
+function LineContent({
+  text,
+  tokens,
+  terms,
+}: {
+  text: string;
+  tokens: Token[] | undefined;
+  terms: string[];
+}) {
+  if (!text) return " ";
+  const parts = tokens ?? [{ text, kind: "plain" as const }];
+  if (!tokens && !terms.length) return text;
+  return parts.map((tok, j) => {
+    const cls = TOKEN_CLASS[tok.kind];
+    const inner = terms.length
+      ? segmentMatches(tok.text, terms).map((seg, k) =>
+          seg.match ? (
+            <mark key={k} className="rounded-xs bg-highlight-border/60 text-fg">
+              {seg.text}
+            </mark>
+          ) : (
+            seg.text
+          ),
+        )
+      : tok.text;
+    return cls ? (
+      <span key={j} className={cls}>
+        {inner}
+      </span>
+    ) : (
+      <span key={j}>{inner}</span>
+    );
+  });
 }
 
 export function CopyButton({

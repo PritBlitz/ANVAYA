@@ -168,6 +168,7 @@ function Explorer({ repo }: { repo: Repository }) {
               content={file.data.content}
               highlight={range}
               label={`Source of ${path}`}
+              language={file.data.language}
               onLineClick={(n) => {
                 const nextRange =
                   range && range.start === range.end && n > range.start
