@@ -143,6 +143,8 @@ describe('tasks, durable runs and plan approval', () => {
       const res = await as(viewer, 'get', `/tasks/${id}`).expect(200);
       expect(res.body.data).toMatchObject({ status: 'open', source_type: 'manual', latest_run: null });
       await as(outsider, 'get', `/tasks/${id}`).expect(404);
+      const patched = await as(member, 'patch', `/tasks/${id}`).send({ title: 'Renamed task', labels: ['x'] }).expect(200);
+      expect(patched.body.data).toMatchObject({ id, title: 'Renamed task', labels: ['x'] });
     });
 
     it('imports a GitHub issue as task context using an issues:read token', async () => {
@@ -194,6 +196,9 @@ describe('tasks, durable runs and plan approval', () => {
       const steps = (await as(viewer, 'get', `/runs/${runId}/steps`).expect(200)).body.data;
       expect(steps.map((s: { agent_type: string; status: string }) => `${s.agent_type}:${s.status}`)).toEqual(['context_retriever:succeeded', 'investigator:succeeded', 'planner:succeeded']);
       expect(steps[0].tool_calls[0]).toMatchObject({ tool_name: 'search_repository', status: 'succeeded' });
+      const taskRuns = (await as(viewer, 'get', `/tasks/${task}/runs`).expect(200)).body.data;
+      expect(taskRuns.map((r: { id: string }) => r.id)).toContain(runId);
+      await as(viewer, 'get', `/runs/${runId}/artifacts`).expect(200);
 
       // Task text is sent as untrusted input, not as trusted intent; no approval happens without a human.
       const inv = ai.generateCalls.find((c) => c.task === 'investigation')!;

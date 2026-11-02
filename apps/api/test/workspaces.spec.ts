@@ -122,6 +122,8 @@ describe('workspaces, memberships and authorization', () => {
     expect(dup.body.error.code).toBe('INVITATION_PENDING');
     const existing = await as(owner, 'post', `/workspaces/${ws}/invitations`).send({ email: member.email, role: 'member' }).expect(409);
     expect(existing.body.error.code).toBe('ALREADY_MEMBER');
+    const pending = (await as(owner, 'get', `/workspaces/${ws}/invitations`).expect(200)).body.data;
+    expect(pending.map((i: { email: string }) => i.email)).toContain(email);
   });
 
   it('members may leave; admins cannot remove admins', async () => {

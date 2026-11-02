@@ -1,4 +1,5 @@
 import { z, type ZodType } from 'zod';
+import { RESPONSES } from './responses.generated.js';
 import { updateAiPolicyBody } from '../ai/ai-policy.service.js';
 import { healthCheckBody, usageQuery } from '../ai/ai.controller.js';
 import { askBody } from '../ai/questions.service.js';
@@ -153,6 +154,16 @@ export const ROUTES: RouteDoc[] = [
   { method: 'post', path: '/runs/{runId}/pr-approval', tag: 'Review', summary: 'Approve/reject PR creation (bound to patch_hash)', status: 200, body: prApprovalBody, idempotency: 'optional' },
   { method: 'post', path: '/runs/{runId}/pull-request', tag: 'Review', summary: 'Create the pull request after approval', status: 201, body: pullRequestBody, idempotency: 'required' },
 ];
+
+// I-8: every JSON route gets a response schema. Hand-written schemas win; the rest
+// are derived from real responses (scripts/derive-response-schemas.mjs) and
+// enforced at test time by test/response-contract.ts.
+const taskDetail = RESPONSES['get /tasks/{taskId}'] as z.ZodObject;
+const derived: Record<string, ZodType> = {
+  // PATCH returns the task without the joined repository name and latest run.
+  'patch /tasks/{taskId}': taskDetail.omit({ repository_full_name: true, latest_run: true }),
+};
+for (const r of ROUTES) r.response ??= derived[`${r.method} ${r.path}`] ?? RESPONSES[`${r.method} ${r.path}`];
 
 /** Shapes referenced from docs (not request validation). */
 export const SCHEMA_COMPONENTS: Record<string, ZodType> = { Plan: planSchema };

@@ -9,6 +9,7 @@ export default defineConfig({
   test: {
     include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     globalSetup: ['test/global-setup.ts'],
+    setupFiles: ['test/response-contract.ts'],
     environment: 'node',
     // Integration suites share one test database; run files sequentially.
     fileParallelism: false,

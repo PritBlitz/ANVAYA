@@ -98,7 +98,7 @@ class OllamaProvider:
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "format": prompt.schema,
+            "format": grammar_safe_schema(prompt.schema),
             "options": {"temperature": 0, "num_predict": max_output_tokens, "num_ctx": self.context_tokens},
         }
         data = await self.client.post("/api/chat", body, timeout=timeout_seconds)
@@ -124,6 +124,22 @@ class OllamaProvider:
             models=names,
             detail=None if ok else f"model {self.model} not installed",
         )
+
+
+# JSON-schema keywords Ollama compiles into llama.cpp grammar repetitions. Large
+# bounds (e.g. maxLength 500 inside an array of up to 12 items) exceed the
+# grammar's repetition limit and crash the runner. They are removed only from
+# the grammar hint; the full schema is still enforced on the parsed output.
+_GRAMMAR_UNSAFE_KEYS = frozenset({"maxLength", "minLength", "pattern", "maxItems", "minItems", "format"})
+
+
+def grammar_safe_schema(schema: Any) -> Any:
+    """Returns a copy of ``schema`` without keywords that blow up grammar compilation."""
+    if isinstance(schema, dict):
+        return {k: grammar_safe_schema(v) for k, v in schema.items() if k not in _GRAMMAR_UNSAFE_KEYS or not isinstance(v, (int, str))}
+    if isinstance(schema, list):
+        return [grammar_safe_schema(v) for v in schema]
+    return schema
 
 
 class OllamaEmbeddingProvider:
