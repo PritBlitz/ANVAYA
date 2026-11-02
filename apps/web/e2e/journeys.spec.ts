@@ -88,7 +88,9 @@ test("task → plan approval → verification → review → pull request", asyn
   await expect(page.getByRole("heading", { name: "Compose pull request" })).toBeVisible();
   // Short summary: the server appends the verification/review evidence section itself.
   await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue(/## Summary/);
-  await expect(page.getByRole("textbox", { name: "Description" })).not.toHaveValue(/## Verification/);
+  await expect(page.getByRole("textbox", { name: "Description" })).not.toHaveValue(
+    /## Verification/,
+  );
   await page.getByRole("button", { name: "Create pull request" }).click();
   await expect(page.getByText(/Pull request #\d+ opened/).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /Open on GitHub/ })).toHaveAttribute(
