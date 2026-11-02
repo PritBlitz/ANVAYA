@@ -297,7 +297,7 @@ describe('repository indexing and retrieval', () => {
       const all: string[] = [];
       let cursor: string | null = null;
       do {
-        const page = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&limit=2${cursor ? `&cursor=${cursor}` : ''}`).expect(200);
+        const page: request.Response = await as(viewer, 'get', `${base()}/symbols?snapshot=${SHA1}&limit=2${cursor ? `&cursor=${cursor}` : ''}`).expect(200);
         all.push(...page.body.data.map((s: { id: string }) => s.id));
         cursor = page.body.meta.page?.next_cursor ?? null;
       } while (cursor);

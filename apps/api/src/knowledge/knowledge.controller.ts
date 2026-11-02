@@ -10,6 +10,7 @@ import { beforeCursor, cursorUs } from '../database/keyset.js';
 import type { KnowledgeDocumentsTable } from '../database/types.js';
 import { type AuthUser, CurrentUser } from '../identity/auth.decorators.js';
 import { ObjectStorage } from '../storage/object-storage.js';
+import { KnowledgeIndexService } from './knowledge-index.service.js';
 import { AccessService, roleAtLeast } from '../workspaces/access.service.js';
 import type { Selectable } from 'kysely';
 
@@ -58,6 +59,7 @@ export class KnowledgeController {
     private readonly access: AccessService,
     private readonly storage: ObjectStorage,
     private readonly audit: AuditService,
+    private readonly index: KnowledgeIndexService,
   ) {}
 
   @Get('repositories/:repositoryId/knowledge')
@@ -99,7 +101,10 @@ export class KnowledgeController {
       await this.audit.record({ organizationId: repository.organization_id, actorUserId: user.id, action: 'knowledge.created', resourceType: 'knowledge_document', resourceId: row.id }, tx);
       return updated;
     });
-    return { ...view(doc), content: body.content };
+    // Chunk and embed right away so the note is usable in Q&A immediately; embedding failures degrade to lexical search.
+    const indexed = await this.index.indexDocument(doc.id, body.content);
+    const fresh = await this.database.db.selectFrom('knowledge_documents').selectAll().where('id', '=', doc.id).executeTakeFirstOrThrow();
+    return { ...view(fresh), content: body.content, chunks: indexed.chunks, embedded_chunks: indexed.embedded };
   }
 
   @Get('knowledge/:documentId')

@@ -211,10 +211,98 @@ describe('AI policy, grounded Q&A, usage and knowledge', () => {
       await as(outsider, 'delete', `/knowledge/${docId}`).expect(404);
     });
 
+    it('indexes notes on creation and cites them in answers', async () => {
+      const created = await as(member, 'post', `/repositories/${repo}/knowledge`)
+        .send({ source_type: 'engineering_note', title: 'Deployment runbook', content: 'Kubernetes helm chart values live in deploy/values.yaml.\nRoll back with helm rollback.' })
+        .expect(201);
+      const note = created.body.data;
+      expect(note).toMatchObject({ chunks: 1, embedded_chunks: 1 });
+      expect(note.indexed_at).not.toBeNull();
+
+      ai.generateHandler = (b) => qaResponse(b, (ev) => ev.filter((e) => e.path.startsWith('anvaya-knowledge/')).map((e) => e.id));
+      const res = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'Where are the kubernetes helm chart values?' }).expect(200);
+      const d = res.body.data;
+      expect(d.retrieval.knowledge_result_count).toBeGreaterThan(0);
+      expect(d.citations.every((c: { source: string }) => c.source === 'knowledge')).toBe(true);
+      expect(d.citations).toContainEqual(
+        expect.objectContaining({ source: 'knowledge', knowledge_document_id: note.id, title: 'Deployment runbook', path: null, commit_sha: null, start_line: 1, end_line: 2 }),
+      );
+      const sent = ai.generateCalls.at(-1)!.evidence as Array<{ path: string; content: string; symbol: string }>;
+      expect(sent.find((e) => e.path === `anvaya-knowledge/${note.id}.md`)).toMatchObject({ symbol: 'Deployment runbook' });
+
+      ai.generateHandler = (b) => qaResponse(b, () => []);
+      const off = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'Where are the kubernetes helm chart values?', include_knowledge: false }).expect(200);
+      expect(off.body.data.retrieval.knowledge_result_count).toBe(0);
+      const offSent = (ai.generateCalls.at(-1)!.evidence as Array<{ path: string }>).map((e) => e.path);
+      expect(offSent.some((p) => p.startsWith('anvaya-knowledge/'))).toBe(false);
+
+      await as(member, 'delete', `/knowledge/${note.id}`).expect(204);
+      const left = await db(app).selectFrom('knowledge_chunks').select('id').where('document_id', '=', note.id).execute();
+      expect(left).toEqual([]);
+    });
+
+    it('keeps notes searchable lexically when embeddings are unavailable', async () => {
+      ai.available = false;
+      let noteId: string;
+      try {
+        const created = await as(member, 'post', `/repositories/${repo}/knowledge`).send({ source_type: 'decision', title: 'Queue choice', content: 'We picked BullMQ over RabbitMQ for background jobs.' }).expect(201);
+        expect(created.body.data).toMatchObject({ chunks: 1, embedded_chunks: 0 });
+        noteId = created.body.data.id;
+        // The note has no embedding, so finding it proves the lexical path.
+        ai.available = true;
+        ai.generateHandler = (b) => qaResponse(b, (ev) => ev.filter((e) => e.path.startsWith('anvaya-knowledge/')).map((e) => e.id));
+        const res = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'Why did we pick bullmq?' }).expect(200);
+        expect(res.body.data.citations).toContainEqual(expect.objectContaining({ source: 'knowledge', knowledge_document_id: noteId }));
+      } finally {
+        ai.available = true;
+      }
+      await as(member, 'delete', `/knowledge/${noteId}`).expect(204);
+    });
+
     it('only the author or an admin can delete', async () => {
       await as(viewer, 'delete', `/knowledge/${docId}`).expect(403);
       await as(member, 'delete', `/knowledge/${docId}`).expect(204);
       await as(member, 'get', `/knowledge/${docId}`).expect(404);
+    });
+  });
+  describe('question history', () => {
+    it("lists only the caller's own questions, newest first, with cursor pagination", async () => {
+      ai.generateHandler = (b) => qaResponse(b, (ev) => [ev.find((e) => e.path === 'src/token.ts')!.id]);
+      const a = (await as(member, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the access token refreshed first?' }).expect(200)).body.data;
+      const b = (await as(member, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the access token refreshed second?' }).expect(200)).body.data;
+      expect(a.id).toEqual(expect.any(String));
+      const page1 = await as(member, 'get', `/repositories/${repo}/questions?limit=1`).expect(200);
+      expect(page1.body.data).toHaveLength(1);
+      expect(page1.body.data[0]).toMatchObject({ id: b.id, question: 'How is the access token refreshed second?', answer: b.answer, insufficient_evidence: false, commit_sha: SHA });
+      expect(page1.body.data[0].citations[0]).toMatchObject({ source: 'code', path: 'src/token.ts' });
+      const page2 = await as(member, 'get', `/repositories/${repo}/questions?limit=1&cursor=${page1.body.meta.page.next_cursor}`).expect(200);
+      expect(page2.body.data[0].id).toBe(a.id);
+
+      const others = await as(viewer, 'get', `/repositories/${repo}/questions?limit=100`).expect(200);
+      expect(others.body.data.map((q: { id: string }) => q.id)).not.toContain(a.id);
+      await as(outsider, 'get', `/repositories/${repo}/questions`).expect(404);
+    });
+
+    it("reads and deletes only the caller's own questions", async () => {
+      const q = (await as(member, 'get', `/repositories/${repo}/questions?limit=1`).expect(200)).body.data[0];
+      await as(member, 'get', `/questions/${q.id}`).expect(200);
+      await as(owner, 'get', `/questions/${q.id}`).expect(404);
+      await as(owner, 'delete', `/questions/${q.id}`).expect(404);
+      await as(member, 'delete', `/questions/${q.id}`).expect(204);
+      await as(member, 'get', `/questions/${q.id}`).expect(404);
+    });
+
+    it('records questions answered without evidence', async () => {
+      ai.available = false; // lexical only, so nothing matches
+      let res;
+      try {
+        res = await as(member, 'post', `/repositories/${repo}/questions`).send({ question: 'zzzqqq nothing matches this', include_knowledge: false }).expect(200);
+      } finally {
+        ai.available = true;
+      }
+      expect(res.body.data).toMatchObject({ provider: null, insufficient_evidence: true });
+      const got = await as(member, 'get', `/questions/${res.body.data.id}`).expect(200);
+      expect(got.body.data).toMatchObject({ insufficient_evidence: true, citations: [] });
     });
   });
 });
