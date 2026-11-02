@@ -6,6 +6,7 @@ import { renderMetrics } from '../common/metrics.js';
 import { AppConfig } from '../config/config.js';
 import { RedisService } from '../common/redis.service.js';
 import { requestContext } from '../common/request-context.js';
+import { withSpan } from '../telemetry/tracing.js';
 import { IndexerService } from '../indexing/indexer.service.js';
 import { IndexingRecoveryService } from '../indexing/indexing-recovery.service.js';
 import { type IndexJobData, QUEUES, type RunJobData } from '../queue/queues.js';
@@ -14,6 +15,10 @@ import { RunsService } from '../runs/runs.service.js';
 import { RetentionService } from './retention.service.js';
 
 const log = logger('worker');
+
+function jobAttributes(job: Job, extra: Record<string, string>): Record<string, string | number> {
+  return { 'messaging.system': 'bullmq', 'messaging.destination.name': job.queueName, 'messaging.message.id': job.id ?? 'unknown', 'anvaya.job.attempt': job.attemptsMade + 1, ...extra };
+}
 
 @Injectable()
 export class WorkerRunner implements OnApplicationShutdown {
@@ -37,7 +42,9 @@ export class WorkerRunner implements OnApplicationShutdown {
       QUEUES.repositoryIndex,
       async (job: Job<IndexJobData>) =>
         requestContext.run({ requestId: `job_${job.id ?? 'unknown'}` }, () =>
-          this.indexer.run(job.data.indexingJobId, { finalAttempt: job.attemptsMade + 1 >= (job.opts.attempts ?? 1) }),
+          withSpan('job repository-index', jobAttributes(job, { 'anvaya.indexing_job_id': job.data.indexingJobId }), () =>
+            this.indexer.run(job.data.indexingJobId, { finalAttempt: job.attemptsMade + 1 >= (job.opts.attempts ?? 1) }),
+          ),
         ),
       {
         connection: this.redis.create('worker-index', { maxRetriesPerRequest: null }),
@@ -51,7 +58,10 @@ export class WorkerRunner implements OnApplicationShutdown {
 
     const runWorker = new Worker<RunJobData>(
       QUEUES.engineeringRun,
-      async (job: Job<RunJobData>) => requestContext.run({ requestId: `job_${job.id ?? 'unknown'}` }, () => this.orchestrator.advance(job.data.runId)),
+      async (job: Job<RunJobData>) =>
+        requestContext.run({ requestId: `job_${job.id ?? 'unknown'}` }, () =>
+          withSpan('job engineering-run', jobAttributes(job, { 'anvaya.run_id': job.data.runId }), () => this.orchestrator.advance(job.data.runId)),
+        ),
       {
         connection: this.redis.create('worker-run', { maxRetriesPerRequest: null }),
         // One model request at a time on constrained hardware (AI_WORKFLOW §8).
