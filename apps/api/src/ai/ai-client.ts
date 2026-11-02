@@ -14,6 +14,7 @@ export class AiServiceError extends Error {
     message: string,
     readonly status: number,
     readonly retryable: boolean,
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -148,10 +149,10 @@ export class AiClient {
     }
     const payload: unknown = await res.json().catch(() => null);
     if (!res.ok) {
-      const err = z.object({ error: z.object({ code: z.string(), message: z.string() }) }).safeParse(payload);
+      const err = z.object({ error: z.object({ code: z.string(), message: z.string(), details: z.record(z.string(), z.unknown()).optional() }) }).safeParse(payload);
       const code = err.success ? err.data.error.code : 'AI_SERVICE_ERROR';
       const message = err.success ? err.data.error.message : `AI service responded with ${res.status}`;
-      throw new AiServiceError(code, message, res.status, res.status >= 500 || res.status === 429);
+      throw new AiServiceError(code, message, res.status, res.status >= 500 || res.status === 429, err.success ? (err.data.error.details ?? {}) : {});
     }
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new AiServiceError('AI_BAD_RESPONSE', 'The AI service returned an unexpected response.', 502, false);

@@ -164,3 +164,13 @@ def test_schema_adaptation_and_pricing() -> None:
     assert schema["properties"]["a"]["maxLength"] == 5
     assert estimate_cost_microunits("claude-sonnet-5-5", 1_000_000, 0) == 2_000_000
     assert estimate_cost_microunits("unknown", 1, 1) is None
+
+
+def test_rate_limit_carries_retry_after() -> None:
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(429, headers={"retry-after": "17"}, json={"type": "error", "error": {"type": "rate_limit_error", "message": "slow down"}})
+
+    with TestClient(create_app(settings(), hosted_providers(handler))) as c:
+        res = c.post("/internal/v1/generate", json=cloud(), headers=AUTH)
+    assert res.status_code == 429
+    assert res.json()["error"]["details"] == {"retry_after_seconds": 17}

@@ -68,6 +68,13 @@ def claude_output_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return walk(copy.deepcopy(schema))  # type: ignore[no-any-return]
 
 
+def _retry_after(value: str | None) -> int:
+    try:
+        return max(1, min(3600, int(float(value or "30"))))
+    except ValueError:
+        return 30
+
+
 def estimate_cost_microunits(model: str, input_tokens: int, output_tokens: int) -> int | None:
     price = PRICING_PER_MTOK.get(model)
     if price is None:
@@ -108,7 +115,12 @@ class AnthropicProvider:
         except anthropic.AuthenticationError as exc:
             raise AiError(503, "PROVIDER_NOT_CONFIGURED", "The hosted provider rejected the configured credentials.") from exc
         except anthropic.RateLimitError as exc:
-            raise AiError(429, "PROVIDER_RATE_LIMITED", "The hosted provider is rate limiting requests. Retry later.") from exc
+            raise AiError(
+                429,
+                "PROVIDER_RATE_LIMITED",
+                "The hosted provider is rate limiting requests. Retry later.",
+                {"retry_after_seconds": _retry_after(exc.response.headers.get("retry-after"))},
+            ) from exc
         except anthropic.BadRequestError as exc:
             log.warning("hosted request rejected", extra={"status": exc.status_code})
             raise AiError(502, "PROVIDER_BAD_REQUEST", "The hosted provider rejected the request.") from exc

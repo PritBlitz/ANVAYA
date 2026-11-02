@@ -143,6 +143,15 @@ const RULES: Rule[] = [
   [/health-check/, 'mode', RUN_MODE],
   [/artifacts/, '', artifacts],
   [/^get \/runs\/\{runId\}\/plan$/, 'approval', planApproval.nullable()],
+  [/audit-events/, '[].actor_type', z.enum(['user', 'system', 'worker', 'provider'])],
+  [/integrations\/github\/(installations|complete)/, 'status', z.enum(['active', 'suspended', 'disconnected'])],
+  [/integrations\/github\/(installations|complete)/, '[].status', z.enum(['active', 'suspended', 'disconnected'])],
+  [REPO_ROUTES, 'visibility', z.enum(['public', 'private', 'internal'])],
+  [REPO_ROUTES, '[].visibility', z.enum(['public', 'private', 'internal'])],
+  [/\/plan$/, 'source', z.enum(['agent', 'user_edit'])],
+  [/review$/, 'ai_findings[].source', z.enum(['ai_review', 'static_analysis', 'security_scanner', 'test'])],
+  [/review$/, 'deterministic_findings[].source', z.enum(['ai_review', 'static_analysis', 'security_scanner', 'test'])],
+  [/verification$/, 'unavailable[].kind', z.enum(['unsupported', 'sandbox_error'])],
 ];
 
 function unwrap(s: ZodType): { inner: ZodType; wrap: (x: ZodType) => ZodType } {
