@@ -3,27 +3,28 @@
 Last updated: 2026-11-02. Update this file whenever an item changes state. A box is ticked only
 after the item has been verified (tests run or behaviour observed), not just written.
 
-Overall: the backend (`feat/backend`) and the frontend (`feat/frontend`) each work in isolation, and
-neither branch has been merged. **The two have never been run against each other.** The frontend
-runs only on its fixture adapter, and its API assumptions differ from the backend in a few places
-(section 1). Section 1 is the critical path.
+Overall: both branches are merged into `main` locally (not pushed). The API contract was agreed with
+the frontend session on 2026-11-02, and the backend side of it is implemented and tested (section 1).
+**The two have still never been run against each other**: I-9 is the critical path.
 
-## 1. Frontend ↔ backend integration (blocks a real end-to-end run)
+## 1. Frontend ↔ backend integration
 
-Frontend gap IDs are from `frontend/docs/frontend/API_INTEGRATION.md`. Backend proposals are in
-`API_CONTRACT_NOTES.md`. Each mismatch needs **one agreed shape** before either side changes code.
+Frontend gap IDs are from `frontend/docs/frontend/API_INTEGRATION.md`; the agreed contract is in
+`API_CONTRACT_NOTES.md`. The frontend adapts to the backend's shapes; the backend added what the
+frontend needed. B = backend side, F = frontend side.
 
-| # | Item | Backend today | Frontend expects | Status |
-|---|---|---|---|---|
-| I-1 | Workspace scoping (GAP-02) | `?workspace_id=` query parameter (or `workspace_id` in the body) | `X-Workspace-Id` header (says the query param is acceptable) | ☐ agree on one; the frontend switches to the query param, or the backend also accepts the header |
-| I-2 | File content (GAP-04) | `GET /repositories/:id/file?path=&commit_sha=` | `GET /repositories/:id/files/content?path=&commit_sha=`, `403 FILE_EXCLUDED` | ☐ align path, error code and field names |
-| I-3 | Workspace-wide run list (GAP-05) | **Missing.** Only `GET /tasks/:id/runs` | `GET /runs?status=&repository_id=&cursor=` with task/repository fields | ☐ backend to implement |
-| I-4 | Approvals on run detail (GAP-19) | `GET /runs/:id` returns plan hash/version but **no `approvals[]`** | `WorkflowRun.approvals: Approval[]` | ☐ backend to add |
-| I-5 | GitHub install flow (GAP-14) | Server-issued single-use `state` from `GET /integrations/github/install-url`; `complete` also needs an OAuth `code` proving the user can see the installation | Builds the URL from a public app slug and generates `state` in the browser | ☐ frontend should use the server install-url (browser-made state is weaker); confirm the callback route |
-| I-6 | Auth (GAP-01) | `/auth/github/login`, `/auth/logout`, `anvaya_csrf` cookie + `X-CSRF-Token` | Same idea | ☐ confirm `return_to` parameter name and the failed-login redirect |
-| I-7 | Shape confirmations (GAP-06/07/08/09/10/11/16/18/20) | Implemented; see the generated `apps/api/openapi.json` | Typed in `apps/web/src/lib/api/types.ts` | ☐ diff the frontend types against `openapi.json` field by field |
-| I-8 | Invitations (GAP-17) | List/revoke/accept implemented | Treated as fire-and-forget; no UI | ☐ frontend may add UI (optional) |
-| I-9 | Real end-to-end run (frontend M10) | — | Playwright suite in `http` mode against NestJS + worker + AI service | ☐ after I-1 to I-7 |
+| # | Item | Agreed contract | Status |
+|---|---|---|---|
+| I-1 | Workspace scoping (GAP-02) | `X-Workspace-Id` header or `workspace_id`; mismatch → 400 `WORKSPACE_MISMATCH` | B ☑ (tested) · F ☐ |
+| I-2 | File content (GAP-04) | `GET /repositories/:id/files/content?path=&commit_sha=`; excluded → 403 `FILE_EXCLUDED` | B ☑ · F ☐ |
+| I-3 | Workspace run list (GAP-05) | `GET /runs?status=a&status=b&repository_id=&task_id=` with `task_title`, `repository_full_name` | B ☑ · F ☐ |
+| I-4 | Run detail (GAP-19, R1) | `GET /runs/:id` adds `approvals[]`, `task_title`, `repository_full_name`, `pull_request` | B ☑ · F ☐ |
+| I-5 | GitHub install (GAP-14) | Server `install-url` + state; callback posts `{installation_id, state, code, setup_action}`; workspace comes from state | B ☑ · F ☐ (frontend agreed to drop browser state) |
+| I-6 | Auth (GAP-01) | `/auth/github/login?return_to=` (same-origin paths only), `/auth/providers`, `/auth/dev-login`, `/auth/logout`, CSRF cookie + header | B ☑ · F ☐ |
+| I-7 | Task list (R2), daily usage (R3), unavailable checks (R4), AI finding `confidence`/`suggested_action` (R5), documented shapes (R6) | See `API_CONTRACT_NOTES.md` | B ☑ · F ☐ |
+| I-8 | Response schemas in `openapi.json` (R7) | Zod response schemas so the frontend can generate types | B ☐ (in progress; only workspace/member/invitation endpoints have them so far) |
+| I-9 | Real end-to-end run (frontend M10) | Frontend Playwright suite in `http` mode against API + worker + AI service (mock) | ☐ frontend runs it and reports mismatches |
+| I-10 | Deployment wiring | Next rewrites `/api/v1/*` → `http://localhost:3001`; set backend `PUBLIC_API_URL=http://localhost:3000` so the OAuth callback and cookies land on the web origin | ☐ verify during I-9 (SSE through the rewrite too) |
 
 ## 2. Needs external access or credentials (owner: user)
 
@@ -59,6 +60,6 @@ infinite scroll beyond the audit log, WebKit/Firefox E2E, moving contract types 
 ## 5. Process
 
 - [x] Backend work committed locally on `feat/backend`, in batches (not pushed)
-- [ ] Push `feat/backend` (user)
-- [ ] Open a PR and review it (user; no autonomous merges)
-- [ ] Merge order: canonical docs → backend → frontend, after I-1 to I-9
+- [x] `feat/backend` fast-forwarded into local `main` (at the user's request)
+- [ ] Push `main` (user)
+- [ ] Commit the canonical docs (X-5)

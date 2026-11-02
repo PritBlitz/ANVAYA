@@ -29,7 +29,8 @@ export const DEFAULT_REPOSITORY_SETTINGS: Required<RepositorySettings> = {
 
 export const createRepositoryBody = z
   .object({
-    workspace_id: z.uuid(),
+    /** Optional when the `X-Workspace-Id` header is sent. */
+    workspace_id: z.uuid().optional(),
     installation_id: z.uuid(),
     external_repository_id: z.number().int().positive(),
     /** Queue an initial index immediately (default true). */
@@ -46,7 +47,7 @@ export const updateRepositoryBody = z
   .refine((v) => v.settings !== undefined || v.status !== undefined, 'at least one field is required');
 
 export const listRepositoriesQuery = paginationQuery.extend({
-  workspace_id: z.uuid(),
+  workspace_id: z.uuid().optional(),
   status: z.enum(['connected', 'disabled', 'disconnected']).optional(),
 });
 

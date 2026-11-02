@@ -79,27 +79,47 @@ export class TasksService {
     });
   }
 
-  async list(userId: string, q: z.infer<typeof listTasksQuery>): Promise<Page<unknown>> {
+  async list(userId: string, q: z.infer<typeof listTasksQuery> & { workspace_id: string }): Promise<Page<unknown>> {
     await this.access.requireWorkspace(userId, q.workspace_id);
     const cursor = decodeCursor(q.cursor);
-    let query = this.database.db.selectFrom('engineering_tasks').selectAll().select(cursorUs('created_at').as('cursor_us')).where('organization_id', '=', q.workspace_id);
-    if (q.repository_id) query = query.where('repository_id', '=', q.repository_id);
-    if (q.status) query = query.where('status', '=', q.status);
-    if (cursor) query = query.where(beforeCursor('created_at', 'id', cursor));
-    const rows = await query.orderBy('created_at', 'desc').orderBy('id', 'desc').limit(q.limit + 1).execute();
-    return toPage(rows, q.limit, ({ cursor_us: _c, ...t }) => taskView(t));
+    let query = this.database.db
+      .selectFrom('engineering_tasks as t')
+      .innerJoin('repositories as repo', 'repo.id', 't.repository_id')
+      .selectAll('t')
+      .select('repo.full_name as repository_full_name')
+      .select(cursorUs('t.created_at').as('cursor_us'))
+      .where('t.organization_id', '=', q.workspace_id);
+    if (q.repository_id) query = query.where('t.repository_id', '=', q.repository_id);
+    if (q.status) query = query.where('t.status', '=', q.status);
+    if (cursor) query = query.where(beforeCursor('t.created_at', 't.id', cursor));
+    const rows = await query.orderBy('t.created_at', 'desc').orderBy('t.id', 'desc').limit(q.limit + 1).execute();
+    const latest = await this.latestRuns(rows.slice(0, q.limit).map((r) => r.id));
+    return toPage(rows, q.limit, ({ cursor_us: _c, repository_full_name, ...t }) => ({ ...taskView(t), repository_full_name, latest_run: latest.get(t.id) ?? null }));
   }
 
   async get(userId: string, taskId: string) {
     const { task } = await this.access.requireTask(userId, taskId);
-    const latestRun = await this.database.db
+    const [latest, repo] = await Promise.all([
+      this.latestRuns([taskId]),
+      this.database.db.selectFrom('repositories').select('full_name').where('id', '=', task.repository_id).executeTakeFirstOrThrow(),
+    ]);
+    return { ...taskView(task), repository_full_name: repo.full_name, latest_run: latest.get(taskId) ?? null };
+  }
+
+  /** Most recent run per task, in one query (avoids one request per list row). */
+  private async latestRuns(taskIds: string[]) {
+    const out = new Map<string, { id: string; run_number: number; status: string; current_stage: string | null; created_at: string }>();
+    if (taskIds.length === 0) return out;
+    const rows = await this.database.db
       .selectFrom('workflow_runs')
-      .select(['id', 'run_number', 'status', 'current_stage', 'created_at'])
-      .where('task_id', '=', taskId)
+      .distinctOn('task_id')
+      .select(['task_id', 'id', 'run_number', 'status', 'current_stage', 'created_at'])
+      .where('task_id', 'in', taskIds)
+      .orderBy('task_id')
       .orderBy('run_number', 'desc')
-      .limit(1)
-      .executeTakeFirst();
-    return { ...taskView(task), latest_run: latestRun ? { ...latestRun, created_at: latestRun.created_at.toISOString() } : null };
+      .execute();
+    for (const { task_id, ...r } of rows) out.set(task_id, { ...r, created_at: r.created_at.toISOString() });
+    return out;
   }
 
   async update(userId: string, taskId: string, body: z.infer<typeof updateTaskBody>) {

@@ -58,15 +58,18 @@ export class IntegrationsService {
    * issued to this user for this workspace and (2) an OAuth code proving the
    * user can see the installation (`GET /user/installations`).
    */
-  async complete(userId: string, workspaceId: string, installationId: number, state: string, code: string) {
-    await this.access.requireWorkspace(userId, workspaceId, 'admin');
+  async complete(userId: string, requestedWorkspaceId: string | undefined, installationId: number, state: string, code: string) {
+    if (requestedWorkspaceId) await this.access.requireWorkspace(userId, requestedWorkspaceId, 'admin');
     if (!this.github.configured) throw Errors.notConfigured('GitHub App');
 
     const raw = await this.redis.client.getdel(`gh-install-state:${state}`);
     const bound = raw ? stateSchema.safeParse(JSON.parse(raw)) : null;
-    if (!bound?.success || bound.data.userId !== userId || bound.data.workspaceId !== workspaceId) {
+    if (!bound?.success || bound.data.userId !== userId || (requestedWorkspaceId !== undefined && bound.data.workspaceId !== requestedWorkspaceId)) {
       throw Errors.forbidden('The installation state is invalid or has expired. Start the installation again.');
     }
+    // The workspace comes from the server-held state, never from the redirect.
+    const workspaceId = bound.data.workspaceId;
+    if (!requestedWorkspaceId) await this.access.requireWorkspace(userId, workspaceId, 'admin');
 
     let remote;
     try {

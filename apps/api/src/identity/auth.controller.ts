@@ -25,7 +25,28 @@ export const callbackQuery = z.object({
   error: z.string().max(200).optional(),
 });
 
+export const loginQuery = z.object({ return_to: z.string().max(512).optional() });
+
 const OAUTH_COOKIE = 'anvaya_oauth';
+const DEFAULT_RETURN_TO = '/app';
+
+/**
+ * Post-login destination. Only same-origin relative paths are honoured (no
+ * scheme, no `//host`, no backslashes or control characters), so `return_to`
+ * can never become an open redirect. Anything else falls back to `/app`.
+ */
+export function safeReturnTo(raw: string | undefined, webOrigin: string): string {
+  const hasControlOrBackslash = (s: string) => [...s].some((ch) => ch === '\\' || ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || hasControlOrBackslash(raw)) return DEFAULT_RETURN_TO;
+  try {
+    const base = new URL(webOrigin);
+    const resolved = new URL(raw, base);
+    if (resolved.origin !== base.origin) return DEFAULT_RETURN_TO;
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return DEFAULT_RETURN_TO;
+  }
+}
 
 @Controller('auth')
 export class AuthController {
@@ -69,9 +90,11 @@ export class AuthController {
   @Public()
   @Get('github/login')
   @RateLimit({ bucket: 'auth', max: 20, windowSeconds: 60 })
-  githubLogin(@Res() res: Response): symbol {
+  githubLogin(@Res() res: Response, @Query(new ZodPipe(loginQuery)) q: z.infer<typeof loginQuery>): symbol {
     const start = this.oauth.start();
-    res.cookie(OAUTH_COOKIE, `${start.state}.${start.verifier}`, {
+    // The destination rides in the same short-lived HttpOnly cookie as the PKCE verifier and is re-validated on return.
+    const returnTo = Buffer.from(safeReturnTo(q.return_to, this.config.env.WEB_APP_URL)).toString('base64url');
+    res.cookie(OAUTH_COOKIE, `${start.state}.${start.verifier}.${returnTo}`, {
       httpOnly: true,
       secure: this.config.env.COOKIE_SECURE,
       sameSite: 'lax',
@@ -91,7 +114,8 @@ export class AuthController {
     const stored = cookies[OAUTH_COOKIE];
     const raw = typeof stored === 'string' ? stored : '';
     res.clearCookie(OAUTH_COOKIE, { path: '/api/v1/auth/github' });
-    const [state, verifier] = raw.split('.');
+    const [state, verifier, encodedReturnTo] = raw.split('.');
+    const returnTo = safeReturnTo(encodedReturnTo ? Buffer.from(encodedReturnTo, 'base64url').toString('utf8') : undefined, web);
     if (q.error || !q.code || !q.state || !state || !verifier || !constantTimeEqual(state, q.state)) {
       res.redirect(302, `${web}/login?error=oauth_failed`);
       return RAW_RESPONSE;
@@ -102,7 +126,7 @@ export class AuthController {
       const issued = await this.sessions.create(user.id, { ip: req.ip, userAgent: req.header('user-agent') });
       this.sessions.setCookies(res, issued);
       await this.audit.record({ organizationId: null, actorUserId: user.id, action: 'auth.login', resourceType: 'session', resourceId: issued.sessionId, metadata: { method: 'github' } });
-      res.redirect(302, `${web}/`);
+      res.redirect(302, `${new URL(web).origin}${returnTo}`);
     } catch (err) {
       const code = (err as { code?: string }).code === 'EMAIL_IN_USE' ? 'email_in_use' : 'oauth_failed';
       res.redirect(302, `${web}/login?error=${code}`);

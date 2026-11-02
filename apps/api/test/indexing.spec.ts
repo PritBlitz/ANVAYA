@@ -232,7 +232,7 @@ describe('repository indexing and retrieval', () => {
     it('conceals repositories from other tenants', async () => {
       await as(outsider, 'post', `/repositories/${repoUuid}/search`).send({ query: 'token' }).expect(404);
       await as(outsider, 'get', `/repositories/${repoUuid}/tree`).expect(404);
-      await as(outsider, 'get', `/repositories/${repoUuid}/file?path=src/auth/token.ts`).expect(404);
+      await as(outsider, 'get', `/repositories/${repoUuid}/files/content?path=src/auth/token.ts`).expect(404);
       await as(outsider, 'get', `/repositories/${repoUuid}/index-status`).expect(404);
     });
 
@@ -270,16 +270,16 @@ describe('repository indexing and retrieval', () => {
     });
 
     it('serves file content at the indexed commit by line range', async () => {
-      const res = await as(viewer, 'get', `/repositories/${repoUuid}/file?path=src/auth/token.ts&start_line=7&end_line=8`).expect(200);
+      const res = await as(viewer, 'get', `/repositories/${repoUuid}/files/content?path=src/auth/token.ts&start_line=7&end_line=8`).expect(200);
       expect(res.body.data).toMatchObject({ commit_sha: SHA1, start_line: 7, end_line: 8 });
       expect(res.body.data.content).toContain('refreshAccessToken');
     });
 
     it('never serves excluded or secret files', async () => {
-      const res = await as(viewer, 'get', `/repositories/${repoUuid}/file?path=.env`).expect(409);
+      const res = await as(viewer, 'get', `/repositories/${repoUuid}/files/content?path=.env`).expect(403);
       expect(res.body.error.code).toBe('FILE_EXCLUDED');
       expect(JSON.stringify(res.body)).not.toContain('super-secret');
-      await as(viewer, 'get', `/repositories/${repoUuid}/file?path=../../etc/passwd`).expect(404);
+      await as(viewer, 'get', `/repositories/${repoUuid}/files/content?path=../../etc/passwd`).expect(400);
     });
   });
 

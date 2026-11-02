@@ -57,6 +57,27 @@ export class UsageService {
     const totals = await base().select(agg).executeTakeFirstOrThrow();
     const byProvider = await base().select(['provider', 'model', ...agg]).groupBy(['provider', 'model']).orderBy('provider').limit(100).execute();
     const byOperation = await base().select(['operation', ...agg]).groupBy('operation').orderBy('operation').limit(100).execute();
+    // Zero-filled UTC day series for charts. The last day is the one containing the (exclusive) end instant.
+    const end = to ?? sql<Date>`now()`;
+    const daily = await sql<{ date: string; requests: number; input_tokens: number; output_tokens: number; estimated_cost_microunits: number | null }>`
+      with days as (
+        select generate_series((${from}::timestamptz at time zone 'UTC')::date,
+                               ((${end}::timestamptz - interval '1 microsecond') at time zone 'UTC')::date,
+                               interval '1 day')::date as d
+      )
+      select to_char(days.d, 'YYYY-MM-DD') as date,
+             count(u.id)::int as requests,
+             coalesce(sum(u.input_tokens), 0)::bigint as input_tokens,
+             coalesce(sum(u.output_tokens), 0)::bigint as output_tokens,
+             sum(u.estimated_cost_microunits)::bigint as estimated_cost_microunits
+      from days
+      left join usage_records u
+        on u.organization_id = ${workspaceId}
+       and u.created_at >= ${from}
+       and u.created_at < ${end}::timestamptz
+       and (u.created_at at time zone 'UTC')::date = days.d
+      group by days.d
+      order by days.d`.execute(this.database.db);
     const localRequests = byProvider.filter((p) => p.provider === 'ollama').reduce((s, p) => s + p.requests, 0);
     const mockRequests = byProvider.filter((p) => p.provider === 'mock').reduce((s, p) => s + p.requests, 0);
     return {
@@ -66,6 +87,7 @@ export class UsageService {
       local_vs_hosted: { local: localRequests, mock: mockRequests, hosted: totals.requests - localRequests - mockRequests },
       by_provider: byProvider,
       by_operation: byOperation,
+      daily: daily.rows,
     };
   }
 }

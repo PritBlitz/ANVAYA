@@ -7,10 +7,11 @@ import { paginationQuery, RAW_RESPONSE, UuidParamPipe, ZodPipe } from '../common
 import { logger } from '../common/logger.js';
 import { RateLimit } from '../common/rate-limit.js';
 import { RedisService } from '../common/redis.service.js';
+import { resolveWorkspaceId, WorkspaceHeader } from '../common/workspace-scope.js';
 import { type AuthedRequest, type AuthUser, CurrentUser } from '../identity/auth.decorators.js';
 import { AccessService } from '../workspaces/access.service.js';
 import { channel, RunEventsService } from './run-events.service.js';
-import { createTaskBody, editPlanBody, listTasksQuery, planApprovalBody, startRunBody, updateTaskBody } from './run.schemas.js';
+import { createTaskBody, editPlanBody, listRunsQuery, listTasksQuery, planApprovalBody, startRunBody, updateTaskBody } from './run.schemas.js';
 import { RunsService } from './runs.service.js';
 import { isTerminal } from './state-machine.js';
 import { TasksService } from './tasks.service.js';
@@ -35,8 +36,8 @@ export class TasksController {
   }
 
   @Get('tasks')
-  list(@CurrentUser() user: AuthUser, @Query(new ZodPipe(listTasksQuery)) q: z.infer<typeof listTasksQuery>) {
-    return this.tasks.list(user.id, q);
+  list(@CurrentUser() user: AuthUser, @WorkspaceHeader() wsHeader: string | undefined, @Query(new ZodPipe(listTasksQuery)) q: z.infer<typeof listTasksQuery>) {
+    return this.tasks.list(user.id, { ...q, workspace_id: resolveWorkspaceId(wsHeader, q.workspace_id) });
   }
 
   @Get('tasks/:taskId')
@@ -70,6 +71,12 @@ export class RunsController {
   @Get('tasks/:taskId/runs')
   list(@CurrentUser() user: AuthUser, @Param('taskId', new UuidParamPipe('Task')) taskId: string, @Query(new ZodPipe(paginationQuery)) q: z.infer<typeof paginationQuery>) {
     return this.runs.listForTask(user.id, taskId, q.limit, q.cursor);
+  }
+
+  @Get('runs')
+  listAll(@CurrentUser() user: AuthUser, @WorkspaceHeader() wsHeader: string | undefined, @Query(new ZodPipe(listRunsQuery)) q: z.infer<typeof listRunsQuery>) {
+    const { workspace_id, ...rest } = q;
+    return this.runs.listForWorkspace(user.id, resolveWorkspaceId(wsHeader, workspace_id), rest);
   }
 
   @Get('runs/:runId')

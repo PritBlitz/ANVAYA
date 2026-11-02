@@ -56,7 +56,7 @@ Endpoints added under `/auth`:
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/auth/providers` | `{ github: boolean, dev: boolean }` — which sign-in buttons to render. Public. |
-| GET | `/auth/github/login` | Browser navigation (not fetch). 302 to GitHub; returns to `WEB_APP_URL/` on success or `WEB_APP_URL/login?error=oauth_failed|email_in_use`. |
+| GET | `/auth/github/login?return_to=/app/...` | Browser navigation (not fetch). 302 to GitHub; on success returns to `WEB_APP_URL` + `return_to` (same-origin relative paths only; anything else → `/app`), on failure to `WEB_APP_URL/login?error=oauth_failed|email_in_use`. The OAuth redirect URI is `PUBLIC_API_URL/api/v1/auth/github/callback`: set `PUBLIC_API_URL` to the web origin when the web app proxies `/api/v1` (cookies are host-only, `Path=/`, no `Domain`). |
 | GET | `/auth/github/callback` | GitHub redirect target. Not called by the UI. |
 | POST | `/auth/dev-login` | `{ email, display_name? }` → `{ user, csrf_token, expires_at }`. **Development only**; 404 when disabled. Must be `Content-Type: application/json`. |
 | GET | `/auth/csrf` | Rotates and returns `{ csrf_token }` (also re-sets the cookie). |
@@ -88,21 +88,26 @@ Role rules enforced server-side (render controls accordingly, but never rely on 
 - Only owners can grant/revoke `owner`, modify admins, or invite admins.
 - The last owner cannot be demoted or removed (`409 LAST_OWNER`).
 
-### Invitations (PROPOSAL — spec only defines `POST /invitations`)
+### Invitations (AGREED, GAP-17 — spec only defines `POST /invitations`)
 - `POST /workspaces/:id/invitations` `{ email, role: admin|member|viewer }` → 201
   `{ id, email, role, status, expires_at, created_at, token, accept_url }`.
   **`token`/`accept_url` are returned once** (no email delivery yet); the inviter shares the link.
   `accept_url` = `WEB_APP_URL/invitations/accept#token=…` (fragment, so it never hits server logs).
+- Invitation `status`: `pending|accepted|revoked|expired`.
 - `GET /workspaces/:id/invitations` (admin+), `DELETE /workspaces/:id/invitations/:invitationId` (204).
 - `POST /invitations/accept` `{ token }` → 200 workspace object. The signed-in user's email must
   equal the invited email (`403` otherwise). Tokens expire after 7 days and are single-use.
 
-## 4. Tenant selection on collection endpoints (PROPOSAL)
+## 4. Tenant selection on collection endpoints (AGREED with frontend, 2026-11-02; GAP-02)
 
-`GET /repositories`, `POST /repositories`, `GET /tasks`, `GET /integrations/github/installations`
-have no workspace in the path. The backend requires **`workspace_id`** (query param for GET,
-body field for POST) and always re-verifies membership. Resource endpoints
-(`/repositories/:id`, `/tasks/:id`, `/runs/:id`, …) derive the workspace from the resource.
+`GET /repositories`, `POST /repositories`, `GET /tasks`, `GET /runs`,
+`GET /integrations/github/install-url`, `GET /integrations/github/installations` and
+`POST /ai/providers/health-check` have no workspace in the path. Send either the
+**`X-Workspace-Id: <uuid>`** header or `workspace_id` (query param for GET, body field for POST).
+- Both sent and different → `400 WORKSPACE_MISMATCH`. Neither → `422` (`details.issues[0].path = "workspace_id"`). Malformed header → `422`.
+- The header only *selects*; membership is always re-verified (non-members get `404`).
+- Resource endpoints (`/repositories/:id`, `/tasks/:id`, `/runs/:id`, …) ignore the header and derive the workspace from the resource.
+- `POST /integrations/github/complete` ignores the header: the server-held `state` is the only binding.
 
 ## 5. Idempotency
 
@@ -125,7 +130,8 @@ retrying a failure with the same key is safe. Keys are scoped per user and endpo
 - `GET /repositories/:id/index-status` → `{ indexing_status, latest_snapshot{commit_sha,status,parser_version,chunker_version,embedding_model,limitations}, coverage{total_files,indexed_files,excluded_files,failed_files,reused_files,excluded_by_reason,parse_status,languages,chunks,embedded_chunks}, active_job, last_job, supported_parsers }`. Poll this while `active_job` is non-null.
 - `indexing_status`: `pending|queued|indexing|ready|partial|failed|disabled`. **`partial` means searchable with stated limitations** (e.g. embeddings unavailable → lexical only); show `latest_snapshot.limitations`.
 - `GET /repositories/:id/tree?snapshot=latest&path=src` → `{ snapshot_id, commit_sha, path, entries: [{type:'directory',name,path,file_count} | {type:'file',name,path,language,parse_status,excluded,exclusion_reason,byte_size,line_count}], truncated }`.
-- **PROPOSAL** `GET /repositories/:id/file?path=&snapshot=latest&start_line=&end_line=` → `{ path, commit_sha, content_hash, language, line_count, start_line, end_line, truncated, content }` (≤2000 lines). Excluded files → `409 FILE_EXCLUDED`. Use this to open citations.
+- **AGREED (GAP-04)** `GET /repositories/:id/files/content?path=&commit_sha=&start_line=&end_line=` (`snapshot=latest|<sha>` also accepted; `commit_sha` wins and must match `snapshot` if both are sent) → `{ path, commit_sha, content_hash, language, parse_status, line_count, start_line, end_line, truncated, content }` (≤2000 lines per request; `truncated` is true when the requested range was cut). Excluded file → `403 FILE_EXCLUDED` with `details.reason`; invalid/traversal path → `400`; unknown file → `404`. Use this to open citations.
+- Shapes (R6): `coverage.languages` = `{ [language]: { files, parsed } }` (`unknown` for unclassified). Job `stage`: `resolving_commit|fetching|processing_files|embedding|resolving_relationships` (null when queued/finished). Job `progress` (grows as stages run; every key optional): `{ files_total, files_processed, files_reused, chunks_embedded }`. Job `status`: `queued|running|retry_scheduled|completed|failed|cancelled`.
 
 ### Search — `POST /repositories/:id/search`
 Request as API_SPEC plus optional `mode: hybrid|lexical|semantic`. Response
@@ -151,6 +157,9 @@ Request `{ question, snapshot?='latest', mode?: local|mock|cloud, top_k?=8, filt
 `POST /ai/providers/health-check { workspace_id, mode? }` → `{ mode, provider, available, models, detail, checked_at }`.
 `GET /workspaces/:id/usage?from&to` (member+, default last 30 days) → `{ period, totals, local_vs_hosted, by_provider, by_operation }`.
 
+### Usage — `GET /workspaces/:id/usage?from=&to=` (member+)
+Default period: last 30 days; max 366 days (`422` otherwise). → `{ workspace_id, period{from,to|null}, totals, local_vs_hosted{local,mock,hosted} (request counts), by_provider[{provider, model, …totals}], by_operation[{operation, …totals}], daily[{date: "YYYY-MM-DD", requests, input_tokens, output_tokens, estimated_cost_microunits|null}] }`. `totals` = `{ requests, input_tokens, output_tokens, estimated_cost_microunits|null, avg_duration_ms }`. `daily` is zero-filled per UTC day (R3).
+
 ### Knowledge
 `POST /repositories/:id/knowledge { source_type: engineering_note|decision|architecture, title, content(≤100KB), source_url?(https) }` (member+). `GET /knowledge/:id` includes `content`. Delete: author or admin. Notes are not yet used by Q&A retrieval.
 
@@ -158,12 +167,14 @@ Request `{ question, snapshot?='latest', mode?: local|mock|cloud, top_k?=8, filt
 
 ### Tasks
 - `POST /repositories/:id/tasks` (member+, Idempotency-Key recommended) — manual: `{ source_type:'manual', title, description, labels? }`; GitHub issue: `{ source_type:'github_issue', external_number }` (title/body imported; `422 NOT_AN_ISSUE` for PR numbers).
-- `GET /tasks?workspace_id=&repository_id=&status=` (paginated), `GET /tasks/:id` (includes `latest_run`), `PATCH /tasks/:id { title?, description?, labels?, status?: open|archived }`.
+- `GET /tasks?repository_id=&status=` (+ workspace per §4; paginated). Every list item and `GET /tasks/:id` include `repository_full_name` and `latest_run {id, run_number, status, current_stage, created_at} | null` (R2).
+- `GET /tasks/:id`, `PATCH /tasks/:id { title?, description?, labels?, status?: open|archived }`.
 - Task `status`: `open|active|completed|failed|cancelled|archived` (driven by its runs).
 
 ### Runs
 - `POST /tasks/:id/runs` → **202** run object. Body as API_SPEC (`mode`, `base_branch`, `budgets`). Budgets are clamped to workspace limits and AI policy; the response `budget` is what applies. `409 RUN_ALREADY_ACTIVE` (with `details.run_id`) if one is running; `409 REPOSITORY_NOT_INDEXED`.
-- Run object: `{ id, task_id, workspace_id, repository_id, run_number, status, current_stage, mode, provider, model, base_branch, snapshot_id, state_version, budget, usage_summary{input_tokens,output_tokens,model_calls,agent_steps}, retry_of_run_id, error_code, error_summary, cancel_requested_at, started_at, ended_at, created_at, updated_at }`; `GET /runs/:id` adds `plan_hash`, `plan_version`, `data_disclosure`.
+- Run object: `{ id, task_id, workspace_id, repository_id, run_number, status, current_stage, mode, provider, model, base_branch, snapshot_id, state_version, budget, usage_summary{input_tokens,output_tokens,model_calls,agent_steps}, retry_of_run_id, error_code, error_summary, cancel_requested_at, started_at, ended_at, created_at, updated_at }`; `GET /runs/:id` adds `task_title`, `repository_full_name`, `plan_hash`, `plan_version`, `data_disclosure`, `approvals[{id, approval_type: plan|pull_request, decision: approved|rejected, subject_hash, comment, user_id, created_at}]` (oldest first; GAP-19) and `pull_request {id, pr_number, pr_url, head_branch, base_branch, created_at} | null` (R1).
+- **AGREED (GAP-05)** `GET /runs?status=a&status=b&repository_id=&task_id=&limit=&cursor=` (+ workspace per §4) → paginated run objects + `task_title`, `repository_full_name`, newest first. Unknown status → `422`.
 - Statuses exactly as ARCHITECTURE §6. `current_stage`: `context_retrieval|investigation|planning|implementation|verification|review|pull_request|null`.
 - `POST /runs/:id/cancel { reason? }` (member+) → 200; terminal immediately. `POST /runs/:id/retry` → 202 new run (`retry_of_run_id`), only from `failed|timed_out|cancelled`.
 - `GET /runs/:id/steps` → `[{ id, sequence_number, agent_type (context_retriever|investigator|planner|…), status, prompt_version, provider, model, input_tokens, output_tokens, duration_ms, error_code, input, output, started_at, ended_at, tool_calls:[{tool_name,status,input,output,duration_ms}] }]` (redacted).
@@ -171,7 +182,7 @@ Request `{ question, snapshot?='latest', mode?: local|mock|cloud, top_k?=8, filt
 - Typical failure codes: `PROVIDER_UNAVAILABLE`, `PROVIDER_TIMEOUT`, `INVALID_MODEL_OUTPUT`, `INVALID_PLAN`, `BUDGET_EXHAUSTED`, `TIMED_OUT`, `EXECUTION_NOT_AVAILABLE` (until M6 ships, every approved run fails here).
 
 ### Plan
-- `GET /runs/:id/plan` → `{ version, plan_hash, source: agent|user_edit, editable, plan, investigation, approval }`; plan shape = AI_WORKFLOW §4.2.
+- `GET /runs/:id/plan` → `{ run_id, version, plan_hash, source: agent|user_edit, created_by, created_at, editable, plan, investigation, approval }`; plan shape = AI_WORKFLOW §4.2. `approval` = latest plan decision `{ decision, user_id, comment, subject_hash, created_at } | null` (R6).
 - `PATCH /runs/:id/plan { plan, base_plan_hash }` (member+, only `awaiting_plan_approval`) → new version + new hash. `409 PLAN_CHANGED` if `base_plan_hash` is stale. File paths must be relative, no `..`, no globs.
 - `POST /runs/:id/plan-approval { decision, comment?, plan_hash }` — **`plan_hash` is required to approve** and must equal the current version (`409 PLAN_CHANGED` otherwise). Approve → `preparing_workspace`; reject → `rejected` (task reopens).
 
@@ -187,8 +198,8 @@ Request `{ question, snapshot?='latest', mode?: local|mock|cloud, top_k?=8, filt
 ### Execution, review and pull requests
 After plan approval the run moves `preparing_workspace → implementing → verifying → (implementing for a bounded repair) → reviewing → awaiting_pr_approval`. Extra SSE events: `patch.proposed { patch_id, patch_hash, attempt, changed_files, additions, deletions }`, `sandbox.started { profile, command }`, `verification.completed { profile, status, exit_code, duration_ms, attempt }`, `review.finding.created { finding_id, source, severity, file_path }`, `approval.required { approval_type: 'pull_request', patch_id, patch_hash }`, `pull_request.created { pr_number, pr_url, head_branch }`.
 - `GET /runs/:id/diff` → `{ patch_id, patch_hash, attempt, base_commit_sha, summary, additions, deletions, changed_files[{path,action,explanation}], diff (unified), diff_truncated, attempts[] }` (404 before a patch exists).
-- `GET /runs/:id/verification` → `{ deterministic: true, current_patch_id, summary{passed,failed,timed_out,skipped,unavailable}, results[{profile_id, command_display, image, status: passed|failed|timed_out|skipped|error, exit_code, duration_ms, output_truncated, stdout_excerpt, stderr_excerpt, attempt, patch_id}] }`. Show these separately from AI output; `error` = infrastructure, not a test failure.
-- `GET /runs/:id/review` → `{ summary, deterministic_findings[], ai_findings[] }`; each finding `{ id, source: ai_review|security_scanner|static_analysis|test, severity, file_path, start_line, end_line, title, description, evidence, status: open|accepted|dismissed|fixed, disposition_* }`. AI findings are advisory; label them as such.
+- `GET /runs/:id/verification` → `{ deterministic: true, current_patch_id, summary{passed,failed,timed_out,skipped,unavailable}, unavailable[{profile_id, reason, kind: unsupported|sandbox_error}] (R4), results[{profile_id, command_display, image, status: passed|failed|timed_out|skipped|error, exit_code, duration_ms, output_truncated, stdout_excerpt, stderr_excerpt, attempt, patch_id}] }`. Show these separately from AI output; `error` = infrastructure, not a test failure.
+- `GET /runs/:id/review` → `{ summary, deterministic_findings[], ai_findings[] }`; each finding `{ id, source: ai_review|security_scanner|static_analysis|test, severity, file_path, start_line, end_line, title, description, evidence, confidence: low|medium|high|null, suggested_action: string|null, status: open|accepted|dismissed|fixed, disposition_* }`. `confidence`/`suggested_action` are top-level fields (R5), set only for `ai_review` findings. AI findings are advisory; label them as such.
 - `POST /runs/:id/findings/:findingId/disposition { status: accepted|dismissed|fixed, comment? }` (member+).
 - `POST /runs/:id/pr-approval { decision, comment?, patch_hash }` — `patch_hash` required to approve and must equal the current diff's hash (`409 PATCH_CHANGED`). Rejection → `completed_without_pr`.
 - `POST /runs/:id/pull-request { title, body?, base_branch? }` — **`Idempotency-Key` required** (`422 IDEMPOTENCY_KEY_REQUIRED`). `201 { id, pr_number, pr_url, head_branch, base_branch }`. Errors: `403` no valid approval of the current patch or installation lacks write permission; `409 PULL_REQUEST_EXISTS`; `422 PULL_REQUEST_NOT_SUPPORTED` (fixture/dev repositories); `503 GITHUB_UNAVAILABLE` (run returns to `awaiting_pr_approval`; retry with a new key). The PR body gets an appended evidence section (verification statuses, finding counts, approver). Nothing is merged or deployed.
@@ -196,7 +207,7 @@ After plan approval the run moves `preparing_workspace → implementing → veri
 - Repository setting `verification_profiles: string[]` (admin) selects from the server allowlist: `python-compile`, `python-unittest`, `node-syntax`, `node-test`. Empty = auto-detect. Arbitrary commands are never accepted.
 
 ### OpenAPI
-`apps/api/openapi.json` (OpenAPI 3.0.3, 70 operations) is generated from the runtime Zod request schemas; a test fails if it drifts from the live routes. Regenerate with `npm run build && npm run openapi`.
+`apps/api/openapi.json` (OpenAPI 3.0.3, 72 operations) is generated from the runtime Zod request schemas; a test fails if it drifts from the live routes. Regenerate with `npm run build && npm run openapi`.
 
 ## 9. Health
 `GET /health/live`, `GET /health/ready` (503 when Postgres or Redis is unavailable).
