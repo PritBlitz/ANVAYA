@@ -15,13 +15,14 @@ import { Avatar, Card, CardHeader, SkeletonRows } from "@/components/ui/misc";
 import { ConfirmDialog, Dialog, DialogClose, DialogContent } from "@/components/ui/overlays";
 import { ErrorState } from "@/components/ui/states";
 import { createIdempotencyKey } from "@/lib/api/client";
-import { qk, useMe, useMembers } from "@/lib/api/queries";
+import { qk, useInvitations, useMe, useMembers } from "@/lib/api/queries";
 import { api } from "@/lib/api/runtime";
-import { WORKSPACE_ROLES, type Member, type WorkspaceRole } from "@/lib/api/types";
+import { WORKSPACE_ROLES, type Invitation, type Member, type WorkspaceRole } from "@/lib/api/types";
 import { ROLE_DESCRIPTIONS } from "@/lib/domain/permissions";
 import { applyServerErrors, notifyError } from "@/lib/forms";
 import { useWorkspace } from "@/lib/workspace/context";
 import { formatRelative } from "@/lib/utils/format";
+import { CopyButton } from "@/features/code/code-view";
 
 export const inviteSchema = z.object({
   email: z.email("Enter a valid email address").max(254),
@@ -39,6 +40,7 @@ function InviteDialog({
   const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
   const key = useRef(createIdempotencyKey());
+  const [created, setCreated] = useState<Invitation | null>(null);
   const form = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
     defaultValues: { email: "", role: "member" },
@@ -48,18 +50,52 @@ function InviteDialog({
     mutationFn: (v: InviteValues) => api.workspaces.invite(workspaceId, v, key.current),
     onSuccess: (inv) => {
       key.current = createIdempotencyKey();
-      toast.success(`Invitation sent to ${inv.email}`);
-      void queryClient.invalidateQueries({ queryKey: qk.members(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: qk.invitations(workspaceId) });
       form.reset();
-      onOpenChange(false);
+      // The API returns the accept link once (no email delivery yet): show it to share.
+      if (inv.accept_url) setCreated(inv);
+      else {
+        toast.success(`Invitation created for ${inv.email}`);
+        onOpenChange(false);
+      }
     },
     onError: (e) => {
       key.current = createIdempotencyKey();
       applyServerErrors(e, form.setError, ["email", "role"]);
     },
   });
+  const close = (o: boolean) => {
+    if (!o) setCreated(null);
+    onOpenChange(o);
+  };
+  if (created) {
+    return (
+      <Dialog open={open} onOpenChange={close}>
+        <DialogContent
+          title="Share the invitation link"
+          description={`Anvaya doesn't send email yet. Send this link to ${created.email}; it works once and expires${created.expires_at ? ` on ${created.expires_at.slice(0, 10)}` : ""}.`}
+          footer={
+            <Button variant="primary" onClick={() => close(false)}>
+              Done
+            </Button>
+          }
+        >
+          <div className="flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2">
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-fg">
+              {created.accept_url}
+            </code>
+            <CopyButton value={created.accept_url ?? ""} label="Copy link" />
+          </div>
+          <p className="mt-3 text-xs text-fg-muted">
+            This is the only time the link is shown. If it&apos;s lost, revoke the invitation and
+            create a new one.
+          </p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={close}>
       <DialogContent
         title="Invite a member"
         footer={
@@ -68,7 +104,7 @@ function InviteDialog({
               <Button variant="ghost">Cancel</Button>
             </DialogClose>
             <Button type="submit" form="invite-form" variant="primary" loading={invite.isPending}>
-              Send invitation
+              Create invitation
             </Button>
           </>
         }
@@ -195,6 +231,16 @@ function MemberRow({
 }
 
 export function MembersSettings() {
+  const { can } = useWorkspace();
+  return (
+    <div className="flex flex-col gap-6">
+      <MembersCard />
+      {can("members.manage") && <PendingInvitations />}
+    </div>
+  );
+}
+
+function MembersCard() {
   const { can, workspace } = useWorkspace();
   const me = useMe();
   const members = useMembers();
@@ -231,6 +277,60 @@ export function MembersSettings() {
         </ul>
       )}
       <InviteDialog open={inviting} onOpenChange={setInviting} />
+    </Card>
+  );
+}
+
+function PendingInvitations() {
+  const { workspaceId } = useWorkspace();
+  const queryClient = useQueryClient();
+  const invitations = useInvitations();
+  const [revoking, setRevoking] = useState<Invitation | null>(null);
+  const revoke = useMutation({
+    mutationFn: (id: string) => api.workspaces.revokeInvitation(workspaceId, id),
+    onSuccess: () => {
+      toast.success("Invitation revoked");
+      setRevoking(null);
+      void queryClient.invalidateQueries({ queryKey: qk.invitations(workspaceId) });
+    },
+    onError: (e) => notifyError(e),
+  });
+  const pending = (invitations.data ?? []).filter((i) => i.status === "pending");
+  if (invitations.isPending || pending.length === 0) return null;
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Pending invitations" description="Links that haven't been accepted yet." />
+      <ul className="divide-y divide-border">
+        {pending.map((i) => (
+          <li key={i.id} className="flex items-center gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-fg">{i.email}</p>
+              <p className="text-xs text-fg-muted">
+                {i.role} · invited {formatRelative(i.created_at)}
+                {i.expires_at ? ` · expires ${i.expires_at.slice(0, 10)}` : ""}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-danger"
+              onClick={() => setRevoking(i)}
+            >
+              Revoke
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <ConfirmDialog
+        open={!!revoking}
+        onOpenChange={(o) => !o && setRevoking(null)}
+        title={`Revoke the invitation for ${revoking?.email ?? ""}?`}
+        description="The link stops working immediately."
+        confirmLabel="Revoke invitation"
+        confirmVariant="danger"
+        pending={revoke.isPending}
+        onConfirm={() => revoking && revoke.mutate(revoking.id)}
+      />
     </Card>
   );
 }
