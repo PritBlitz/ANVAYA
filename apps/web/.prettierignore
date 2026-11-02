@@ -7,3 +7,4 @@ package-lock.json
 next-env.d.ts
 # Next rewrites this on every build.
 tsconfig.json
+src/lib/api/generated

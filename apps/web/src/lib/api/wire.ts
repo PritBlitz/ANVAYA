@@ -37,7 +37,8 @@ export interface WProviders {
 }
 
 export interface WDevLogin {
-  user: WUser;
+  /** dev-login returns no avatar. */
+  user: Omit<WUser, "avatar_url"> & { avatar_url?: WUser["avatar_url"] };
   csrf_token: string;
   expires_at: ISO;
 }
@@ -317,7 +318,7 @@ export interface WQuestionAnswer {
   model: string | null;
   mode: WMode;
   prompt_version?: string | null;
-  data_disclosure: { provider: string; data_categories: string[] } | null;
+  data_disclosure: { provider: string | null; data_categories: string[] } | null;
   retrieval?: {
     result_count?: number;
     knowledge_result_count?: number;
@@ -328,7 +329,7 @@ export interface WQuestionAnswer {
     output_tokens?: number;
     duration_ms?: number;
     schema_repair_attempted?: boolean;
-  };
+  } | null;
 }
 
 export interface WKnowledge {
@@ -480,7 +481,7 @@ export interface WRun {
   updated_at: ISO;
   plan_hash?: string | null;
   plan_version?: number | null;
-  data_disclosure?: { provider: string; data_categories: string[] } | null;
+  data_disclosure?: { provider: string | null; data_categories: string[] } | null;
   /** GAP-19 */
   approvals?: WApproval[];
   /** R1 */
@@ -663,12 +664,16 @@ export interface WSymbol {
   commit_sha: string;
 }
 
+/** Symbols nested in a detail response carry no snapshot/commit; the detail does. */
+export type WSymbolRef = Omit<WSymbol, "snapshot_id" | "commit_sha"> &
+  Partial<Pick<WSymbol, "snapshot_id" | "commit_sha">>;
+
 export interface WSymbolDetail {
   snapshot_id: UUID;
   commit_sha: string;
-  symbol: WSymbol;
-  outgoing: { type: string; line: number; target: WSymbol | null; target_name: string }[];
-  incoming: { type: string; line: number; source: WSymbol }[];
+  symbol: WSymbolRef;
+  outgoing: { type: string; line: number; target: WSymbolRef | null; target_name: string }[];
+  incoming: { type: string; line: number; source: WSymbolRef }[];
   truncated: boolean;
 }
 
@@ -706,4 +711,22 @@ export interface WQuestionHistoryItem {
   mode: WMode;
   commit_sha: string | null;
   created_at: ISO;
+}
+
+/** POST /runs/:id/findings/:findingId/disposition returns only the decision. */
+export interface WFindingDisposition {
+  id: UUID;
+  status: WFinding["status"];
+  disposition_by: UUID | null;
+  disposition_comment: string | null;
+  disposition_at: ISO | null;
+}
+
+/** PATCH /runs/:id/plan returns the new revision only (no investigation/approval). */
+export interface WPlanRevision {
+  run_id: UUID;
+  version: number;
+  plan_hash: string;
+  source: "agent" | "user_edit";
+  plan: WPlanDoc;
 }

@@ -2217,7 +2217,14 @@ route("PATCH", "/runs/:runId/plan", (req) => {
   audit(req, run.workspace_id, "plan.edited", "workflow_run", run.id, {
     version: run.plan.version,
   });
-  return ok(wPlan(run));
+  const full = wPlan(run);
+  return ok({
+    run_id: full.run_id,
+    version: full.version,
+    plan_hash: full.plan_hash,
+    source: full.source,
+    plan: full.plan,
+  } satisfies W.WPlanRevision);
 });
 
 route("POST", "/runs/:runId/plan-approval", (req) => {
@@ -2321,7 +2328,13 @@ route("POST", "/runs/:runId/findings/:findingId/disposition", (req) => {
     severity: finding.severity,
     source: finding.source,
   });
-  return ok(wFinding(finding));
+  return ok({
+    id: finding.id,
+    status,
+    disposition_by: currentUser(req).id,
+    disposition_comment: typeof req.body.comment === "string" ? req.body.comment : null,
+    disposition_at: iso(req.now),
+  } satisfies W.WFindingDisposition);
 });
 
 route("POST", "/runs/:runId/pr-approval", (req) => {

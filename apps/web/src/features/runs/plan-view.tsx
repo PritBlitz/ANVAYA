@@ -257,9 +257,20 @@ function PlanEditor({ runPlan, onDone }: { runPlan: RunPlan; onDone: () => void 
   const save = useMutation({
     mutationFn: (v: PlanFormValues) =>
       api.runs.updatePlan(runPlan.run_id, formToPlan(v), runPlan.plan_hash),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(qk.runPart(workspaceId, runPlan.run_id, "plan"), updated);
-      toast.success(`Plan saved as version ${updated.version}`);
+    onSuccess: (revision) => {
+      // The response is the new revision only: keep the investigation, then refetch.
+      const key = qk.runPart(workspaceId, runPlan.run_id, "plan");
+      queryClient.setQueryData(key, {
+        ...runPlan,
+        plan: revision.plan,
+        plan_hash: revision.plan_hash,
+        version: revision.version,
+        source: revision.source,
+        state: "edited" as const,
+        approval: null,
+      });
+      void queryClient.invalidateQueries({ queryKey: key });
+      toast.success(`Plan saved as version ${revision.version}`);
       onDone();
     },
     onError: (e) => {

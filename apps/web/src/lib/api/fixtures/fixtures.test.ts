@@ -224,7 +224,14 @@ describe("fixture adapter contract", () => {
       { ...plan.plan, risks: [...plan.plan.risks, "Reviewed by a human"] },
       plan.plan_hash,
     );
-    expect(edited).toMatchObject({ version: 2, state: "edited", source: "user_edit" });
+    // PATCH returns the revision only (backend contract); the full view shows the edit.
+    expect(edited).toMatchObject({ version: 2, source: "user_edit" });
+    expect(edited).not.toHaveProperty("investigation");
+    expect(await api.runs.plan(run.id)).toMatchObject({
+      version: 2,
+      state: "edited",
+      investigation: expect.anything(),
+    });
     // Approving the old hash is refused; the current hash is accepted.
     expect(
       await fail(

@@ -752,7 +752,10 @@ export function fieldErrorsFromDetails(details: Record<string, unknown>): Record
 
 // ── Code intelligence (GAP-15) ───────────────────────────────────────────
 
-export function toSymbol(w: W.WSymbol): T.CodeSymbol {
+export function toSymbol(
+  w: W.WSymbolRef,
+  at?: { snapshot_id: string; commit_sha: string },
+): T.CodeSymbol {
   return {
     id: w.id,
     name: w.name,
@@ -763,26 +766,27 @@ export function toSymbol(w: W.WSymbol): T.CodeSymbol {
     end_line: Math.max(w.end_line, w.start_line),
     language: w.language ?? null,
     signature: w.signature ?? null,
-    snapshot_id: w.snapshot_id,
-    commit_sha: w.commit_sha,
+    snapshot_id: w.snapshot_id ?? at?.snapshot_id ?? "",
+    commit_sha: w.commit_sha ?? at?.commit_sha ?? "",
   };
 }
 
 export function toSymbolDetail(w: W.WSymbolDetail): T.SymbolDetail {
+  const at = { snapshot_id: w.snapshot_id, commit_sha: w.commit_sha };
   return {
     snapshot_id: w.snapshot_id,
     commit_sha: w.commit_sha,
-    symbol: toSymbol(w.symbol),
+    symbol: toSymbol(w.symbol, at),
     outgoing: (w.outgoing ?? []).map((o) => ({
       type: o.type,
       line: o.line,
-      target: o.target ? toSymbol(o.target) : null,
+      target: o.target ? toSymbol(o.target, at) : null,
       target_name: o.target_name || o.target?.name || "unknown",
     })),
     incoming: (w.incoming ?? []).map((i) => ({
       type: i.type,
       line: i.line,
-      source: toSymbol(i.source),
+      source: toSymbol(i.source, at),
     })),
     truncated: !!w.truncated,
   };
