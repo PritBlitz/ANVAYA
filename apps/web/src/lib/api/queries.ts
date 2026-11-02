@@ -44,6 +44,7 @@ export const qk = {
     ["ws", ws, "repositories", id, "symbol", symbolId, snapshot] as const,
   dependencyMap: (ws: string, id: string, path: string, snapshot: string) =>
     ["ws", ws, "repositories", id, "dependency-map", path, snapshot] as const,
+  questions: (ws: string, id: string) => ["ws", ws, "repositories", id, "questions"] as const,
   knowledge: (ws: string, id: string) => ["ws", ws, "repositories", id, "knowledge"] as const,
   knowledgeDoc: (ws: string, docId: string) => ["ws", ws, "knowledge", docId] as const,
   tasks: (ws: string, params?: T.TaskListParams) =>
@@ -246,6 +247,18 @@ export function useDependencyMap(id: string, path: string, snapshot = "latest") 
     queryFn: () => api.repositories.dependencyMap(id, path || undefined, snapshot),
     staleTime: 5 * 60_000,
     placeholderData: (prev) => prev,
+  });
+}
+
+/** B-8: saved Q&A history for the current user, 20 per page, newest first. */
+export function useQuestionHistory(id: string) {
+  const ws = useWorkspaceId();
+  return useInfiniteQuery({
+    queryKey: qk.questions(ws, id),
+    queryFn: ({ pageParam }) =>
+      api.repositories.questions(id, { limit: 20, cursor: pageParam ?? undefined }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
   });
 }
 

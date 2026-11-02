@@ -291,17 +291,24 @@ export interface WSearch {
 }
 
 export interface WCitation {
+  /** B-2; absent on older backends (= "code"). */
+  source?: "code" | "knowledge";
   evidence_id?: string;
-  path: string;
+  path: string | null;
   start_line: number;
   end_line: number;
-  commit_sha: string;
+  commit_sha: string | null;
   content_hash: string;
   symbol?: string | null;
+  knowledge_document_id?: UUID | null;
+  title?: string | null;
   supports?: string | null;
 }
 
 export interface WQuestionAnswer {
+  /** B-8: saved history entry. */
+  id?: UUID;
+  created_at?: ISO;
   answer: string;
   insufficient_evidence: boolean;
   citations: WCitation[];
@@ -311,7 +318,11 @@ export interface WQuestionAnswer {
   mode: WMode;
   prompt_version?: string | null;
   data_disclosure: { provider: string; data_categories: string[] } | null;
-  retrieval?: { result_count?: number; evidence_included?: string[] } & Record<string, unknown>;
+  retrieval?: {
+    result_count?: number;
+    knowledge_result_count?: number;
+    evidence_included?: string[];
+  } & Record<string, unknown>;
   usage?: {
     input_tokens?: number;
     output_tokens?: number;
@@ -679,4 +690,20 @@ export interface WDependencyMap {
   unresolved_imports: number;
   truncated: boolean;
   limitations: string[];
+}
+
+/** B-8: one saved Q&A history entry (caller's own only). */
+export interface WQuestionHistoryItem {
+  id: UUID;
+  repository_id: UUID;
+  question: string;
+  answer: string;
+  insufficient_evidence: boolean;
+  citations: WCitation[];
+  limitations: string[];
+  provider: string | null;
+  model: string | null;
+  mode: WMode;
+  commit_sha: string | null;
+  created_at: ISO;
 }

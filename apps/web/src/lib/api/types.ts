@@ -316,21 +316,45 @@ export interface SearchResponse {
 
 export type InferenceMode = "local" | "cloud" | "mock";
 
-export interface Citation {
+/** A cited range of indexed code at a commit. */
+export interface CodeCitation {
+  source: "code";
   path: string;
   start_line: number;
   end_line: number;
   commit_sha: string;
   content_hash: string;
+  symbol: string | null;
+  supports: string | null;
 }
+
+/** A cited range inside a knowledge note (B-2); the line range is within the note. */
+export interface KnowledgeCitation {
+  source: "knowledge";
+  knowledge_document_id: UUID;
+  title: string;
+  start_line: number;
+  end_line: number;
+  content_hash: string;
+  supports: string | null;
+}
+
+export type Citation = CodeCitation | KnowledgeCitation;
 
 export interface AskQuestionRequest {
   question: string;
   snapshot?: "latest" | string;
   mode?: InferenceMode;
+  /** Search knowledge notes too (backend default true). */
+  include_knowledge?: boolean;
 }
 
 export interface QuestionAnswer {
+  /** Saved history entry id (B-8); null for answers that were not persisted. */
+  id: UUID | null;
+  created_at: ISODateTime | null;
+  /** Snapshot commit the answer was grounded in, when known. */
+  commit_sha: string | null;
   question: string;
   answer: string;
   /** True when retrieval found nothing usable; the model was not called. */
@@ -346,6 +370,7 @@ export interface QuestionAnswer {
   retrieval: {
     chunks_considered: number | null;
     chunks_used: number;
+    knowledge_results: number | null;
     token_estimate: number | null;
     latency_ms: number | null;
   };

@@ -218,6 +218,11 @@ export function createEndpoints(client: ApiClient) {
             { signal },
           ),
         ),
+      /** B-8: the caller's own saved questions, newest first. */
+      questions: (repositoryId: string, params: T.PageParams = {}) =>
+        list(client, `/repositories/${enc(repositoryId)}/questions`, M.toQuestionHistoryItem, {
+          query: { ...params },
+        }),
       knowledge: (repositoryId: string) =>
         listAll(client, `/repositories/${enc(repositoryId)}/knowledge`, M.toKnowledge),
       addKnowledge: async (
@@ -236,6 +241,14 @@ export function createEndpoints(client: ApiClient) {
             idempotencyKey,
           }),
         ),
+    },
+
+    questions: {
+      get: async (questionId: string) =>
+        M.toQuestionHistoryItem(
+          await client.get<W.WQuestionHistoryItem>(`/questions/${enc(questionId)}`),
+        ),
+      remove: (questionId: string) => client.delete(`/questions/${enc(questionId)}`),
     },
 
     knowledge: {

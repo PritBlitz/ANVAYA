@@ -68,6 +68,8 @@ export interface FixtureState {
   repositories: Scoped<T.Repository>[];
   index_jobs: Record<string, IndexJob>;
   knowledge: Scoped<T.KnowledgeDocument & { content: string }>[];
+  /** B-8 saved Q&A history; visible only to the asking user. */
+  questions: Scoped<W.WQuestionHistoryItem & { user_id: string }>[];
   tasks: Scoped<T.EngineeringTask>[];
   runs: FixtureRun[];
   policies: Record<string, T.AiPolicy>;
@@ -86,7 +88,7 @@ export interface FixtureState {
   idempotency: Record<string, { fingerprint: string; status: number; body: unknown }>;
 }
 
-export const FIXTURE_STATE_VERSION = 4;
+export const FIXTURE_STATE_VERSION = 5;
 
 export const IDS = {
   user: "00000000-0000-4000-8000-000000000001",
@@ -259,6 +261,7 @@ export function createSeedState(): FixtureState {
           "Every charge request sent to the processor must carry an idempotency key derived from the order id so network retries can never double-charge a customer.",
       },
     ],
+    questions: [],
     tasks: [],
     runs: [],
     policies: { [ws]: defaultPolicy() },

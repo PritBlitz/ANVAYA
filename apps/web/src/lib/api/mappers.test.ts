@@ -476,3 +476,72 @@ describe("investigation (live payload)", () => {
     ]);
   });
 });
+
+describe("Q&A citations and history (B-2, B-8)", () => {
+  it("maps code and knowledge citations and drops malformed ones", () => {
+    const a = M.toQuestionAnswer("q", {
+      id: "q1",
+      created_at: "2026-11-03T00:00:00Z",
+      answer: "a [1] [2]",
+      insufficient_evidence: false,
+      citations: [
+        {
+          path: "src/a.ts",
+          start_line: 3,
+          end_line: 1,
+          commit_sha: "c".repeat(40),
+          content_hash: "h",
+        },
+        {
+          source: "knowledge",
+          path: null,
+          start_line: 2,
+          end_line: 4,
+          commit_sha: null,
+          content_hash: "k",
+          knowledge_document_id: "doc-1",
+          title: "ADR-006",
+        },
+        {
+          source: "code",
+          path: null,
+          start_line: 1,
+          end_line: 1,
+          commit_sha: null,
+          content_hash: "x",
+        },
+      ],
+      limitations: [],
+      provider: "mock",
+      model: "m",
+      mode: "mock",
+      data_disclosure: null,
+      retrieval: { result_count: 5, knowledge_result_count: 1 },
+    });
+    expect(a.id).toBe("q1");
+    expect(a.citations).toHaveLength(2);
+    expect(a.citations[0]).toMatchObject({ source: "code", path: "src/a.ts", end_line: 3 });
+    expect(a.citations[1]).toMatchObject({ source: "knowledge", knowledge_document_id: "doc-1" });
+    expect(a.commit_sha).toBe("c".repeat(40));
+    expect(a.retrieval.knowledge_results).toBe(1);
+  });
+
+  it("maps history items without per-request diagnostics", () => {
+    const h = M.toQuestionHistoryItem({
+      id: "q2",
+      repository_id: "r",
+      question: "why?",
+      answer: "no evidence",
+      insufficient_evidence: true,
+      citations: [],
+      limitations: ["none"],
+      provider: null,
+      model: null,
+      mode: "mock",
+      commit_sha: "d".repeat(40),
+      created_at: "2026-11-03T00:00:00Z",
+    });
+    expect(h).toMatchObject({ id: "q2", question: "why?", commit_sha: "d".repeat(40) });
+    expect(h.retrieval.latency_ms).toBeNull();
+  });
+});

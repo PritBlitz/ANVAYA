@@ -1664,8 +1664,84 @@ route("GET", "/repositories/:repositoryId/snapshots", (req) => {
   return paginate(s.latest_snapshot ? [{ ...s.latest_snapshot, ...s.coverage }] : [], req.query);
 });
 
+/** Knowledge notes whose lines share terms with the question (B-2 keyword fallback). */
+function knowledgeHits(state: FixtureState, repositoryId: string, question: string) {
+  const terms = question
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 3);
+  const hits: W.WCitation[] = [];
+  for (const k of state.knowledge.filter((d) => d.repository_id === repositoryId)) {
+    const lines = k.content.split("\n");
+    const idx = lines.findIndex((l) => {
+      const low = l.toLowerCase();
+      return terms.filter((t) => low.includes(t)).length >= 2;
+    });
+    if (idx < 0) continue;
+    hits.push({
+      source: "knowledge",
+      evidence_id: `kn-${k.id.slice(-4)}`,
+      path: null,
+      start_line: idx + 1,
+      end_line: idx + 1,
+      commit_sha: null,
+      content_hash: k.content_hash,
+      symbol: null,
+      knowledge_document_id: k.id,
+      title: k.title,
+      supports: null,
+    });
+  }
+  return hits.slice(0, 2);
+}
+
+function saveQuestion(
+  req: FixtureRequest,
+  repo: Scoped<T.Repository>,
+  question: string,
+  sha: string,
+  answer: W.WQuestionAnswer,
+): W.WQuestionAnswer {
+  const id = `51000000-0000-4000-8000-${String(++req.state.seq).padStart(12, "0")}`;
+  const created_at = iso(req.now);
+  req.state.questions.unshift({
+    id,
+    repository_id: repo.id,
+    workspace_id: repo.workspace_id,
+    user_id: currentUser(req).id,
+    question,
+    answer: answer.answer,
+    insufficient_evidence: answer.insufficient_evidence,
+    citations: answer.citations,
+    limitations: answer.limitations,
+    provider: answer.provider,
+    model: answer.model,
+    mode: answer.mode,
+    commit_sha: sha,
+    created_at,
+  });
+  return { ...answer, id, created_at };
+}
+
+function wQuestion(q: FixtureState["questions"][number]): W.WQuestionHistoryItem {
+  const { user_id: _u, workspace_id: _w, ...item } = q;
+  void _u;
+  void _w;
+  return item;
+}
+
+function ownQuestion(req: FixtureRequest) {
+  const q = req.state.questions.find((x) => x.id === req.params.questionId);
+  // Other users' entries (admins included) are indistinguishable from missing ones.
+  if (!q || q.user_id !== currentUser(req).id) {
+    throw new FixtureHttpError(404, "NOT_FOUND", "Question not found.");
+  }
+  membership(req, q.workspace_id);
+  return q;
+}
+
 route("POST", "/repositories/:repositoryId/questions", (req) => {
-  strictBody(req, ["question", "snapshot", "mode", "top_k", "filters"]);
+  strictBody(req, ["question", "snapshot", "mode", "top_k", "filters", "include_knowledge"]);
   const repo = repoForRead(req);
   const sha = requireIndexed(repo);
   const question = str(req.body, "question", { min: 3, max: 2000 });
@@ -1677,31 +1753,35 @@ route("POST", "/repositories/:repositoryId/questions", (req) => {
       "MODE_NOT_ALLOWED",
       `The ${mode} mode is not allowed by workspace policy.`,
     );
+  const includeKnowledge = req.body.include_knowledge !== false;
   const hits = searchFiles(filesForRepository(repo.full_name), question, sha, 4);
   const strong = hits.filter((h) => (h.semantic_score ?? 0) >= 0.6);
+  const notes = includeKnowledge ? knowledgeHits(req.state, repo.id, question) : [];
   if (strong.length === 0) {
-    return ok({
-      answer:
-        "I couldn't find indexed evidence that answers this question, so I won't guess. Try naming a file, function, or concept that appears in the code.",
-      insufficient_evidence: true,
-      citations: [],
-      limitations: [
-        "No retrieved chunk met the relevance threshold.",
-        "Answers are only generated from indexed evidence.",
-      ],
-      provider: null,
-      model: null,
-      mode,
-      prompt_version: "repository_qa.v1",
-      data_disclosure: null,
-      retrieval: { result_count: hits.length, evidence_included: [] },
-      usage: {
-        input_tokens: 0,
-        output_tokens: 0,
-        duration_ms: 180,
-        schema_repair_attempted: false,
-      },
-    } satisfies W.WQuestionAnswer);
+    return ok(
+      saveQuestion(req, repo, question, sha, {
+        answer:
+          "I couldn't find indexed evidence that answers this question, so I won't guess. Try naming a file, function, or concept that appears in the code.",
+        insufficient_evidence: true,
+        citations: [],
+        limitations: [
+          "No retrieved chunk met the relevance threshold.",
+          "Answers are only generated from indexed evidence.",
+        ],
+        provider: null,
+        model: null,
+        mode,
+        prompt_version: "repository_qa.v1",
+        data_disclosure: null,
+        retrieval: { result_count: hits.length, knowledge_result_count: 0, evidence_included: [] },
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          duration_ms: 180,
+          schema_repair_attempted: false,
+        },
+      }),
+    );
   }
   req.state.usage.push({
     workspace_id: repo.workspace_id,
@@ -1720,38 +1800,63 @@ route("POST", "/repositories/:repositoryId/questions", (req) => {
     (h, i) =>
       `- \`${h.file_path}\` lines ${h.start_line}–${h.end_line}${h.symbol_name ? ` (\`${h.symbol_name}\`)` : ""} [${i + 1}]`,
   );
-  return ok({
-    answer: `The most relevant logic is in \`${lead.file_path}\`${lead.symbol_name ? `, around \`${lead.symbol_name}\`` : ""} [1]. Related evidence:\n\n${lines.join("\n")}\n\nThis answer was assembled by the mock provider from retrieved snippets; it summarises where the behaviour lives rather than explaining it.`,
-    insufficient_evidence: false,
-    citations: strong.map((h, i) => ({
-      evidence_id: `ev-${i + 1}`,
-      path: h.file_path,
-      start_line: h.start_line,
-      end_line: h.end_line,
-      commit_sha: h.commit_sha,
-      content_hash: h.content_hash,
-      symbol: h.symbol_name ?? null,
-      supports: null,
-    })),
-    limitations: repo.full_name.endsWith("ml-pipeline")
-      ? ["Notebook files are not indexed and were not searched."]
-      : [],
-    provider: "mock",
-    model: "mock-deterministic",
-    mode,
-    prompt_version: "repository_qa.v1",
-    data_disclosure: null,
-    retrieval: {
-      result_count: hits.length + 6,
-      evidence_included: strong.map((_, i) => `ev-${i + 1}`),
-    },
-    usage: {
-      input_tokens: 900 + strong.length * 450,
-      output_tokens: 240,
-      duration_ms: 640,
-      schema_repair_attempted: false,
-    },
-  } satisfies W.WQuestionAnswer);
+  const noteLines = notes.map((n, i) => `- Team note “${n.title}” [${strong.length + i + 1}]`);
+  const codeCitations: W.WCitation[] = strong.map((h, i) => ({
+    source: "code",
+    evidence_id: `ev-${i + 1}`,
+    path: h.file_path,
+    start_line: h.start_line,
+    end_line: h.end_line,
+    commit_sha: h.commit_sha,
+    content_hash: h.content_hash,
+    symbol: h.symbol_name ?? null,
+    knowledge_document_id: null,
+    title: null,
+    supports: null,
+  }));
+  return ok(
+    saveQuestion(req, repo, question, sha, {
+      answer: `The most relevant logic is in \`${lead.file_path}\`${lead.symbol_name ? `, around \`${lead.symbol_name}\`` : ""} [1]. Related evidence:\n\n${[...lines, ...noteLines].join("\n")}\n\nThis answer was assembled by the mock provider from retrieved snippets; it summarises where the behaviour lives rather than explaining it.`,
+      insufficient_evidence: false,
+      citations: [...codeCitations, ...notes],
+      limitations: repo.full_name.endsWith("ml-pipeline")
+        ? ["Notebook files are not indexed and were not searched."]
+        : [],
+      provider: "mock",
+      model: "mock-deterministic",
+      mode,
+      prompt_version: "repository_qa.v1",
+      data_disclosure: null,
+      retrieval: {
+        result_count: hits.length + 6,
+        knowledge_result_count: notes.length,
+        evidence_included: [...codeCitations, ...notes].map((c) => c.evidence_id!),
+      },
+      usage: {
+        input_tokens: 900 + strong.length * 450,
+        output_tokens: 240,
+        duration_ms: 640,
+        schema_repair_attempted: false,
+      },
+    }),
+  );
+});
+
+route("GET", "/repositories/:repositoryId/questions", (req) => {
+  const repo = repoForRead(req);
+  const me = currentUser(req).id;
+  const items = req.state.questions
+    .filter((q) => q.repository_id === repo.id && q.user_id === me)
+    .map(wQuestion);
+  return paginate(items, req.query);
+});
+
+route("GET", "/questions/:questionId", (req) => ok(wQuestion(ownQuestion(req))));
+
+route("DELETE", "/questions/:questionId", (req) => {
+  const q = ownQuestion(req);
+  req.state.questions = req.state.questions.filter((x) => x.id !== q.id);
+  return noContent();
 });
 
 route("GET", "/repositories/:repositoryId/knowledge", (req) => {

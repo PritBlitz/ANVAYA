@@ -152,6 +152,39 @@ test("search and grounded Q&A open cited lines", async ({ page }) => {
   await expect(page.getByText("No supporting evidence")).toBeVisible();
 });
 
+test("Q&A cites knowledge notes and keeps a private history", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/w/acme/repositories");
+  await page.getByRole("link", { name: "acme/payments-api" }).click();
+  await page.getByRole("link", { name: "Ask", exact: true }).click();
+  await page.getByRole("button", { name: "What happens when a charge request fails?" }).click();
+  await expect(page.getByText(/\d+ from knowledge notes/)).toBeVisible();
+  await expectAccessible(page);
+
+  // The answer survives a reload as a saved history entry.
+  await page.reload();
+  const earlier = page.getByRole("list", { name: "Earlier questions" });
+  await expect(earlier.getByText("What happens when a charge request fails?")).toBeVisible();
+
+  // Knowledge citations open the note.
+  await earlier
+    .getByRole("link", { name: /ADR-006/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/knowledge\?doc=/);
+  await expect(page.getByRole("dialog")).toContainText("idempotency key");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("link", { name: "Ask", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /Remove “What happens when a charge request fails\?” from history/,
+    })
+    .click();
+  await expect(page.getByText("Removed from your history")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Earlier questions" })).toHaveCount(0);
+});
+
 test("symbol explorer and dependency map link to source", async ({ page }) => {
   await signIn(page);
   await page.goto("/w/acme/repositories");

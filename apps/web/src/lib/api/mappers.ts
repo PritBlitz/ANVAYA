@@ -290,18 +290,51 @@ export function toSearchResponse(w: W.WSearch): T.SearchResponse {
   };
 }
 
-export function toQuestionAnswer(question: string, w: W.WQuestionAnswer): T.QuestionAnswer {
+/** Code citations need a path and commit; anything else that names a note is knowledge. */
+export function toCitation(c: W.WCitation): T.Citation | null {
+  if (c.source === "knowledge" || (!c.path && c.knowledge_document_id)) {
+    if (!c.knowledge_document_id) return null;
+    return {
+      source: "knowledge",
+      knowledge_document_id: c.knowledge_document_id,
+      title: c.title || "Knowledge note",
+      start_line: c.start_line,
+      end_line: Math.max(c.end_line, c.start_line),
+      content_hash: c.content_hash,
+      supports: c.supports ?? null,
+    };
+  }
+  if (!c.path || !c.commit_sha) return null;
   return {
+    source: "code",
+    path: c.path,
+    start_line: c.start_line,
+    end_line: Math.max(c.end_line, c.start_line),
+    commit_sha: c.commit_sha,
+    content_hash: c.content_hash,
+    symbol: c.symbol ?? null,
+    supports: c.supports ?? null,
+  };
+}
+
+const toCitations = (list: W.WCitation[] | undefined) =>
+  (list ?? []).map(toCitation).filter((c): c is T.Citation => c !== null);
+
+function firstCodeSha(cited: T.Citation[]): string | null {
+  for (const c of cited) if (c.source === "code") return c.commit_sha;
+  return null;
+}
+
+export function toQuestionAnswer(question: string, w: W.WQuestionAnswer): T.QuestionAnswer {
+  const cited = toCitations(w.citations);
+  return {
+    id: w.id ?? null,
+    created_at: w.created_at ?? null,
+    commit_sha: firstCodeSha(cited),
     question,
     answer: w.answer,
     insufficient_evidence: !!w.insufficient_evidence,
-    citations: w.citations.map((c) => ({
-      path: c.path,
-      start_line: c.start_line,
-      end_line: c.end_line,
-      commit_sha: c.commit_sha,
-      content_hash: c.content_hash,
-    })),
+    citations: cited,
     provider: w.provider,
     model: w.model,
     mode: w.mode,
@@ -310,9 +343,39 @@ export function toQuestionAnswer(question: string, w: W.WQuestionAnswer): T.Ques
     retrieval: {
       chunks_considered:
         typeof w.retrieval?.result_count === "number" ? w.retrieval.result_count : null,
-      chunks_used: w.citations.length,
+      chunks_used: cited.length,
+      knowledge_results:
+        typeof w.retrieval?.knowledge_result_count === "number"
+          ? w.retrieval.knowledge_result_count
+          : null,
       token_estimate: w.usage?.input_tokens ?? null,
       latency_ms: w.usage?.duration_ms ?? null,
+    },
+  };
+}
+
+/** History entries carry no retrieval diagnostics or disclosure; those are per request. */
+export function toQuestionHistoryItem(w: W.WQuestionHistoryItem): T.QuestionAnswer {
+  const cited = toCitations(w.citations);
+  return {
+    id: w.id,
+    created_at: w.created_at,
+    commit_sha: w.commit_sha ?? firstCodeSha(cited),
+    question: w.question,
+    answer: w.answer,
+    insufficient_evidence: !!w.insufficient_evidence,
+    citations: cited,
+    provider: w.provider,
+    model: w.model,
+    mode: w.mode,
+    limitations: w.limitations ?? [],
+    data_disclosure: null,
+    retrieval: {
+      chunks_considered: null,
+      chunks_used: cited.length,
+      knowledge_results: null,
+      token_estimate: null,
+      latency_ms: null,
     },
   };
 }
