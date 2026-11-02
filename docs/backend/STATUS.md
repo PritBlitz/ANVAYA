@@ -16,14 +16,14 @@ returning fake success.
 | Audit | `GET /workspaces/:id/audit-events` | ✅ |
 | GitHub | `GET /integrations/github/install-url`, `POST /integrations/github/complete`, `GET /integrations/github/installations`, `GET …/installations/:id/repositories`, `DELETE …/installations/:id`, `POST /webhooks/github` | ✅ (against a fake GitHub that verifies App JWT signatures; not yet run against real GitHub) |
 | Repositories | `GET/POST /repositories`, `GET/PATCH/DELETE /repositories/:id` | ✅ |
-| Indexing | `POST /repositories/:id/index`, `GET …/index-status`, `GET …/snapshots`, `GET …/tree`, `GET …/file` (PROPOSAL), `POST …/search` | ✅ (worker process `main.worker.ts`; embeddings via AI service contract, tested with a fake AI server) |
+| Indexing | `POST /repositories/:id/index`, `GET …/index-status`, `GET …/snapshots`, `GET …/tree`, `GET …/files/content`, `POST …/search` | ✅ (worker process `main.worker.ts`; embeddings via AI service contract, tested with a fake AI server) |
 | AI policy | `GET/PATCH /workspaces/:id/ai-policy`, `POST /ai/providers/health-check` | ✅ |
 | Usage | `GET /workspaces/:id/usage` | ✅ |
 | Q&A | `POST /repositories/:id/questions` | ✅ (contract verified against the real FastAPI service in mock mode; not yet run against a live Ollama model) |
 | Knowledge | `GET/POST /repositories/:id/knowledge`, `GET/DELETE /knowledge/:id` | ✅ CRUD. Notes are **not yet included in retrieval/Q&A**. |
 | AI service | `services/ai-service`: mock + Ollama adapters, prompts, schemas, embeddings | ✅ 26 pytest tests. Hosted (cloud) adapter not implemented: cloud requests fail with `PROVIDER_NOT_CONFIGURED`. |
 | Tasks | `POST /repositories/:id/tasks` (manual + GitHub issue), `GET /tasks`, `GET/PATCH /tasks/:id` | ✅ |
-| Runs | `POST /tasks/:id/runs`, `GET /tasks/:id/runs`, `GET /runs/:id`, `POST /runs/:id/cancel`, `POST /runs/:id/retry`, `GET /runs/:id/steps`, `GET /runs/:id/artifacts` | ✅ (retrieval → investigation → planning; worker-driven; verified end-to-end with real worker + real AI service in mock mode) |
+| Runs | `POST /tasks/:id/runs`, `GET /tasks/:id/runs`, `GET /runs` (workspace list), `GET /runs/:id` (with approvals, PR), `POST /runs/:id/cancel`, `POST /runs/:id/retry`, `GET /runs/:id/steps`, `GET /runs/:id/artifacts` | ✅ (retrieval → investigation → planning; worker-driven; verified end-to-end with real worker + real AI service in mock mode) |
 | Plan | `GET/PATCH /runs/:id/plan`, `POST /runs/:id/plan-approval` | ✅ approval bound to plan hash |
 | SSE | `GET /runs/:id/events` | ✅ replay + live |
 | Execution & verification | workspace → patch → sandboxed verification → bounded repair (worker) | ✅ with `EXECUTION_DRIVER=docker` (dev). Default `disabled`: approved runs fail with `EXECUTION_NOT_AVAILABLE`. Sandbox policy tested against **real Docker**; full pipeline verified end-to-end with real containers. |
