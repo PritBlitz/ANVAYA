@@ -30,7 +30,7 @@ import { Dialog, DialogClose, DialogContent } from "@/components/ui/overlays";
 import { EmptyState, ErrorState, InlineAlert } from "@/components/ui/states";
 import { isApiError } from "@/lib/api/errors";
 import { createIdempotencyKey } from "@/lib/api/client";
-import { qk, useRunPlan } from "@/lib/api/queries";
+import { qk, useMembers, useRunPlan } from "@/lib/api/queries";
 import { api } from "@/lib/api/runtime";
 import type {
   ApprovalDecision,
@@ -249,13 +249,27 @@ function PlanEditor({ runPlan, onDone }: { runPlan: RunPlan; onDone: () => void 
   const steps = useFieldArray({ control: form.control, name: "steps" });
   const errors = form.formState.errors;
   const save = useMutation({
-    mutationFn: (v: PlanFormValues) => api.runs.updatePlan(runPlan.run_id, formToPlan(v)),
+    mutationFn: (v: PlanFormValues) =>
+      api.runs.updatePlan(runPlan.run_id, formToPlan(v), runPlan.plan_hash),
     onSuccess: (updated) => {
       queryClient.setQueryData(qk.runPart(workspaceId, runPlan.run_id, "plan"), updated);
       toast.success(`Plan saved as version ${updated.version}`);
       onDone();
     },
-    onError: (e) => applyServerErrors(e, form.setError, ["objective", "files_to_modify", "steps"]),
+    onError: (e) => {
+      if (isApiError(e) && e.code === "PLAN_CHANGED") {
+        // Someone else changed the plan: reload it rather than overwrite their edit.
+        void queryClient.invalidateQueries({
+          queryKey: qk.runPart(workspaceId, runPlan.run_id, "plan"),
+        });
+        toast.error("The plan changed while you were editing", {
+          description: "The latest version was loaded. Re-apply your edits.",
+        });
+        onDone();
+        return;
+      }
+      applyServerErrors(e, form.setError, ["objective", "files_to_modify", "steps"]);
+    },
   });
   return (
     <form
@@ -376,7 +390,11 @@ function DecisionDialog({
     mutationFn: () =>
       api.runs.decidePlan(
         runPlan.run_id,
-        { decision, ...(comment.trim() ? { comment: comment.trim() } : {}) },
+        {
+          decision,
+          plan_hash: runPlan.plan_hash,
+          ...(comment.trim() ? { comment: comment.trim() } : {}),
+        },
         key.current,
       ),
     onSuccess: () => {
@@ -395,6 +413,16 @@ function DecisionDialog({
     },
     onError: (e) => {
       key.current = createIdempotencyKey();
+      if (isApiError(e) && e.code === "PLAN_CHANGED") {
+        void queryClient.invalidateQueries({
+          queryKey: qk.runPart(workspaceId, runPlan.run_id, "plan"),
+        });
+        toast.error("The plan changed before your decision", {
+          description: "Review the latest version, then decide again.",
+        });
+        onOpenChange(false);
+        return;
+      }
       if (isApiError(e) && e.fieldErrors.comment) setError(e.fieldErrors.comment);
       else notifyError(e);
     },
@@ -467,6 +495,11 @@ function DecisionDialog({
 export function PlanView() {
   const { run } = useRunContext();
   const { can } = useWorkspace();
+  const members = useMembers();
+  const memberName = (userId: string) => {
+    const m = members.data?.find((x) => x.user.id === userId);
+    return m ? (m.user.display_name ?? m.user.email) : "a member";
+  };
   const plan = useRunPlan(run.id);
   const [editing, setEditing] = useState(false);
   const [decision, setDecision] = useState<ApprovalDecision | null>(null);
@@ -550,9 +583,9 @@ export function PlanView() {
           <InlineAlert
             tone={p.state === "approved" ? "success" : "danger"}
             icon={p.state === "approved" ? <Check /> : <X />}
-            title={`Plan ${p.state}${p.decided_by ? ` by ${p.decided_by.display_name ?? p.decided_by.email}` : ""}`}
+            title={`Plan ${p.state}${p.approval ? ` by ${memberName(p.approval.user_id)}` : ""}`}
           >
-            {p.decision_comment ?? "No comment."}
+            {p.approval?.comment ?? "No comment."}
           </InlineAlert>
         ) : awaiting ? (
           decidable ? (

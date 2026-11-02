@@ -13,47 +13,65 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/overlays";
 import { createIdempotencyKey } from "@/lib/api/client";
 import { qk, useRepositories } from "@/lib/api/queries";
+import type { CreateTaskRequest } from "@/lib/api/types";
 import { api } from "@/lib/api/runtime";
 import { isQueryable } from "@/lib/domain/status";
 import { applyServerErrors } from "@/lib/forms";
 import { useWorkspace } from "@/lib/workspace/context";
 
+/**
+ * Manual tasks carry a title and description. GitHub-issue tasks send only the issue
+ * number: the server imports title and body as untrusted context. Pull-request and
+ * failing-check sources aren't accepted by the API yet, so they aren't offered.
+ */
 export const createTaskSchema = z
   .object({
     repository_id: z.string().min(1, "Choose a repository"),
-    source_type: z.enum(["manual", "github_issue", "pull_request", "failing_check"]),
+    source_type: z.enum(["manual", "github_issue"]),
     external_number: z.string().trim().optional(),
-    title: z
-      .string()
-      .trim()
-      .min(4, "Title must be at least 4 characters")
-      .max(200, "Title must be at most 200 characters"),
-    description: z
-      .string()
-      .trim()
-      .min(10, "Describe the problem in at least 10 characters")
-      .max(10000, "Keep the description under 10,000 characters"),
+    title: z.string().trim().max(200, "Title must be at most 200 characters"),
+    description: z.string().trim().max(10000, "Keep the description under 10,000 characters"),
     start_now: z.boolean(),
   })
   .superRefine((v, ctx) => {
-    if (v.source_type === "manual") return;
-    const n = Number(v.external_number);
-    if (!v.external_number || !Number.isInteger(n) || n < 1) {
+    if (v.source_type === "github_issue") {
+      const n = Number(v.external_number);
+      if (!v.external_number || !Number.isInteger(n) || n < 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["external_number"],
+          message: "Enter the issue number, e.g. 214",
+        });
+      }
+      return;
+    }
+    if (v.title.length < 4)
       ctx.addIssue({
         code: "custom",
-        path: ["external_number"],
-        message: "Enter the GitHub number, e.g. 214",
+        path: ["title"],
+        message: "Title must be at least 4 characters",
+      });
+    if (v.description.length < 10) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["description"],
+        message: "Describe the problem in at least 10 characters",
       });
     }
   });
 
 export type CreateTaskValues = z.infer<typeof createTaskSchema>;
 
+/** Request body for the selected source (strict: no fields the server would reject). */
+export function toCreateTaskRequest(v: CreateTaskValues): CreateTaskRequest {
+  return v.source_type === "github_issue"
+    ? { source_type: "github_issue", external_number: Number(v.external_number) }
+    : { source_type: "manual", title: v.title, description: v.description };
+}
+
 const SOURCE_LABELS = {
   manual: "Describe it manually",
   github_issue: "GitHub issue",
-  pull_request: "Pull request",
-  failing_check: "Failing check",
 } as const;
 
 export function CreateTaskDialog({
@@ -91,19 +109,15 @@ export function CreateTaskDialog({
     mutationFn: async (v: CreateTaskValues) => {
       const task = await api.repositories.createTask(
         v.repository_id,
-        {
-          source_type: v.source_type,
-          title: v.title,
-          description: v.description,
-          ...(v.source_type !== "manual" ? { external_number: Number(v.external_number) } : {}),
-        },
+        toCreateTaskRequest(v),
         key.current,
       );
       if (!v.start_now) return { task, run: null };
       const repo = queryable.find((r) => r.id === v.repository_id);
+      // Mode omitted: the server applies the workspace's default mode (local-first).
       const run = await api.tasks.startRun(
         task.id,
-        { mode: "local", base_branch: repo?.default_branch ?? "main" },
+        { base_branch: repo?.default_branch ?? "main" },
         `start-${task.id}-1`,
       );
       return { task, run };
@@ -193,14 +207,12 @@ export function CreateTaskDialog({
               </Select>
             </Field>
           </div>
-          {source !== "manual" && (
+          {source === "github_issue" ? (
             <Field
-              label={
-                source === "failing_check" ? "Check run number" : `${SOURCE_LABELS[source]} number`
-              }
+              label="Issue number"
               required
               error={errors.external_number?.message}
-              hint="Its title, body, and comments are imported as untrusted context."
+              hint="Anvaya imports the issue's title and body as untrusted context."
             >
               <Input
                 inputMode="numeric"
@@ -209,21 +221,24 @@ export function CreateTaskDialog({
                 {...form.register("external_number")}
               />
             </Field>
+          ) : (
+            <>
+              <Field label="Title" required error={errors.title?.message}>
+                <Input
+                  placeholder="Concurrent refresh requests sign users out"
+                  {...form.register("title")}
+                />
+              </Field>
+              <Field
+                label="Description"
+                required
+                error={errors.description?.message}
+                hint="Expected vs. actual behaviour, constraints, and anything out of scope."
+              >
+                <Textarea rows={6} {...form.register("description")} />
+              </Field>
+            </>
           )}
-          <Field label="Title" required error={errors.title?.message}>
-            <Input
-              placeholder="Concurrent refresh requests sign users out"
-              {...form.register("title")}
-            />
-          </Field>
-          <Field
-            label="Description"
-            required
-            error={errors.description?.message}
-            hint="Expected vs. actual behaviour, constraints, and anything out of scope."
-          >
-            <Textarea rows={6} {...form.register("description")} />
-          </Field>
           <label className="flex items-start gap-2.5 rounded-md border border-border bg-bg-subtle p-3 text-sm">
             <input
               type="checkbox"

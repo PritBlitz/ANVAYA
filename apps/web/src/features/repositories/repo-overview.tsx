@@ -110,12 +110,12 @@ function ExclusionsCard({ status, repo }: { status: IndexStatus; repo: Repositor
   const { can } = useWorkspace();
   const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();
-  const [value, setValue] = useState((repo.settings.excluded_paths ?? []).join("\n"));
+  const [value, setValue] = useState((repo.settings.exclude_paths ?? []).join("\n"));
   const save = useMutation({
     mutationFn: () =>
       api.repositories.update(repo.id, {
         settings: {
-          excluded_paths: value
+          exclude_paths: value
             .split("\n")
             .map((s) => s.trim())
             .filter(Boolean),

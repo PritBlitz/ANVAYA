@@ -14,12 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, SkeletonRows } from "@/components/ui/misc";
 import { EmptyState, ErrorState, InlineAlert } from "@/components/ui/states";
 import { OnboardingSteps } from "@/features/onboarding/onboarding-steps";
-import { createIdempotencyKey } from "@/lib/api/client";
 import { qk, useAvailableRepositories, useInstallations } from "@/lib/api/queries";
 import { api } from "@/lib/api/runtime";
 import type { AvailableRepository, GitInstallation } from "@/lib/api/types";
 import { notifyError } from "@/lib/forms";
-import { beginGitHubInstall } from "@/lib/github-install";
+import { beginGitHubInstall, goToInstallUrl } from "@/lib/github-install";
 import { useWorkspace } from "@/lib/workspace/context";
 import { cn } from "@/lib/utils/cn";
 import { VisibilityIcon } from "./repositories-screen";
@@ -58,9 +57,19 @@ function PermissionsList() {
   );
 }
 
-function InstallCard() {
-  const { slug } = useWorkspace();
+/** Fetch the server-issued install URL (GAP-14) and go to GitHub. */
+function useStartInstall() {
+  const { workspace } = useWorkspace();
   const router = useRouter();
+  return useMutation({
+    mutationFn: () => beginGitHubInstall({ id: workspace.id, slug: workspace.slug }),
+    onSuccess: (url) => goToInstallUrl(url, router.push),
+    onError: (e) => notifyError(e, "Couldn't start the GitHub installation"),
+  });
+}
+
+function InstallCard() {
+  const install = useStartInstall();
   return (
     <Card>
       <div className="grid gap-6 p-6 md:grid-cols-[1fr_1.1fr]">
@@ -79,11 +88,8 @@ function InstallCard() {
             variant="primary"
             size="lg"
             className="self-start"
-            onClick={() => {
-              const url = beginGitHubInstall(slug);
-              if (url.startsWith("/")) router.push(url);
-              else window.location.assign(url);
-            }}
+            onClick={() => install.mutate()}
+            loading={install.isPending}
           >
             <GitHubMark /> Install on GitHub <ExternalLink className="opacity-70" />
           </Button>
@@ -129,10 +135,13 @@ function RepositoryPicker({
       for (const [i, repo] of repos.entries()) {
         setProgress(`Connecting ${repo.full_name} (${i + 1}/${repos.length})…`);
         const registered = await api.repositories.register(
-          { installation_id: installation.id, external_repository_id: repo.external_repository_id },
+          {
+            installation_id: installation.id,
+            external_repository_id: repo.external_repository_id,
+            index: true,
+          },
           `register-${installation.id}-${repo.external_repository_id}`,
         );
-        await api.repositories.queueIndex(registered.id, createIdempotencyKey());
         connected.push(registered);
       }
       return connected;
@@ -276,10 +285,10 @@ function RepositoryPicker({
 }
 
 export function ConnectRepositoryScreen() {
-  const { can, base, slug } = useWorkspace();
+  const install = useStartInstall();
+  const { can, base } = useWorkspace();
   const params = useSearchParams();
   const onboarding = params.get("onboarding") === "1";
-  const router = useRouter();
   const installations = useInstallations();
   const [selectedId, setSelectedId] = useState<string | null>(params.get("installation"));
 
@@ -346,11 +355,8 @@ export function ConnectRepositoryScreen() {
             <button
               type="button"
               className="font-medium text-link hover:underline"
-              onClick={() => {
-                const url = beginGitHubInstall(slug);
-                if (url.startsWith("/")) router.push(url);
-                else window.location.assign(url);
-              }}
+              onClick={() => install.mutate()}
+              disabled={install.isPending}
             >
               Add another account
             </button>

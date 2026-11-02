@@ -16,7 +16,7 @@ import { EmptyState, ErrorState, InlineAlert } from "@/components/ui/states";
 import { isApiError } from "@/lib/api/errors";
 import { qk, useRunReview } from "@/lib/api/queries";
 import { api } from "@/lib/api/runtime";
-import type { FindingDispositionDecision, ReviewFinding } from "@/lib/api/types";
+import type { FindingDispositionRequest, ReviewFinding } from "@/lib/api/types";
 import {
   findingSourceMeta,
   isTerminalRun,
@@ -62,7 +62,7 @@ function DismissDialog({ finding, onClose }: { finding: ReviewFinding; onClose: 
               loading={dispose.isPending}
               onClick={() => {
                 if (!comment.trim()) return setError("Explain why this finding doesn't apply");
-                dispose.mutate({ disposition: "dismiss", comment: comment.trim() });
+                dispose.mutate({ status: "dismissed", comment: comment.trim() });
               }}
             >
               Dismiss finding
@@ -89,7 +89,7 @@ function useDisposition(finding: ReviewFinding, onDone?: () => void) {
   const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { disposition: FindingDispositionDecision; comment?: string }) =>
+    mutationFn: (body: FindingDispositionRequest) =>
       api.runs.disposeFinding(run.id, finding.id, body),
     onSuccess: (updated) => {
       queryClient.setQueryData(
@@ -172,14 +172,14 @@ function FindingCard({ finding, editable }: { finding: ReviewFinding; editable: 
           <div className="flex flex-wrap gap-2 border-t border-border bg-bg-subtle px-4 py-2">
             <Button
               size="xs"
-              onClick={() => dispose.mutate({ disposition: "accept" })}
+              onClick={() => dispose.mutate({ status: "accepted" })}
               disabled={dispose.isPending}
             >
               <Check /> Accept risk
             </Button>
             <Button
               size="xs"
-              onClick={() => dispose.mutate({ disposition: "fix" })}
+              onClick={() => dispose.mutate({ status: "fixed" })}
               disabled={dispose.isPending}
             >
               <CheckCheck /> Mark fixed

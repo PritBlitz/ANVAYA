@@ -1,10 +1,7 @@
-import { API_MODE } from "@/lib/api/runtime";
-import { createRequestId } from "@/lib/api/client";
+import { api } from "@/lib/api/runtime";
 
 const STATE_KEY = "anvaya.github_install";
 const MAX_AGE_MS = 15 * 60_000;
-
-export const FIXTURE_INSTALLATION_ID = 99_001;
 
 interface PendingInstall {
   state: string;
@@ -13,25 +10,48 @@ interface PendingInstall {
 }
 
 /**
- * Begin a GitHub App installation. A random `state` is stored in sessionStorage and
- * checked on return so a forged callback URL cannot attach an installation to the
- * user's workspace (GAP-14).
+ * Begin a GitHub App installation (GAP-14). The API issues the install URL together with
+ * a single-use, server-held `state` bound to this user and workspace; the browser never
+ * invents state. We keep the state only to return the user to the right workspace and
+ * to catch obviously stale or foreign callbacks early — the server is the authority.
  */
-export function beginGitHubInstall(workspaceSlug: string): string {
-  const state = createRequestId();
-  const pending: PendingInstall = { state, slug: workspaceSlug, createdAt: Date.now() };
+export async function beginGitHubInstall(workspace: { id: string; slug: string }): Promise<string> {
+  const { url, state } = await api.github.installUrl(workspace.id);
+  const pending: PendingInstall = { state, slug: workspace.slug, createdAt: Date.now() };
   sessionStorage.setItem(STATE_KEY, JSON.stringify(pending));
-  if (API_MODE === "fixtures") {
-    return `/integrations/github/callback?installation_id=${FIXTURE_INSTALLATION_ID}&setup_action=install&state=${state}`;
-  }
-  const appSlug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG ?? "anvaya";
-  return `https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new?state=${encodeURIComponent(state)}`;
+  return url;
+}
+
+/** Navigate to the install URL (relative in fixtures, github.com otherwise). */
+export function goToInstallUrl(url: string, push: (href: string) => void) {
+  if (url.startsWith("/")) push(url);
+  else window.location.assign(url);
+}
+
+export interface CallbackParams {
+  code: string | null;
+  installation_id: string | null;
+  setup_action: string | null;
+  state: string | null;
 }
 
 export type InstallValidation =
-  { ok: true; slug: string } | { ok: false; reason: "missing" | "mismatch" | "expired" };
+  | {
+      ok: true;
+      slug: string;
+      installationId: number;
+      code: string;
+      state: string;
+      setupAction?: "install" | "update" | "request";
+    }
+  | { ok: false; reason: "missing_code" | "missing_installation" | "unknown_state" | "expired" };
 
-export function validateGitHubInstall(stateParam: string | null): InstallValidation {
+/**
+ * GitHub returns to /integrations/github/callback with code, installation_id,
+ * setup_action and our state. All four are forwarded; a missing `code` means the user
+ * didn't authorize, so the installation can't be linked.
+ */
+export function validateGitHubInstall(params: CallbackParams): InstallValidation {
   let pending: PendingInstall | null = null;
   try {
     const raw = sessionStorage.getItem(STATE_KEY);
@@ -39,10 +59,23 @@ export function validateGitHubInstall(stateParam: string | null): InstallValidat
   } catch {
     pending = null;
   }
-  if (!pending || !stateParam) return { ok: false, reason: "missing" };
-  if (pending.state !== stateParam) return { ok: false, reason: "mismatch" };
+  if (!pending || !params.state || pending.state !== params.state)
+    return { ok: false, reason: "unknown_state" };
   if (Date.now() - pending.createdAt > MAX_AGE_MS) return { ok: false, reason: "expired" };
-  return { ok: true, slug: pending.slug };
+  if (!params.code) return { ok: false, reason: "missing_code" };
+  const installationId = Number(params.installation_id);
+  if (!Number.isInteger(installationId) || installationId <= 0)
+    return { ok: false, reason: "missing_installation" };
+  const setup = params.setup_action;
+  return {
+    ok: true,
+    slug: pending.slug,
+    installationId,
+    code: params.code,
+    state: params.state,
+    setupAction:
+      setup === "install" || setup === "update" || setup === "request" ? setup : undefined,
+  };
 }
 
 export function clearGitHubInstall() {

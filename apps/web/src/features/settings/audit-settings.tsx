@@ -4,20 +4,22 @@ import { Lock, ScrollText } from "lucide-react";
 import { useDeferredValue, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Card, Mono, SkeletonRows } from "@/components/ui/misc";
 import { EmptyState, ErrorState } from "@/components/ui/states";
-import { useAuditEvents } from "@/lib/api/queries";
+import { useAuditEvents, useMembers } from "@/lib/api/queries";
+import type { AuditListParams } from "@/lib/api/types";
 import { useWorkspace } from "@/lib/workspace/context";
 import { formatDateTime } from "@/lib/utils/format";
 
 export function AuditSettings() {
   const { can } = useWorkspace();
   const [action, setAction] = useState("");
-  const [actor, setActor] = useState("");
-  const params = {
+  const [actorUserId, setActorUserId] = useState("");
+  const members = useMembers();
+  const params: Omit<AuditListParams, "cursor"> = {
     action: useDeferredValue(action.trim()) || undefined,
-    actor: useDeferredValue(actor.trim()) || undefined,
+    actor_user_id: actorUserId || undefined,
   };
   const events = useAuditEvents(params, can("audit.view"));
 
@@ -42,12 +44,18 @@ export function AuditSettings() {
           onChange={(e) => setAction(e.target.value)}
           className="font-mono text-xs"
         />
-        <Input
+        <Select
           aria-label="Filter by actor"
-          placeholder="Actor name"
-          value={actor}
-          onChange={(e) => setActor(e.target.value)}
-        />
+          value={actorUserId}
+          onChange={(e) => setActorUserId(e.target.value)}
+        >
+          <option value="">All actors</option>
+          {members.data?.map((m) => (
+            <option key={m.user.id} value={m.user.id}>
+              {m.user.display_name ?? m.user.email}
+            </option>
+          ))}
+        </Select>
       </div>
       <Card className="overflow-hidden">
         {events.isPending ? (

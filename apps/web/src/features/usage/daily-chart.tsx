@@ -18,7 +18,7 @@ export function niceMax(value: number): number {
  * Single-series bar chart of daily tokens (dataviz: one hue, no legend, thin bars
  * with rounded data-ends, 2px gaps, recessive axes, per-bar tooltip, table view).
  */
-export function DailyTokensChart({ daily }: { daily: UsageSummary["daily"] }) {
+export function DailyTokensChart({ daily }: { daily: NonNullable<UsageSummary["daily"]> }) {
   const [active, setActive] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
   const totals = daily.map((d) => d.input_tokens + d.output_tokens);
@@ -52,7 +52,7 @@ export function DailyTokensChart({ daily }: { daily: UsageSummary["daily"] }) {
                 Output
               </th>
               <th scope="col" className="py-1.5 text-right font-medium">
-                Runs
+                Requests
               </th>
             </tr>
           </thead>
@@ -62,7 +62,7 @@ export function DailyTokensChart({ daily }: { daily: UsageSummary["daily"] }) {
                 <td className="py-1.5 text-fg">{d.date}</td>
                 <td className="py-1.5 text-right text-fg-muted">{formatNumber(d.input_tokens)}</td>
                 <td className="py-1.5 text-right text-fg-muted">{formatNumber(d.output_tokens)}</td>
-                <td className="py-1.5 text-right text-fg-muted">{d.runs}</td>
+                <td className="py-1.5 text-right text-fg-muted">{d.requests}</td>
               </tr>
             ))}
           </tbody>
@@ -103,7 +103,7 @@ export function DailyTokensChart({ daily }: { daily: UsageSummary["daily"] }) {
                       onMouseEnter={() => setActive(i)}
                       onFocus={() => setActive(i)}
                       onBlur={() => setActive(null)}
-                      aria-label={`${d.date}: ${formatNumber(total)} tokens, ${d.runs} runs`}
+                      aria-label={`${d.date}: ${formatNumber(total)} tokens, ${d.requests} requests`}
                       className="flex h-full w-full items-end justify-center rounded-xs focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       <span
@@ -136,7 +136,7 @@ export function DailyTokensChart({ daily }: { daily: UsageSummary["daily"] }) {
                   {formatNumber(daily[active].input_tokens)} in ·{" "}
                   {formatNumber(daily[active].output_tokens)} out
                 </p>
-                <p className="text-fg-muted">{daily[active].runs} runs</p>
+                <p className="text-fg-muted">{daily[active].requests} requests</p>
               </div>
             )}
           </div>

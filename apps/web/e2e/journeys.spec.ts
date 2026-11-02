@@ -86,7 +86,9 @@ test("task → plan approval → verification → review → pull request", asyn
     .click();
 
   await expect(page.getByRole("heading", { name: "Compose pull request" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue(/## Verification/);
+  // Short summary: the server appends the verification/review evidence section itself.
+  await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue(/## Summary/);
+  await expect(page.getByRole("textbox", { name: "Description" })).not.toHaveValue(/## Verification/);
   await page.getByRole("button", { name: "Create pull request" }).click();
   await expect(page.getByText(/Pull request #\d+ opened/).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /Open on GitHub/ })).toHaveAttribute(
@@ -189,7 +191,7 @@ test("command palette and theme", async ({ page }) => {
   await palette.getByRole("combobox").fill("usage");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/w\/acme\/usage$/);
-  await expect(page.getByRole("button", { name: /tokens, \d+ runs/ }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /tokens, \d+ requests/ }).first()).toBeVisible();
 
   await page.keyboard.press("Control+k");
   await palette.getByRole("combobox").fill("theme");

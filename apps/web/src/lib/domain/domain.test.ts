@@ -75,11 +75,18 @@ describe("events", () => {
     expect(describeEvent(ev("approval.required", { approval_type: "pull_request" })).title).toBe(
       "Pull-request approval required",
     );
-    expect(describeEvent(ev("verification.completed", { passed: false })).tone).toBe("danger");
-    expect(describeEvent(ev("agent.started", { agent_type: "planner" })).tone).toBe("ai");
-    expect(describeEvent(ev("agent.started", { agent_type: "context_retriever" })).tone).toBe(
-      "info",
-    );
+    expect(
+      describeEvent(
+        ev("verification.completed", { profile: "node-test", status: "failed", exit_code: 1 }),
+      ).tone,
+    ).toBe("danger");
+    expect(
+      describeEvent(
+        ev("verification.completed", { profile: "node-test", status: "passed", exit_code: 0 }),
+      ).tone,
+    ).toBe("success");
+    expect(describeEvent(ev("agent.started", { agent: "planner" })).tone).toBe("ai");
+    expect(describeEvent(ev("agent.started", { agent: "context_retriever" })).tone).toBe("info");
     expect(describeEvent(ev("run.stage.changed", { stage: "planning" })).quiet).toBe(true);
   });
 

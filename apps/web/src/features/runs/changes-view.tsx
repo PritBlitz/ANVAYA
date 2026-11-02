@@ -8,8 +8,10 @@ import {
   FileText,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { AiBadge } from "@/components/domain/badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, Mono, SkeletonRows } from "@/components/ui/misc";
 import { EmptyState, ErrorState, InlineAlert } from "@/components/ui/states";
@@ -44,7 +46,15 @@ function DiffStat({ additions, deletions }: { additions: number; deletions: numb
   );
 }
 
-function FileDiffCard({ file, outOfScope }: { file: DiffFile; outOfScope: boolean }) {
+function FileDiffCard({
+  file,
+  outOfScope,
+  explanation,
+}: {
+  file: DiffFile;
+  outOfScope: boolean;
+  explanation?: string | null;
+}) {
   const [open, setOpen] = useState(true);
   return (
     <Card id={fileAnchor(file.path)} className="scroll-mt-4 overflow-hidden">
@@ -74,6 +84,12 @@ function FileDiffCard({ file, outOfScope }: { file: DiffFile; outOfScope: boolea
           <DiffStat additions={file.additions} deletions={file.deletions} />
         </span>
       </div>
+      {explanation && (
+        <p className="flex items-start gap-2 border-b border-border bg-ai-soft/40 px-3 py-2 text-xs text-fg">
+          <Sparkles className="mt-0.5 size-3 shrink-0 text-ai" aria-label="AI-written" />
+          {explanation}
+        </p>
+      )}
       {open && (
         <div className="scrollbar-thin overflow-x-auto font-mono text-[12.5px] leading-6">
           {file.binary ? (
@@ -215,16 +231,8 @@ export function ChangesView() {
         <Card className="flex flex-col gap-1.5 p-3 text-xs">
           <span className="text-fg-muted">
             Patch{" "}
-            <Badge
-              tone={
-                d.patch_status === "rejected"
-                  ? "danger"
-                  : d.patch_status === "applied"
-                    ? "success"
-                    : "info"
-              }
-            >
-              {d.patch_status}
+            <Badge tone={d.attempt > 1 ? "warning" : "info"}>
+              {d.attempt > 1 ? `repair attempt ${d.attempt}` : "first attempt"}
             </Badge>
           </span>
           <span className="flex items-center justify-between gap-2 text-fg-muted">
@@ -237,6 +245,25 @@ export function ChangesView() {
         </Card>
       </aside>
       <div className="flex min-w-0 flex-col gap-4">
+        {d.summary && (
+          <InlineAlert
+            tone="ai"
+            icon={<Sparkles />}
+            title={
+              <span className="flex items-center gap-2">
+                Patch summary <AiBadge />
+              </span>
+            }
+          >
+            {d.summary}
+          </InlineAlert>
+        )}
+        {d.truncated && (
+          <InlineAlert tone="warning" icon={<ShieldAlert />} title="Diff truncated">
+            This patch is larger than the display limit. Download the patch artifact from the
+            Timeline to review every line before approving.
+          </InlineAlert>
+        )}
         {plan.data &&
           (outOfScope.size === 0 ? (
             <InlineAlert tone="success" icon={<ShieldCheck />} title="Within approved scope">
@@ -252,7 +279,12 @@ export function ChangesView() {
             </InlineAlert>
           ))}
         {files.map((f) => (
-          <FileDiffCard key={f.path} file={f} outOfScope={outOfScope.has(f.path)} />
+          <FileDiffCard
+            key={f.path}
+            file={f}
+            outOfScope={outOfScope.has(f.path)}
+            explanation={d.changed_files.find((c) => c.path === f.path)?.explanation}
+          />
         ))}
       </div>
     </div>

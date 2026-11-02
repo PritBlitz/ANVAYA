@@ -2,14 +2,15 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { FileCode2, FileX2, History, PanelLeft } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mono, SkeletonRows } from "@/components/ui/misc";
 import { Dialog, DrawerContent } from "@/components/ui/overlays";
 import { EmptyState, ErrorState, InlineAlert } from "@/components/ui/states";
 import { isApiError } from "@/lib/api/errors";
-import { useFileContent, useTree } from "@/lib/api/queries";
+import { useFileContent, useTreeLevels } from "@/lib/api/queries";
+import type { TreeEntry } from "@/lib/api/types";
 import type { Repository } from "@/lib/api/types";
 import { formatLineParam, parseLineRange } from "@/lib/code";
 import { formatBytes, lineRange, shortSha } from "@/lib/utils/format";
@@ -17,6 +18,12 @@ import { RequireIndexed } from "@/features/repositories/not-indexed";
 import { useRepoId } from "@/features/repositories/repo-layout";
 import { CodeView, CopyButton } from "./code-view";
 import { FileTree } from "./file-tree";
+
+function ancestorsOf(path: string | null): string[] {
+  if (!path) return [];
+  const parts = path.split("/");
+  return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
+}
 
 function Explorer({ repo }: { repo: Repository }) {
   const params = useSearchParams();
@@ -26,9 +33,27 @@ function Explorer({ repo }: { repo: Repository }) {
   const range = parseLineRange(params.get("lines"));
   const commit = params.get("commit") ?? repo.latest_indexed_commit_sha;
   const stale = !!commit && commit !== repo.latest_indexed_commit_sha;
-  const tree = useTree(repo.id, null);
   const file = useFileContent(repo.id, path, commit);
   const [treeOpen, setTreeOpen] = useState(false);
+  // Directory levels to load: the root, the ancestors of a deep-linked file, and any
+  // directory the user expands. The backend lists one level per request.
+  const [expandedDirs, setExpandedDirs] = useState<string[]>(() => ["", ...ancestorsOf(path)]);
+  const levels = useTreeLevels(repo.id, expandedDirs);
+  const root = levels[0]!;
+  const entries = useMemo(() => {
+    const byPath = new Map<string, TreeEntry[]>();
+    expandedDirs.forEach((dir, i) => {
+      const data = levels[i]?.data;
+      if (data) byPath.set(dir, data.entries);
+    });
+    const attach = (list: TreeEntry[]): TreeEntry[] =>
+      list.map((e) =>
+        e.type === "directory" && byPath.has(e.path)
+          ? { ...e, children: attach(byPath.get(e.path)!) }
+          : e,
+      );
+    return attach(byPath.get("") ?? []);
+  }, [expandedDirs, levels]);
 
   const navigate = (next: { path?: string; lines?: string | null }) => {
     const q = new URLSearchParams(params.toString());
@@ -41,14 +66,15 @@ function Explorer({ repo }: { repo: Repository }) {
     router.replace(`${pathname}?${q.toString()}`, { scroll: false });
   };
 
-  const treePanel = tree.isPending ? (
+  const treePanel = root.isPending ? (
     <SkeletonRows rows={10} className="p-3" label="Loading file tree" />
-  ) : tree.isError ? (
-    <ErrorState compact error={tree.error} onRetry={() => tree.refetch()} />
+  ) : root.isError ? (
+    <ErrorState compact error={root.error} onRetry={() => root.refetch()} />
   ) : (
     <FileTree
-      entries={tree.data.entries}
+      entries={entries}
       selectedPath={path}
+      onExpand={(dir) => setExpandedDirs((prev) => (prev.includes(dir) ? prev : [...prev, dir]))}
       onSelect={(p) => {
         navigate({ path: p });
         setTreeOpen(false);
