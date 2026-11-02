@@ -9,6 +9,7 @@ const log = logger('run-events');
 /** SSE event names (API_SPEC §8). */
 export type RunEventType =
   | 'run.created'
+  | 'dependencies.installed'
   | 'run.status.changed'
   | 'run.stage.changed'
   | 'retrieval.completed'

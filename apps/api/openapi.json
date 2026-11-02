@@ -6023,7 +6023,9 @@
                             "python-compile",
                             "python-unittest",
                             "node-syntax",
-                            "node-test"
+                            "node-test",
+                            "npm-test",
+                            "python-pytest"
                           ]
                         }
                       }
@@ -17471,18 +17473,22 @@
                                 ]
                               },
                               "exit_code": {
+                                "nullable": true,
                                 "type": "number"
                               },
                               "duration_ms": {
+                                "nullable": true,
                                 "type": "number"
                               },
                               "output_truncated": {
                                 "type": "boolean"
                               },
                               "stdout_excerpt": {
+                                "nullable": true,
                                 "type": "string"
                               },
                               "stderr_excerpt": {
+                                "nullable": true,
                                 "type": "string"
                               },
                               "created_at": {

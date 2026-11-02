@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { logger } from '../common/logger.js';
@@ -12,8 +15,8 @@ import { planSchema } from '../runs/run.schemas.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from '../runs/stage-toolkit.js';
 import { ObjectStorage } from '../storage/object-storage.js';
 import { PatchRejected, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
-import { profileById, selectProfiles, unavailableChecks } from './profiles.js';
-import { SandboxDriver } from './sandbox.js';
+import { profileById, selectProfiles, unavailableChecks, type VerificationProfile } from './profiles.js';
+import { SandboxDriver, type SandboxResult } from './sandbox.js';
 import { WorkspaceManager } from './workspace.js';
 
 const log = logger('execution');
@@ -145,8 +148,9 @@ export class ExecutionPipeline extends ExecutionStages {
     await this.workspaces.cleanup(run.id);
     const paths = await this.ensureWorkspace({ ...run, checkpoint: { ...run.checkpoint, current_patch_id: null } });
     const repo = await this.repository(run);
-    const profiles = selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths));
-    const unavailable = unavailableChecks(new Set(paths));
+    const dependencyFetch = this.config.env.SANDBOX_DEPENDENCY_FETCH === 'enabled';
+    const profiles = selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths), { dependencyFetch });
+    const unavailable = unavailableChecks(new Set(paths), { dependencyFetch });
     await this.kit.database.transaction(async (tx) => {
       const current = await this.kit.guard(tx, run);
       await this.kit.finishTool(tx, current, toolId, 'succeeded', { files: paths.length, profiles: profiles.map((p) => p.id) }, Date.now() - started, 'prepare_workspace');
@@ -286,13 +290,39 @@ export class ExecutionPipeline extends ExecutionStages {
       const watcher = setInterval(() => {
         this.kit.assertActive(run.id).catch(() => abort.abort());
       }, 2000);
-      let res;
+      let res: SandboxResult | undefined;
+      let deps: Awaited<ReturnType<ExecutionPipeline['installDependencies']>> | null = null;
       try {
-        res = await this.sandbox.run(profile, this.workspaces.dir(run.id), { timeoutSeconds: Math.max(5, Math.min(this.config.env.SANDBOX_TIMEOUT_SECONDS, Math.floor(remaining))), signal: abort.signal });
+        if (profile.dependencies) deps = await this.installDependencies(run, profile, remaining, abort.signal);
+        if (!deps || deps.ok) {
+          res = await this.sandbox.run(profile, this.workspaces.dir(run.id), {
+            timeoutSeconds: Math.max(5, Math.min(this.config.env.SANDBOX_TIMEOUT_SECONDS, Math.floor(remaining))),
+            signal: abort.signal,
+            ...(deps?.ok ? { dependencies: { spec: profile.dependencies!, dir: join(deps.dir, profile.dependencies!.runSubdir) } } : {}),
+          });
+        }
       } finally {
         clearInterval(watcher);
       }
       if (abort.signal.aborted) throw new RunNoLongerActive();
+      if (deps && !deps.ok) {
+        // Not run: reported as skipped with the reason, never as passed (FR-VER-005).
+        const key = `runs/${run.id}/verification/${attempt}-${profile.id}`;
+        await this.storage.put(`${key}.stderr`, `[anvaya] ${deps.reason}`);
+        await this.kit.database.transaction(async (tx) => {
+          const current = await this.kit.guard(tx, run);
+          await tx
+            .insertInto('verification_runs')
+            .values({ run_id: run.id, patch_id: patchId, attempt, profile_id: profile.id, command_display: profile.commandDisplay, image: profile.image, status: 'skipped', stderr_object_key: `${key}.stderr` })
+            .execute();
+          await this.kit.finishTool(tx, current, toolId, 'failed', { profile_id: profile.id, status: 'skipped', reason: deps.reason }, 0, 'run_profile');
+          await this.kit.events.emit(tx, current, 'verification.completed', { profile: profile.id, status: 'skipped', exit_code: null, attempt, reason: deps.reason });
+        });
+        await this.kit.events.notify(run.id);
+        results.push({ profile: profile.id, status: 'skipped', exit_code: null, stderr: deps.reason, stdout: '' });
+        continue;
+      }
+      if (!res) throw new Error('unreachable: profile did not run');
       const status = res.error ? 'error' : res.timedOut ? 'timed_out' : res.exitCode === 0 ? 'passed' : 'failed';
       const key = `runs/${run.id}/verification/${attempt}-${profile.id}`;
       await this.storage.put(`${key}.stdout`, res.stdout);
@@ -338,6 +368,44 @@ export class ExecutionPipeline extends ExecutionStages {
       return;
     }
     await this.kit.move(run, 'reviewing', results.every((r) => r.status === 'skipped') ? 'no verification profile applies; proceeding to review' : 'all verification profiles passed');
+  }
+
+  /**
+   * B-4: validates the manifests on the host, then downloads dependencies in a networked
+   * fetch container that never runs repository code. Cached per run and manifest hash, so a
+   * repair attempt that does not touch the manifests reuses the download.
+   */
+  private async installDependencies(run: WorkflowRun, profile: VerificationProfile, remaining: number, signal: AbortSignal): Promise<{ ok: true; dir: string } | { ok: false; reason: string }> {
+    const spec = profile.dependencies!;
+    const workspaceDir = this.workspaces.dir(run.id);
+    const prepared = await spec.prepare(workspaceDir);
+    if (!prepared.ok) return { ok: false, reason: `Dependencies were not installed: ${prepared.reason}` };
+    const hash = createHash('sha256');
+    for (const f of prepared.stage) hash.update(f).update(' ').update(await readFile(join(workspaceDir, f)));
+    const digest = hash.digest('hex');
+    const dir = resolve(workspaceDir, '..', 'deps', spec.ecosystem);
+    const marker = join(dir, '.anvaya-installed');
+    if ((await readFile(marker, 'utf8').catch(() => '')) === digest) return { ok: true, dir };
+
+    await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true, mode: 0o777 });
+    await chmod(dir, 0o777);
+    for (const f of prepared.stage) await copyFile(join(workspaceDir, f), join(dir, f));
+    const toolStarted = Date.now();
+    const timeoutSeconds = Math.max(10, Math.min(this.config.env.SANDBOX_FETCH_TIMEOUT_SECONDS, Math.floor(remaining)));
+    const res = await this.sandbox.fetch(spec, prepared.stage, workspaceDir, dir, { timeoutSeconds, signal });
+    const ok = !res.error && !res.timedOut && res.exitCode === 0;
+    log.info({ run_id: run.id, ecosystem: spec.ecosystem, exit_code: res.exitCode, timed_out: res.timedOut, duration_ms: Date.now() - toolStarted }, 'dependency fetch finished');
+    await this.kit.database.transaction(async (tx) => {
+      const current = await this.kit.guard(tx, run);
+      await this.kit.events.emit(tx, current, 'dependencies.installed', { profile: profile.id, ecosystem: spec.ecosystem, status: ok ? 'succeeded' : 'failed', duration_ms: res.durationMs });
+    });
+    if (!ok) {
+      const tail = boundText(redactText(res.error ?? (res.stderr || res.stdout)).slice(-1500), 1500).text;
+      return { ok: false, reason: `Dependency installation failed (${res.timedOut ? 'timed out' : `exit ${res.exitCode ?? 'n/a'}`}): ${tail}` };
+    }
+    await writeFile(marker, digest);
+    return { ok: true, dir };
   }
 
   // ---------------------------------------------------------------------------

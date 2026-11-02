@@ -1,3 +1,5 @@
+import { type DependencySpec, npmSpec, pipSpec } from './dependencies.js';
+
 /**
  * Server-defined verification profiles (SECURITY §7 command execution policy).
  * The model never supplies a command: a profile id maps to a fixed, pinned
@@ -15,6 +17,8 @@ export interface VerificationProfile {
   commandDisplay: string;
   /** Repository files whose presence makes this profile applicable. */
   detect: (paths: ReadonlySet<string>) => boolean;
+  /** Third-party dependencies installed by a separate fetch step first (B-4). Only offered when dependency fetching is enabled. */
+  dependencies?: DependencySpec;
 }
 
 const PYTHON_IMAGE = 'python:3.12-alpine@sha256:e6dae589c1c05976188fd3bd019afd091445fc533ed2ea29001beddc7368a9c8';
@@ -55,6 +59,24 @@ export const PROFILES: readonly VerificationProfile[] = [
     commandDisplay: 'node --test',
     detect: (p) => [...p].some((f) => /\.test\.(m|c)?js$/.test(f)),
   },
+  {
+    id: 'npm-test',
+    description: 'Install locked npm dependencies (no install scripts), then run the package.json test script offline',
+    image: NODE_IMAGE,
+    argv: ['npm', 'test', '--offline', '--no-update-notifier'],
+    commandDisplay: 'npm ci --ignore-scripts (fetch) → npm test (offline)',
+    detect: (p) => p.has('package.json') && p.has('package-lock.json'),
+    dependencies: npmSpec(NODE_IMAGE),
+  },
+  {
+    id: 'python-pytest',
+    description: 'Install wheel-only requirements, then run pytest offline',
+    image: PYTHON_IMAGE,
+    argv: ['python', '-B', '-m', 'pytest', '-q', '-p', 'no:cacheprovider'],
+    commandDisplay: 'pip install --only-binary=:all: -r requirements*.txt (fetch) → python -m pytest (offline)',
+    detect: (p) => [...p].some((f) => /^requirements(-dev|-test)?\.txt$/.test(f)),
+    dependencies: pipSpec(PYTHON_IMAGE),
+  },
 ];
 
 export const PROFILE_IDS = PROFILES.map((p) => p.id);
@@ -63,10 +85,11 @@ export function profileById(id: string): VerificationProfile | undefined {
   return PROFILES.find((p) => p.id === id);
 }
 
-/** Profiles configured on the repository, or auto-detected from its files. */
-export function selectProfiles(configured: readonly string[] | undefined, paths: ReadonlySet<string>): VerificationProfile[] {
-  if (configured && configured.length > 0) return configured.map(profileById).filter((p): p is VerificationProfile => p !== undefined);
-  return PROFILES.filter((p) => p.detect(paths));
+/** Profiles configured on the repository, or auto-detected from its files. Dependency profiles need fetching enabled. */
+export function selectProfiles(configured: readonly string[] | undefined, paths: ReadonlySet<string>, opts: { dependencyFetch?: boolean } = {}): VerificationProfile[] {
+  const allowed = (p: VerificationProfile) => !p.dependencies || opts.dependencyFetch === true;
+  if (configured && configured.length > 0) return configured.map(profileById).filter((p): p is VerificationProfile => p !== undefined && allowed(p));
+  return PROFILES.filter((p) => allowed(p) && p.detect(paths));
 }
 
 export interface UnavailableCheck {
@@ -81,14 +104,21 @@ const NEEDS_DEPENDENCIES = 'needs project dependencies installed; the sandbox ha
  * (FR-VER-005: report "unavailable" separately, never as passed). Derived only
  * from file paths; repository content is never executed or interpreted here.
  */
-export function unavailableChecks(paths: ReadonlySet<string>): UnavailableCheck[] {
+export function unavailableChecks(paths: ReadonlySet<string>, opts: { dependencyFetch?: boolean } = {}): UnavailableCheck[] {
   const has = (re: RegExp) => [...paths].some((p) => re.test(p));
   const out: UnavailableCheck[] = [];
   const hasPackageJson = has(/(^|\/)package\.json$/);
+  const fetch = opts.dependencyFetch === true;
   if (has(/\.(ts|tsx|mts|cts)$/)) out.push({ profile_id: 'typescript-typecheck', reason: `TypeScript type checking ${NEEDS_DEPENDENCIES}` });
-  if (hasPackageJson) out.push({ profile_id: 'npm-test', reason: `The package.json test script ${NEEDS_DEPENDENCIES}` });
-  if (has(/(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt|Pipfile|poetry\.lock)$/)) {
-    out.push({ profile_id: 'python-dependencies', reason: `Tests importing third-party Python packages (e.g. pytest) ${NEEDS_DEPENDENCIES}` });
+  if (hasPackageJson && !(fetch && paths.has('package.json') && paths.has('package-lock.json'))) {
+    out.push({ profile_id: 'npm-test', reason: fetch ? 'npm dependencies can only be installed from a root package-lock.json' : `The package.json test script ${NEEDS_DEPENDENCIES}` });
+  }
+  const pyManifests = has(/(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt|Pipfile|poetry\.lock)$/);
+  if (pyManifests && !(fetch && has(/^requirements(-dev|-test)?\.txt$/))) {
+    out.push({
+      profile_id: 'python-dependencies',
+      reason: fetch ? 'Python dependencies can only be installed from root requirements.txt / requirements-dev.txt / requirements-test.txt' : `Tests importing third-party Python packages (e.g. pytest) ${NEEDS_DEPENDENCIES}`,
+    });
   }
   if (has(/(^|\/)go\.mod$/)) out.push({ profile_id: 'go-test', reason: 'No verification profile exists for Go yet' });
   if (has(/(^|\/)Cargo\.toml$/)) out.push({ profile_id: 'cargo-test', reason: 'No verification profile exists for Rust yet' });

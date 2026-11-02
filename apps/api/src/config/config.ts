@@ -63,6 +63,13 @@ export const envSchema = z
     SANDBOX_PIDS_LIMIT: z.coerce.number().int().min(16).max(4096).default(256),
     SANDBOX_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(3600).default(300),
     SANDBOX_OUTPUT_LIMIT_BYTES: z.coerce.number().int().min(1024).max(10_000_000).default(1_000_000),
+    /** B-4: allow a networked, no-code-execution dependency fetch step before dependency profiles. */
+    SANDBOX_DEPENDENCY_FETCH: z.enum(['disabled', 'enabled']).default('disabled'),
+    /** Docker network for the fetch step; point it at an egress-restricted network in shared environments. */
+    SANDBOX_FETCH_NETWORK: z.string().regex(/^[A-Za-z0-9_.-]+$/).default('bridge'),
+    /** Optional HTTP(S) proxy for the fetch step (egress allowlist). */
+    SANDBOX_FETCH_PROXY: z.url().optional(),
+    SANDBOX_FETCH_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
 
     /** Enables GET /api/v1/internal/metrics (bearer token). Unset = disabled. */
     METRICS_TOKEN: z.string().min(16).optional(),
@@ -151,6 +158,7 @@ export class AppConfig {
       aiServiceUrl: e.AI_SERVICE_URL,
       repositorySource: e.REPOSITORY_SOURCE,
       executionDriver: e.EXECUTION_DRIVER,
+      dependencyFetch: e.SANDBOX_DEPENDENCY_FETCH,
     };
   }
 }
