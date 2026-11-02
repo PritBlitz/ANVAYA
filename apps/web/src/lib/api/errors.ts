@@ -119,7 +119,17 @@ export function describeError(error: unknown): {
   const requestId = error.requestId;
   // Model-provider outcomes (B-1): explicit, and never followed by a silent fallback.
   const provider = PROVIDER_ERRORS[error.code];
-  if (provider) return { ...provider, requestId };
+  if (provider) {
+    const details = (error.details ?? {}) as { retry_after_seconds?: unknown; category?: unknown };
+    let description = provider.description;
+    if (typeof details.retry_after_seconds === "number") {
+      description += ` The provider suggests waiting ${Math.ceil(details.retry_after_seconds)} s.`;
+    }
+    if (typeof details.category === "string" && details.category) {
+      description += ` Reason given: ${details.category.replace(/_/g, " ")}.`;
+    }
+    return { title: provider.title, description, requestId };
+  }
   if (error.isNetwork) {
     return {
       title: "Can't reach Anvaya",

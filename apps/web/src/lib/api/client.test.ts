@@ -218,6 +218,26 @@ describe("retry policy", () => {
         .title,
     ).toMatch(/rate limiting/);
     expect(
+      describeError(
+        new ApiError({
+          status: 429,
+          code: "PROVIDER_RATE_LIMITED",
+          message: "x",
+          details: { retry_after_seconds: 30 },
+        }),
+      ).description,
+    ).toMatch(/waiting 30 s/);
+    expect(
+      describeError(
+        new ApiError({
+          status: 422,
+          code: "PROVIDER_REFUSED",
+          message: "x",
+          details: { category: "cyber" },
+        }),
+      ).description,
+    ).toMatch(/Reason given: cyber/);
+    expect(
       describeError(new ApiError({ status: 504, code: "PROVIDER_TIMEOUT", message: "x" }))
         .description,
     ).toMatch(/request timeout/);

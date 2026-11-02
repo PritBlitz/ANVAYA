@@ -3445,7 +3445,8 @@ export interface operations {
                         data: {
                             /** Format: uuid */
                             id: string;
-                            actor_type: string;
+                            /** @enum {string} */
+                            actor_type: "user" | "system" | "worker" | "provider";
                             /** Format: uuid */
                             actor_user_id: string;
                             actor_email: string;
@@ -3669,7 +3670,8 @@ export interface operations {
                             granted_permissions: {
                                 [key: string]: string;
                             };
-                            status: string;
+                            /** @enum {string} */
+                            status: "active" | "suspended" | "disconnected";
                             /** Format: date-time */
                             created_at: string;
                             /** Format: date-time */
@@ -3778,7 +3780,8 @@ export interface operations {
                             granted_permissions: {
                                 [key: string]: string;
                             };
-                            status: string;
+                            /** @enum {string} */
+                            status: "active" | "suspended" | "disconnected";
                             /** Format: date-time */
                             created_at: string;
                             /** Format: date-time */
@@ -4163,7 +4166,8 @@ export interface operations {
                             name: string;
                             full_name: string;
                             default_branch: string;
-                            visibility: string;
+                            /** @enum {string} */
+                            visibility: "public" | "private" | "internal";
                             /** @enum {string} */
                             status: "connected" | "disabled" | "disconnected";
                             /** @enum {string} */
@@ -4296,7 +4300,8 @@ export interface operations {
                             name: string;
                             full_name: string;
                             default_branch: string;
-                            visibility: string;
+                            /** @enum {string} */
+                            visibility: "public" | "private" | "internal";
                             /** @enum {string} */
                             status: "connected" | "disabled" | "disconnected";
                             /** @enum {string} */
@@ -4414,7 +4419,8 @@ export interface operations {
                             name: string;
                             full_name: string;
                             default_branch: string;
-                            visibility: string;
+                            /** @enum {string} */
+                            visibility: "public" | "private" | "internal";
                             /** @enum {string} */
                             status: "connected" | "disabled" | "disconnected";
                             /** @enum {string} */
@@ -4634,7 +4640,8 @@ export interface operations {
                             name: string;
                             full_name: string;
                             default_branch: string;
-                            visibility: string;
+                            /** @enum {string} */
+                            visibility: "public" | "private" | "internal";
                             /** @enum {string} */
                             status: "connected" | "disabled" | "disconnected";
                             /** @enum {string} */
@@ -9075,7 +9082,8 @@ export interface operations {
                             run_id: string;
                             version: number;
                             plan_hash: string;
-                            source: string;
+                            /** @enum {string} */
+                            source: "agent" | "user_edit";
                             /** Format: uuid */
                             created_by: string | null;
                             /** Format: date-time */
@@ -9230,7 +9238,8 @@ export interface operations {
                             run_id: string;
                             version: number;
                             plan_hash: string;
-                            source: string;
+                            /** @enum {string} */
+                            source: "agent" | "user_edit";
                             plan: {
                                 risks: string[];
                                 steps: {
@@ -9616,7 +9625,8 @@ export interface operations {
                             unavailable: {
                                 profile_id: string;
                                 reason: string;
-                                kind: string;
+                                /** @enum {string} */
+                                kind: "unsupported" | "sandbox_error";
                             }[];
                             results: {
                                 /** Format: uuid */
@@ -9734,7 +9744,8 @@ export interface operations {
                                 id: string;
                                 /** Format: uuid */
                                 patch_id: string;
-                                source: string;
+                                /** @enum {string} */
+                                source: "ai_review" | "static_analysis" | "security_scanner" | "test";
                                 /** @enum {string} */
                                 severity: "info" | "low" | "medium" | "high" | "critical";
                                 file_path: string;
@@ -9763,7 +9774,8 @@ export interface operations {
                                 id: string;
                                 /** Format: uuid */
                                 patch_id: string;
-                                source: string;
+                                /** @enum {string} */
+                                source: "ai_review" | "static_analysis" | "security_scanner" | "test";
                                 /** @enum {string} */
                                 severity: "info" | "low" | "medium" | "high" | "critical";
                                 file_path: string;

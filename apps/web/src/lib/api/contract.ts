@@ -142,7 +142,20 @@ type CitationSourceOf = Item<
   Data<"/repositories/{repositoryId}/questions", "post">["citations"]
 >["source"];
 
+type ActorTypeOf = Item<Data<"/workspaces/{workspaceId}/audit-events", "get">>["actor_type"];
+type InstallationStatusOf = Item<Data<"/integrations/github/installations", "get">>["status"];
+type VisibilityOf = NonNullable<Item<Data<"/repositories", "get">>["visibility"]>;
+type PlanSourceOf = Data<"/runs/{runId}/plan", "get">["source"];
+type FindingSourceOf = Item<
+  Data<"/runs/{runId}/review", "get">["deterministic_findings"]
+>["source"];
+
 export type EnumChecks = [
+  Expect<Subset<ActorTypeOf, T.AuditEvent["actor_type"]>>,
+  Expect<Subset<InstallationStatusOf, T.InstallationStatus>>,
+  Expect<Subset<VisibilityOf, T.RepositoryVisibility>>,
+  Expect<Subset<PlanSourceOf, T.RunPlan["source"]>>,
+  Expect<Subset<FindingSourceOf, T.FindingSource>>,
   Expect<Subset<RunStatusOf, T.RunStatus>>,
   Expect<Subset<ModeOf, T.InferenceMode>>,
   Expect<Subset<IndexingOf, T.IndexingStatus>>,
