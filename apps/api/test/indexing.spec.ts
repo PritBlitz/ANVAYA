@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { sql } from 'kysely';
 import { IndexerService } from '../src/indexing/indexer.service.js';
+import { withVectorScan } from '../src/retrieval/retrieval.service.js';
 import { IndexingRecoveryService } from '../src/indexing/indexing-recovery.service.js';
 import { signPayload } from '../src/github/webhooks.controller.js';
 import { FakeAi } from './fake-ai.js';
@@ -222,6 +224,20 @@ describe('repository indexing and retrieval', () => {
       const path = await as(viewer, 'post', `/repositories/${repoUuid}/search`).send({ query: 'invoice total charge', filters: { paths: ['billing/'] } }).expect(200);
       expect(path.body.data.results.length).toBeGreaterThan(0);
       expect(path.body.data.results.every((r: { file_path: string }) => r.file_path.startsWith('billing/'))).toBe(true);
+    });
+
+    it('has HNSW indexes for code and knowledge embeddings that semantic queries can use', async () => {
+      const idx = await sql<{ indexname: string }>`SELECT indexname FROM pg_indexes WHERE indexname IN ('idx_chunks_embedding_hnsw', 'idx_knowledge_chunks_embedding_hnsw') ORDER BY 1`.execute(db(app));
+      expect(idx.rows.map((r) => r.indexname)).toEqual(['idx_chunks_embedding_hnsw', 'idx_knowledge_chunks_embedding_hnsw']);
+      const plan = await db(app)
+        .transaction()
+        .execute(async (tx) => {
+          await sql`SET LOCAL enable_seqscan = off`.execute(tx);
+          await withVectorScan(tx);
+          const vec = `[${Array.from({ length: 768 }, (_, i) => (i === 0 ? 1 : 0)).join(',')}]`;
+          return sql<{ 'QUERY PLAN': string }>`EXPLAIN SELECT id FROM code_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> ${vec}::vector LIMIT 40`.execute(tx);
+        });
+      expect(plan.rows.map((r) => r['QUERY PLAN']).join(' ')).toContain('idx_chunks_embedding_hnsw');
     });
 
     it('treats LIKE wildcards in path filters literally', async () => {

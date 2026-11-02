@@ -9,6 +9,7 @@ dependencies = [
   "pydantic-settings>=2.6",
   "httpx>=0.27",
   "uvicorn>=0.32",
+  "anthropic>=1.17,<2",
 ]
 
 [project.optional-dependencies]

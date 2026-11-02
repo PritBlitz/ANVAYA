@@ -1465,7 +1465,13 @@
                                 "type": "string"
                               },
                               "role": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "owner",
+                                  "admin",
+                                  "member",
+                                  "viewer"
+                                ]
                               }
                             },
                             "required": [
@@ -5228,10 +5234,24 @@
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "connected",
+                              "disabled",
+                              "disconnected"
+                            ]
                           },
                           "indexing_status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "queued",
+                              "indexing",
+                              "ready",
+                              "partial",
+                              "failed",
+                              "disabled"
+                            ]
                           },
                           "latest_indexed_commit_sha": {
                             "nullable": true,
@@ -5507,10 +5527,24 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "disabled",
+                            "disconnected"
+                          ]
                         },
                         "indexing_status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "queued",
+                            "indexing",
+                            "ready",
+                            "partial",
+                            "failed",
+                            "disabled"
+                          ]
                         },
                         "latest_indexed_commit_sha": {
                           "nullable": true,
@@ -5729,10 +5763,24 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "disabled",
+                            "disconnected"
+                          ]
                         },
                         "indexing_status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "queued",
+                            "indexing",
+                            "ready",
+                            "partial",
+                            "failed",
+                            "disabled"
+                          ]
                         },
                         "latest_indexed_commit_sha": {
                           "nullable": true,
@@ -6016,10 +6064,24 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "disabled",
+                            "disconnected"
+                          ]
                         },
                         "indexing_status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "queued",
+                            "indexing",
+                            "ready",
+                            "partial",
+                            "failed",
+                            "disabled"
+                          ]
                         },
                         "latest_indexed_commit_sha": {
                           "nullable": true,
@@ -6358,7 +6420,15 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "succeeded",
+                            "partial",
+                            "failed",
+                            "cancelled"
+                          ]
                         },
                         "trigger": {
                           "type": "string"
@@ -6513,7 +6583,16 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "indexing_status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "queued",
+                            "indexing",
+                            "ready",
+                            "partial",
+                            "failed",
+                            "disabled"
+                          ]
                         },
                         "latest_snapshot": {
                           "type": "object",
@@ -6530,7 +6609,14 @@
                               "type": "string"
                             },
                             "status": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "processing",
+                                "ready",
+                                "partial",
+                                "failed"
+                              ]
                             },
                             "parser_version": {
                               "type": "string"
@@ -6635,10 +6721,6 @@
                         "active_job": {
                           "nullable": true,
                           "type": "object",
-                          "additionalProperties": {}
-                        },
-                        "last_job": {
-                          "type": "object",
                           "properties": {
                             "id": {
                               "type": "string",
@@ -6646,22 +6728,30 @@
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
                             "status": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "partial",
+                                "failed",
+                                "cancelled"
+                              ]
                             },
                             "stage": {
+                              "nullable": true,
                               "type": "string"
                             },
                             "trigger": {
                               "type": "string"
                             },
                             "commit_sha": {
+                              "nullable": true,
                               "type": "string"
                             },
                             "progress": {
                               "type": "object",
-                              "additionalProperties": {
-                                "type": "number"
-                              }
+                              "additionalProperties": {}
                             },
                             "attempts": {
                               "type": "number"
@@ -6680,11 +6770,92 @@
                               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                             },
                             "started_at": {
+                              "nullable": true,
                               "type": "string",
                               "format": "date-time",
                               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                             },
                             "ended_at": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "status",
+                            "stage",
+                            "trigger",
+                            "commit_sha",
+                            "progress",
+                            "attempts",
+                            "error_code",
+                            "error_summary",
+                            "created_at",
+                            "started_at",
+                            "ended_at"
+                          ]
+                        },
+                        "last_job": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "partial",
+                                "failed",
+                                "cancelled"
+                              ]
+                            },
+                            "stage": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "trigger": {
+                              "type": "string"
+                            },
+                            "commit_sha": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "progress": {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "attempts": {
+                              "type": "number"
+                            },
+                            "error_code": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "error_summary": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "started_at": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "ended_at": {
+                              "nullable": true,
                               "type": "string",
                               "format": "date-time",
                               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
@@ -6878,7 +7049,14 @@
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "processing",
+                              "ready",
+                              "partial",
+                              "failed"
+                            ]
                           },
                           "total_files": {
                             "type": "number"
@@ -7110,7 +7288,11 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "directory",
+                                  "file"
+                                ]
                               },
                               "name": {
                                 "type": "string"
@@ -7126,7 +7308,14 @@
                                 "type": "string"
                               },
                               "parse_status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "parsed",
+                                  "unsupported_language",
+                                  "parse_error",
+                                  "not_parsed",
+                                  "excluded"
+                                ]
                               },
                               "excluded": {
                                 "type": "boolean"
@@ -7356,7 +7545,14 @@
                           "type": "string"
                         },
                         "parse_status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "parsed",
+                            "unsupported_language",
+                            "parse_error",
+                            "not_parsed",
+                            "excluded"
+                          ]
                         },
                         "line_count": {
                           "type": "number"
@@ -7672,13 +7868,29 @@
                               "type": "string"
                             },
                             "snapshot_status": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "processing",
+                                "ready",
+                                "partial",
+                                "failed"
+                              ]
                             },
                             "lexical": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "disabled"
+                              ]
                             },
                             "semantic": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "unavailable",
+                                "disabled"
+                              ]
                             },
                             "semantic_reason": {
                               "nullable": true,
@@ -7948,7 +8160,15 @@
                             "type": "string"
                           },
                           "kind": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "function",
+                              "class",
+                              "method",
+                              "type",
+                              "interface",
+                              "module"
+                            ]
                           },
                           "path": {
                             "type": "string"
@@ -8164,7 +8384,15 @@
                               "type": "string"
                             },
                             "kind": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "function",
+                                "class",
+                                "method",
+                                "type",
+                                "interface",
+                                "module"
+                              ]
                             },
                             "path": {
                               "type": "string"
@@ -8200,7 +8428,13 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "calls",
+                                  "extends",
+                                  "instantiates",
+                                  "imports"
+                                ]
                               },
                               "line": {
                                 "type": "number"
@@ -8221,7 +8455,15 @@
                                     "type": "string"
                                   },
                                   "kind": {
-                                    "type": "string"
+                                    "type": "string",
+                                    "enum": [
+                                      "function",
+                                      "class",
+                                      "method",
+                                      "type",
+                                      "interface",
+                                      "module"
+                                    ]
                                   },
                                   "path": {
                                     "type": "string"
@@ -8269,7 +8511,13 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "calls",
+                                  "extends",
+                                  "instantiates",
+                                  "imports"
+                                ]
                               },
                               "line": {
                                 "type": "number"
@@ -8289,7 +8537,15 @@
                                     "type": "string"
                                   },
                                   "kind": {
-                                    "type": "string"
+                                    "type": "string",
+                                    "enum": [
+                                      "function",
+                                      "class",
+                                      "method",
+                                      "type",
+                                      "interface",
+                                      "module"
+                                    ]
                                   },
                                   "path": {
                                     "type": "string"
@@ -8847,7 +9103,11 @@
                             "type": "object",
                             "properties": {
                               "source": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "code",
+                                  "knowledge"
+                                ]
                               },
                               "evidence_id": {
                                 "type": "string"
@@ -8917,7 +9177,12 @@
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "prompt_version": {
                           "nullable": true,
@@ -8955,13 +9220,29 @@
                               "type": "string"
                             },
                             "snapshot_status": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "processing",
+                                "ready",
+                                "partial",
+                                "failed"
+                              ]
                             },
                             "lexical": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "disabled"
+                              ]
                             },
                             "semantic": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "unavailable",
+                                "disabled"
+                              ]
                             },
                             "semantic_reason": {
                               "nullable": true,
@@ -9224,7 +9505,11 @@
                                   "type": "string"
                                 },
                                 "source": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "enum": [
+                                    "code",
+                                    "knowledge"
+                                  ]
                                 },
                                 "symbol": {
                                   "nullable": true,
@@ -9286,7 +9571,12 @@
                             "type": "string"
                           },
                           "mode": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "local",
+                              "cloud",
+                              "mock"
+                            ]
                           },
                           "commit_sha": {
                             "type": "string"
@@ -9467,7 +9757,11 @@
                                 "type": "string"
                               },
                               "source": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "code",
+                                  "knowledge"
+                                ]
                               },
                               "symbol": {
                                 "type": "string"
@@ -9529,7 +9823,12 @@
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "commit_sha": {
                           "type": "string"
@@ -9788,7 +10087,12 @@
                       "type": "object",
                       "properties": {
                         "default_mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "allowed_modes": {
                           "type": "array",
@@ -10072,7 +10376,12 @@
                       "type": "object",
                       "properties": {
                         "default_mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "allowed_modes": {
                           "type": "array",
@@ -10292,7 +10601,12 @@
                       "type": "object",
                       "properties": {
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "type": "string"
@@ -10831,7 +11145,15 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "source_type": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "readme",
+                              "architecture",
+                              "decision",
+                              "issue",
+                              "pull_request",
+                              "engineering_note"
+                            ]
                           },
                           "title": {
                             "type": "string"
@@ -11070,7 +11392,15 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "source_type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "readme",
+                            "architecture",
+                            "decision",
+                            "issue",
+                            "pull_request",
+                            "engineering_note"
+                          ]
                         },
                         "title": {
                           "type": "string"
@@ -11261,7 +11591,15 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "source_type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "readme",
+                            "architecture",
+                            "decision",
+                            "issue",
+                            "pull_request",
+                            "engineering_note"
+                          ]
                         },
                         "title": {
                           "type": "string"
@@ -11628,7 +11966,13 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "source_type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "github_issue",
+                            "pull_request",
+                            "failing_check",
+                            "manual"
+                          ]
                         },
                         "external_number": {
                           "nullable": true,
@@ -11641,7 +11985,15 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "active",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "archived"
+                          ]
                         },
                         "labels": {
                           "type": "array",
@@ -11877,7 +12229,13 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "source_type": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "github_issue",
+                              "pull_request",
+                              "failing_check",
+                              "manual"
+                            ]
                           },
                           "external_number": {
                             "nullable": true,
@@ -11890,7 +12248,15 @@
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "active",
+                              "completed",
+                              "failed",
+                              "cancelled",
+                              "archived"
+                            ]
                           },
                           "labels": {
                             "type": "array",
@@ -11924,7 +12290,26 @@
                                 "type": "number"
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "retrieving_context",
+                                  "investigating",
+                                  "planning",
+                                  "awaiting_plan_approval",
+                                  "preparing_workspace",
+                                  "implementing",
+                                  "verifying",
+                                  "reviewing",
+                                  "awaiting_pr_approval",
+                                  "creating_pr",
+                                  "completed",
+                                  "failed",
+                                  "cancelled",
+                                  "timed_out",
+                                  "rejected",
+                                  "completed_without_pr"
+                                ]
                               },
                               "current_stage": {
                                 "nullable": true,
@@ -12106,7 +12491,13 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "source_type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "github_issue",
+                            "pull_request",
+                            "failing_check",
+                            "manual"
+                          ]
                         },
                         "external_number": {
                           "nullable": true,
@@ -12119,7 +12510,15 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "active",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "archived"
+                          ]
                         },
                         "labels": {
                           "type": "array",
@@ -12153,7 +12552,26 @@
                               "type": "number"
                             },
                             "status": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "retrieving_context",
+                                "investigating",
+                                "planning",
+                                "awaiting_plan_approval",
+                                "preparing_workspace",
+                                "implementing",
+                                "verifying",
+                                "reviewing",
+                                "awaiting_pr_approval",
+                                "creating_pr",
+                                "completed",
+                                "failed",
+                                "cancelled",
+                                "timed_out",
+                                "rejected",
+                                "completed_without_pr"
+                              ]
                             },
                             "current_stage": {
                               "nullable": true,
@@ -12380,7 +12798,13 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "source_type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "github_issue",
+                            "pull_request",
+                            "failing_check",
+                            "manual"
+                          ]
                         },
                         "external_number": {
                           "nullable": true,
@@ -12393,7 +12817,15 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "active",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "archived"
+                          ]
                         },
                         "labels": {
                           "type": "array",
@@ -12656,14 +13088,38 @@
                           "type": "number"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "retrieving_context",
+                            "investigating",
+                            "planning",
+                            "awaiting_plan_approval",
+                            "preparing_workspace",
+                            "implementing",
+                            "verifying",
+                            "reviewing",
+                            "awaiting_pr_approval",
+                            "creating_pr",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "timed_out",
+                            "rejected",
+                            "completed_without_pr"
+                          ]
                         },
                         "current_stage": {
                           "nullable": true,
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "nullable": true,
@@ -12973,13 +13429,37 @@
                             "type": "number"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "retrieving_context",
+                              "investigating",
+                              "planning",
+                              "awaiting_plan_approval",
+                              "preparing_workspace",
+                              "implementing",
+                              "verifying",
+                              "reviewing",
+                              "awaiting_pr_approval",
+                              "creating_pr",
+                              "completed",
+                              "failed",
+                              "cancelled",
+                              "timed_out",
+                              "rejected",
+                              "completed_without_pr"
+                            ]
                           },
                           "current_stage": {
                             "type": "string"
                           },
                           "mode": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "local",
+                              "cloud",
+                              "mock"
+                            ]
                           },
                           "provider": {
                             "type": "string"
@@ -13377,13 +13857,37 @@
                             "type": "number"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "retrieving_context",
+                              "investigating",
+                              "planning",
+                              "awaiting_plan_approval",
+                              "preparing_workspace",
+                              "implementing",
+                              "verifying",
+                              "reviewing",
+                              "awaiting_pr_approval",
+                              "creating_pr",
+                              "completed",
+                              "failed",
+                              "cancelled",
+                              "timed_out",
+                              "rejected",
+                              "completed_without_pr"
+                            ]
                           },
                           "current_stage": {
                             "type": "string"
                           },
                           "mode": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "local",
+                              "cloud",
+                              "mock"
+                            ]
                           },
                           "provider": {
                             "type": "string"
@@ -13679,14 +14183,38 @@
                           "type": "number"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "retrieving_context",
+                            "investigating",
+                            "planning",
+                            "awaiting_plan_approval",
+                            "preparing_workspace",
+                            "implementing",
+                            "verifying",
+                            "reviewing",
+                            "awaiting_pr_approval",
+                            "creating_pr",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "timed_out",
+                            "rejected",
+                            "completed_without_pr"
+                          ]
                         },
                         "current_stage": {
                           "nullable": true,
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "nullable": true,
@@ -13847,10 +14375,19 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "approval_type": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "plan",
+                                  "pull_request",
+                                  "other"
+                                ]
                               },
                               "decision": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "approved",
+                                  "rejected"
+                                ]
                               },
                               "subject_hash": {
                                 "type": "string"
@@ -14251,14 +14788,38 @@
                           "type": "number"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "retrieving_context",
+                            "investigating",
+                            "planning",
+                            "awaiting_plan_approval",
+                            "preparing_workspace",
+                            "implementing",
+                            "verifying",
+                            "reviewing",
+                            "awaiting_pr_approval",
+                            "creating_pr",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "timed_out",
+                            "rejected",
+                            "completed_without_pr"
+                          ]
                         },
                         "current_stage": {
                           "nullable": true,
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "nullable": true,
@@ -14565,14 +15126,38 @@
                           "type": "number"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "retrieving_context",
+                            "investigating",
+                            "planning",
+                            "awaiting_plan_approval",
+                            "preparing_workspace",
+                            "implementing",
+                            "verifying",
+                            "reviewing",
+                            "awaiting_pr_approval",
+                            "creating_pr",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "timed_out",
+                            "rejected",
+                            "completed_without_pr"
+                          ]
                         },
                         "current_stage": {
                           "nullable": true,
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "nullable": true,
@@ -14851,7 +15436,15 @@
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "running",
+                              "succeeded",
+                              "failed",
+                              "skipped",
+                              "cancelled"
+                            ]
                           },
                           "prompt_version": {
                             "nullable": true,
@@ -15267,11 +15860,114 @@
                       "properties": {
                         "patches": {
                           "type": "array",
-                          "items": {}
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "patch"
+                                ]
+                              },
+                              "patch_hash": {
+                                "type": "string"
+                              },
+                              "base_commit_sha": {
+                                "type": "string"
+                              },
+                              "changed_files": {},
+                              "additions": {
+                                "type": "number"
+                              },
+                              "deletions": {
+                                "type": "number"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "proposed",
+                                  "validated",
+                                  "applied",
+                                  "rejected"
+                                ]
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "patch_hash",
+                              "base_commit_sha",
+                              "changed_files",
+                              "additions",
+                              "deletions",
+                              "status",
+                              "created_at"
+                            ]
+                          }
                         },
                         "verification_logs": {
                           "type": "array",
-                          "items": {}
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "verification"
+                                ]
+                              },
+                              "profile_id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "timed_out",
+                                  "skipped",
+                                  "error"
+                                ]
+                              },
+                              "exit_code": {
+                                "nullable": true,
+                                "type": "number"
+                              },
+                              "duration_ms": {
+                                "nullable": true,
+                                "type": "number"
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "profile_id",
+                              "status",
+                              "exit_code",
+                              "duration_ms",
+                              "created_at"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -15612,7 +16308,39 @@
                         "approval": {
                           "nullable": true,
                           "type": "object",
-                          "additionalProperties": {}
+                          "properties": {
+                            "decision": {
+                              "type": "string",
+                              "enum": [
+                                "approved",
+                                "rejected"
+                              ]
+                            },
+                            "user_id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "comment": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "subject_hash": {
+                              "type": "string"
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "decision",
+                            "user_id",
+                            "comment",
+                            "subject_hash",
+                            "created_at"
+                          ]
                         }
                       },
                       "required": [
@@ -16078,14 +16806,38 @@
                           "type": "number"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "retrieving_context",
+                            "investigating",
+                            "planning",
+                            "awaiting_plan_approval",
+                            "preparing_workspace",
+                            "implementing",
+                            "verifying",
+                            "reviewing",
+                            "awaiting_pr_approval",
+                            "creating_pr",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "timed_out",
+                            "rejected",
+                            "completed_without_pr"
+                          ]
                         },
                         "current_stage": {
                           "nullable": true,
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "type": "string"
@@ -16413,7 +17165,13 @@
                                 "type": "number"
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "proposed",
+                                  "validated",
+                                  "applied",
+                                  "rejected"
+                                ]
                               },
                               "patch_hash": {
                                 "type": "string"
@@ -16655,7 +17413,14 @@
                                 "type": "string"
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "timed_out",
+                                  "skipped",
+                                  "error"
+                                ]
                               },
                               "exit_code": {
                                 "type": "number"
@@ -16849,7 +17614,14 @@
                                 "type": "string"
                               },
                               "severity": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "info",
+                                  "low",
+                                  "medium",
+                                  "high",
+                                  "critical"
+                                ]
                               },
                               "file_path": {
                                 "type": "string"
@@ -16893,7 +17665,13 @@
                                 "type": "string"
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "accepted",
+                                  "dismissed",
+                                  "fixed"
+                                ]
                               },
                               "disposition_by": {
                                 "nullable": true,
@@ -16957,7 +17735,14 @@
                                 "type": "string"
                               },
                               "severity": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "info",
+                                  "low",
+                                  "medium",
+                                  "high",
+                                  "critical"
+                                ]
                               },
                               "file_path": {
                                 "type": "string"
@@ -17000,7 +17785,13 @@
                                 "type": "string"
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "accepted",
+                                  "dismissed",
+                                  "fixed"
+                                ]
                               },
                               "disposition_by": {
                                 "nullable": true,
@@ -17226,7 +18017,13 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "accepted",
+                            "dismissed",
+                            "fixed"
+                          ]
                         },
                         "disposition_by": {
                           "type": "string",
@@ -17447,14 +18244,38 @@
                           "type": "number"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "retrieving_context",
+                            "investigating",
+                            "planning",
+                            "awaiting_plan_approval",
+                            "preparing_workspace",
+                            "implementing",
+                            "verifying",
+                            "reviewing",
+                            "awaiting_pr_approval",
+                            "creating_pr",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "timed_out",
+                            "rejected",
+                            "completed_without_pr"
+                          ]
                         },
                         "current_stage": {
                           "nullable": true,
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
                         },
                         "provider": {
                           "type": "string"
