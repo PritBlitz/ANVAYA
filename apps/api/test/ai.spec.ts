@@ -161,6 +161,31 @@ describe('AI policy, grounded Q&A, usage and knowledge', () => {
       expect(ai.generateCalls.at(-1)!.mode).toBe('local');
     });
 
+    it('routes cloud mode to the configured hosted model, audits it, and surfaces refusals without fallback', async () => {
+      const policy = { allowed_modes: ['local', 'mock', 'cloud'], cloud: { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', data_categories: ['source_code'] }, acknowledge_data_disclosure: true };
+      await as(owner, 'patch', `/workspaces/${ws}/ai-policy`).send(policy).expect(200);
+      try {
+        ai.generateHandler = (b) => {
+          const r = qaResponse(b, (ev) => [ev[0]!.id]);
+          return { body: { ...r.body, provider: 'anthropic', model: 'claude-opus-5-5', mode: 'cloud' } };
+        };
+        const ok = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the access token refreshed?', mode: 'cloud' }).expect(200);
+        expect(ok.body.data).toMatchObject({ provider: 'anthropic', model: 'claude-opus-5-5', mode: 'cloud', data_disclosure: { provider: 'anthropic', data_categories: ['source_code'] } });
+        const sent = ai.generateCalls.at(-1)!;
+        expect(sent).toMatchObject({ mode: 'cloud', provider: 'anthropic', model: 'claude-opus-5-5' });
+        const audit = await db(app).selectFrom('audit_events').select('metadata_redacted').where('organization_id', '=', ws).where('action', '=', 'ai.cloud_inference').orderBy('created_at', 'desc').executeTakeFirstOrThrow();
+        expect(audit.metadata_redacted).toMatchObject({ provider: 'anthropic', model: 'claude-opus-5-5', data_categories: ['source_code'] });
+
+        const before = ai.generateCalls.length;
+        ai.generateHandler = () => ({ status: 422, body: { error: { code: 'PROVIDER_REFUSED', message: 'declined', details: { category: 'cyber' } } } });
+        const refused = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the access token refreshed?', mode: 'cloud' }).expect(422);
+        expect(refused.body.error.code).toBe('PROVIDER_REFUSED');
+        expect(ai.generateCalls.length).toBe(before + 1); // no retry on another provider or model
+      } finally {
+        await as(owner, 'patch', `/workspaces/${ws}/ai-policy`).send({ allowed_modes: ['local', 'mock'], cloud: { enabled: false } }).expect(200);
+      }
+    });
+
     it('rejects malformed model output at the trust boundary', async () => {
       ai.generateHandler = (b) => ({ body: { ...qaResponse(b, () => []).body, output: { answer: 42 } } });
       const res = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the token refreshed?' }).expect(502);
@@ -176,7 +201,7 @@ describe('AI policy, grounded Q&A, usage and knowledge', () => {
       const op = res.body.data.by_operation.find((o: { operation: string }) => o.operation === 'repository_qa');
       expect(op.requests).toBeGreaterThanOrEqual(2);
       expect(Number(op.input_tokens)).toBeGreaterThanOrEqual(2400);
-      expect(res.body.data.local_vs_hosted.hosted).toBe(0);
+      expect(res.body.data.local_vs_hosted.hosted).toBe(1); // the one successful cloud answer above
       await as(viewer, 'get', `/workspaces/${ws}/usage`).expect(403);
     });
 

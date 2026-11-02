@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from .config import Settings
 from .errors import AiError, invalid_output, provider_not_configured, provider_timeout
 from .prompts import build_prompt
+from .providers.anthropic_hosted import build_anthropic_provider
 from .providers.base import EmbeddingProvider, GenerationProvider
 from .providers.mock import MockEmbeddingProvider, MockProvider
 from .providers.ollama import OllamaClient, OllamaEmbeddingProvider, OllamaProvider
@@ -40,7 +41,11 @@ class Providers:
         return cls(
             mock=MockProvider(),
             local=OllamaProvider(client, s.ollama_generation_model, s.ollama_context_tokens),
-            cloud=None,
+            cloud=(
+                build_anthropic_provider(s.anthropic_api_key.get_secret_value(), s.hosted_model, s.hosted_effort, s.hosted_base_url)
+                if s.hosted_provider == "anthropic" and s.anthropic_api_key
+                else None
+            ),
             embeddings=emb,
             ollama_client=client,
         )

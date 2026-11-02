@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { sql } from 'kysely';
+import { type Kysely, sql } from 'kysely';
 import { AiClient, AiServiceError } from '../ai/ai-client.js';
 import { Errors } from '../common/errors.js';
 import { logger } from '../common/logger.js';
 import { DatabaseService } from '../database/database.service.js';
-import type { Repository } from '../database/types.js';
+import type { Database, Repository } from '../database/types.js';
 
 const log = logger('retrieval');
 const RRF_K = 60;
@@ -104,8 +104,8 @@ export class RetrievalService {
     const mode = q.mode ?? 'hybrid';
     const filters = q.filters ?? {};
 
-    const base = () => {
-      let b = this.database.db
+    const base = (exec: Kysely<Database> = this.database.db) => {
+      let b = exec
         .selectFrom('code_chunks as c')
         .innerJoin('repository_files as f', 'f.id', 'c.repository_file_id')
         // Scope first: repository AND snapshot (tenant isolation is enforced by the caller's repository access check).
@@ -150,16 +150,22 @@ export class RetrievalService {
           semanticReason = `query embedding model ${modelTag} does not match the index (${snap.embedding_model}); re-index required`;
         } else {
           const vec = `[${emb.embeddings[0]!.join(',')}]`;
-          const rows = await base()
-            .select(['c.id', sql<number>`1 - (c.embedding <=> ${vec}::vector)`.as('similarity')])
-            .where('c.embedding', 'is not', null)
-            .where('c.embedding_model', '=', emb.model)
-            .where('c.embedding_version', '=', emb.model_version)
-            .orderBy(sql`c.embedding <=> ${vec}::vector`)
-            .orderBy('c.id')
-            .limit(CANDIDATES)
-            .execute();
-          rows.forEach((r, i) => semantic.set(r.id, { rank: i + 1, score: Number(r.similarity) }));
+          // Ordered by distance alone so the HNSW index is usable; ties are broken by id below.
+          const rows = await this.database.transaction(async (tx) => {
+            await withVectorScan(tx);
+            return base(tx)
+              .select(['c.id', sql<number>`1 - (c.embedding <=> ${vec}::vector)`.as('similarity')])
+              .where('c.embedding', 'is not', null)
+              .where('c.embedding_model', '=', emb.model)
+              .where('c.embedding_version', '=', emb.model_version)
+              .orderBy(sql`c.embedding <=> ${vec}::vector`)
+              .limit(CANDIDATES)
+              .execute();
+          });
+          rows
+            .map((r) => ({ id: r.id, score: Number(r.similarity) }))
+            .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+            .forEach((r, i) => semantic.set(r.id, { rank: i + 1, score: r.score }));
         }
       } catch (err) {
         if (!(err instanceof AiServiceError)) throw err;
@@ -232,6 +238,16 @@ export class RetrievalService {
       },
     };
   }
+}
+
+/**
+ * Session settings for filtered approximate-nearest-neighbour queries (B-5):
+ * iterative HNSW scans keep returning rows until the LIMIT is met after the
+ * snapshot/model filters, in exact distance order. Must run inside a transaction.
+ */
+export async function withVectorScan(tx: Kysely<Database>): Promise<void> {
+  await sql`SET LOCAL hnsw.iterative_scan = strict_order`.execute(tx);
+  await sql`SET LOCAL hnsw.ef_search = 100`.execute(tx);
 }
 
 export function escapeLike(s: string): string {

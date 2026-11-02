@@ -237,6 +237,10 @@ describe('execution, verification, review and pull-request handoff', () => {
       const key = `pr-${randomUUID()}`;
       const res = await as(member, 'post', `/runs/${run}/pull-request`, { idempotencyKey: key }).send({ title: 'Fix token refresh', body: 'Summary.' }).expect(201);
       expect(res.body.data).toMatchObject({ provider: 'github', pr_number: 1, base_branch: 'main' });
+      const art = (await as(viewer, 'get', `/runs/${run}/artifacts`).expect(200)).body.data;
+      expect(art.patches.length).toBeGreaterThan(0);
+      expect(art.verification_logs.length).toBeGreaterThan(0);
+      await as(viewer, 'get', `/runs/${run}/plan`).expect(200);
       expect(gh.pulls).toHaveLength(1);
       expect(gh.pulls[0]!.files['src/token.ts']).toContain('t.trim()');
       expect(gh.pulls[0]!.body).toContain('python-compile');

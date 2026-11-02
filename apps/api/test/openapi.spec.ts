@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildOpenApi } from '../src/openapi/generate.js';
+import { unusedRules } from '../src/openapi/refinements.js';
 import { ROUTES } from '../src/openapi/registry.js';
 import { bootApp } from './helpers.js';
 
@@ -31,6 +32,10 @@ describe('OpenAPI contract', () => {
     const documented = new Set(ROUTES.map((r) => `${r.method} ${r.path}`));
     expect([...live].filter((r) => !documented.has(r)).sort()).toEqual([]);
     expect([...documented].filter((r) => !live.has(r)).sort()).toEqual([]);
+  });
+
+  it('applies every response refinement rule to at least one route', () => {
+    expect(unusedRules()).toEqual([]);
   });
 
   it('generates a valid-looking OpenAPI 3 document with request schemas', () => {
