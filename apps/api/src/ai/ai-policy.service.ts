@@ -156,9 +156,11 @@ export function aiErrorToApp(err: unknown): Error {
     case 'INVALID_MODEL_OUTPUT':
       return Errors.upstream('INVALID_MODEL_OUTPUT', 'The model did not produce a valid structured answer.');
     case 'PROVIDER_REFUSED':
-      return Errors.unprocessable('PROVIDER_REFUSED', 'The hosted model declined this request. No other model was tried.');
+      return Errors.unprocessable('PROVIDER_REFUSED', 'The hosted model declined this request. No other model was tried.', typeof err.details.category === 'string' ? { category: err.details.category } : {});
     case 'PROVIDER_RATE_LIMITED':
-      return new AppError(429, 'PROVIDER_RATE_LIMITED', 'The hosted provider is rate limiting requests. Retry later.');
+      return new AppError(429, 'PROVIDER_RATE_LIMITED', 'The hosted provider is rate limiting requests. Retry later.', {
+        retry_after_seconds: typeof err.details.retry_after_seconds === 'number' ? err.details.retry_after_seconds : 30,
+      });
     case 'PROVIDER_BAD_REQUEST':
       return Errors.upstream('PROVIDER_BAD_REQUEST', 'The hosted provider rejected the request.');
     case 'PROVIDER_NOT_CONFIGURED':

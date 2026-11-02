@@ -4008,7 +4008,13 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "actor_type": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "system",
+                              "worker",
+                              "provider"
+                            ]
                           },
                           "actor_user_id": {
                             "type": "string",
@@ -4405,7 +4411,12 @@
                           }
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "suspended",
+                            "disconnected"
+                          ]
                         },
                         "created_at": {
                           "type": "string",
@@ -4595,7 +4606,12 @@
                             }
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "suspended",
+                              "disconnected"
+                            ]
                           },
                           "created_at": {
                             "type": "string",
@@ -5231,7 +5247,12 @@
                             "type": "string"
                           },
                           "visibility": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "public",
+                              "private",
+                              "internal"
+                            ]
                           },
                           "status": {
                             "type": "string",
@@ -5524,7 +5545,12 @@
                           "type": "string"
                         },
                         "visibility": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "public",
+                            "private",
+                            "internal"
+                          ]
                         },
                         "status": {
                           "type": "string",
@@ -5760,7 +5786,12 @@
                           "type": "string"
                         },
                         "visibility": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "public",
+                            "private",
+                            "internal"
+                          ]
                         },
                         "status": {
                           "type": "string",
@@ -6061,7 +6092,12 @@
                           "type": "string"
                         },
                         "visibility": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "public",
+                            "private",
+                            "internal"
+                          ]
                         },
                         "status": {
                           "type": "string",
@@ -16109,7 +16145,11 @@
                           "type": "string"
                         },
                         "source": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "user_edit"
+                          ]
                         },
                         "created_by": {
                           "nullable": true,
@@ -16519,7 +16559,11 @@
                           "type": "string"
                         },
                         "source": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "user_edit"
+                          ]
                         },
                         "plan": {
                           "type": "object",
@@ -17375,7 +17419,11 @@
                                 "type": "string"
                               },
                               "kind": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "unsupported",
+                                  "sandbox_error"
+                                ]
                               }
                             },
                             "required": [
@@ -17611,7 +17659,13 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "source": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "ai_review",
+                                  "static_analysis",
+                                  "security_scanner",
+                                  "test"
+                                ]
                               },
                               "severity": {
                                 "type": "string",
@@ -17732,7 +17786,13 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "source": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "ai_review",
+                                  "static_analysis",
+                                  "security_scanner",
+                                  "test"
+                                ]
                               },
                               "severity": {
                                 "type": "string",

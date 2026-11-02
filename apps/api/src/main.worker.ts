@@ -1,9 +1,14 @@
-import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
-import { createRootLogger } from './common/logger.js';
-import { AppConfig } from './config/config.js';
-import { WorkerModule } from './worker/worker.module.js';
-import { WorkerRunner } from './worker/worker.runner.js';
+import { startTracing } from './telemetry/tracing.js';
+
+// Tracing must start before the application modules load so they can be instrumented.
+startTracing('anvaya-worker');
+
+await import('reflect-metadata');
+const { NestFactory } = await import('@nestjs/core');
+const { createRootLogger } = await import('./common/logger.js');
+const { AppConfig } = await import('./config/config.js');
+const { WorkerModule } = await import('./worker/worker.module.js');
+const { WorkerRunner } = await import('./worker/worker.runner.js');
 
 const config = new AppConfig();
 const log = createRootLogger(config.env.LOG_LEVEL, 'anvaya-worker');

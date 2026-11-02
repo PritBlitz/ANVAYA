@@ -1,4 +1,5 @@
 import { pino, type Logger } from 'pino';
+import { traceIds } from '../telemetry/tracing.js';
 import { requestContext } from './request-context.js';
 
 /** Keys whose values are always redacted from structured logs. */
@@ -28,7 +29,7 @@ export function createRootLogger(level: string, service = 'anvaya-api'): Logger 
     timestamp: pino.stdTimeFunctions.isoTime,
     mixin() {
       const rid = requestContext.requestId();
-      return rid ? { request_id: rid } : {};
+      return { ...(rid ? { request_id: rid } : {}), ...traceIds() };
     },
   });
   return root;

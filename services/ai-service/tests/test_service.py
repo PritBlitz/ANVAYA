@@ -361,3 +361,13 @@ def test_grammar_safe_schema_keeps_property_names() -> None:
     assert out["properties"]["pattern"] == {"type": "array", "items": {"type": "string"}}
     assert out["required"] == ["format", "pattern"]
     assert schema["properties"]["format"]["maxLength"] == 9  # input untouched
+
+
+def test_traceparent_is_parsed_for_log_correlation() -> None:
+    from app.main import parse_traceparent
+
+    tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    assert parse_traceparent(tp) == {"trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "span_id": "00f067aa0ba902b7"}
+    assert parse_traceparent(None) == {}
+    assert parse_traceparent("garbage") == {}
+    assert parse_traceparent("00-" + "0" * 32 + "-00f067aa0ba902b7-01") == {}

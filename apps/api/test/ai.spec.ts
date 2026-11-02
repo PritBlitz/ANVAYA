@@ -181,6 +181,11 @@ describe('AI policy, grounded Q&A, usage and knowledge', () => {
         const refused = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the access token refreshed?', mode: 'cloud' }).expect(422);
         expect(refused.body.error.code).toBe('PROVIDER_REFUSED');
         expect(ai.generateCalls.length).toBe(before + 1); // no retry on another provider or model
+
+        ai.generateHandler = () => ({ status: 429, body: { error: { code: 'PROVIDER_RATE_LIMITED', message: 'slow down', details: { retry_after_seconds: 17 } } } });
+        const limited = await as(viewer, 'post', `/repositories/${repo}/questions`).send({ question: 'How is the access token refreshed?', mode: 'cloud' }).expect(429);
+        expect(limited.body.error.code).toBe('PROVIDER_RATE_LIMITED');
+        expect(limited.headers['retry-after']).toBe('17');
       } finally {
         await as(owner, 'patch', `/workspaces/${ws}/ai-policy`).send({ allowed_modes: ['local', 'mock'], cloud: { enabled: false } }).expect(200);
       }

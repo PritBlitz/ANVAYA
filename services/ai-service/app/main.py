@@ -12,6 +12,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -37,7 +38,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "service": "anvaya-ai",
         }
-        for key in ("task", "provider", "attempts", "in", "out", "request_id", "path", "status", "duration_ms", "code"):
+        for key in ("task", "provider", "attempts", "in", "out", "request_id", "trace_id", "span_id", "path", "status", "duration_ms", "code"):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         return json.dumps(payload)
@@ -53,6 +54,17 @@ def _configure_logging(level: str) -> None:
 
 
 log = logging.getLogger("anvaya.ai")
+
+
+_TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
+
+
+def parse_traceparent(value: str | None) -> dict[str, str]:
+    """W3C trace context from the control plane, for log correlation with API/worker traces (B-6)."""
+    m = _TRACEPARENT.match((value or "").strip().lower())
+    if not m or m.group(1) == "0" * 32:
+        return {}
+    return {"trace_id": m.group(1), "span_id": m.group(2)}
 
 
 def create_app(settings: Settings | None = None, providers: Providers | None = None) -> FastAPI:
@@ -73,6 +85,7 @@ def create_app(settings: Settings | None = None, providers: Providers | None = N
     @app.middleware("http")
     async def request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         rid = request.headers.get("x-request-id") or f"ai_{uuid.uuid4()}"
+        trace_ctx = parse_traceparent(request.headers.get("traceparent"))
         started = time.monotonic()
         response = await call_next(request)
         response.headers["X-Request-Id"] = rid[:128]
@@ -83,6 +96,7 @@ def create_app(settings: Settings | None = None, providers: Providers | None = N
                 "path": request.url.path,
                 "status": response.status_code,
                 "duration_ms": int((time.monotonic() - started) * 1000),
+                **trace_ctx,
             },
         )
         return response
