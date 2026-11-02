@@ -167,7 +167,7 @@ function PrComposer({ run, defaultBody }: { run: WorkflowRun; defaultBody: strin
           <Field
             label="Description"
             required
-            hint="Includes verification evidence and review findings. Markdown."
+            hint="Markdown. Anvaya appends a verification and review evidence section when it opens the pull request."
             error={errors.body?.message}
           >
             <Textarea rows={16} className="font-mono text-xs" {...form.register("body")} />
@@ -200,24 +200,38 @@ export function PullRequestView() {
   const decideKey = useRef(createIdempotencyKey());
 
   const decide = useMutation({
-    mutationFn: (d: ApprovalDecision) =>
-      api.runs.decidePullRequest(
+    mutationFn: async (d: ApprovalDecision) => {
+      // The approval is bound to the exact patch the user reviewed (409 PATCH_CHANGED otherwise).
+      const patchHash = diff.data?.patch_hash;
+      if (!patchHash) throw new Error("Patch not loaded");
+      await api.runs.decidePullRequest(
         run.id,
-        { decision: d, ...(comment.trim() ? { comment: comment.trim() } : {}) },
+        {
+          decision: d,
+          patch_hash: patchHash,
+          ...(comment.trim() ? { comment: comment.trim() } : {}),
+        },
         decideKey.current,
-      ),
-    onSuccess: (approval) => {
+      );
+      return d;
+    },
+    onSuccess: (decided) => {
       void queryClient.invalidateQueries({ queryKey: qk.run(workspaceId, run.id) });
       void queryClient.invalidateQueries({ queryKey: qk.runs(workspaceId) });
       setDecision(null);
       toast.success(
-        approval.decision === "approved"
+        decided === "approved"
           ? "Pull request creation approved"
           : "Completed without a pull request",
       );
     },
     onError: (e) => {
       decideKey.current = createIdempotencyKey();
+      if (isApiError(e) && (e.code === "PATCH_CHANGED" || e.code === "BLOCKING_FINDINGS")) {
+        void queryClient.invalidateQueries({ queryKey: qk.runPart(workspaceId, run.id, "diff") });
+        void queryClient.invalidateQueries({ queryKey: qk.runPart(workspaceId, run.id, "review") });
+        setDecision(null);
+      }
       notifyError(e, "Decision not recorded");
     },
   });
@@ -265,6 +279,7 @@ export function PullRequestView() {
     verification: verification.data,
     review: review.data,
     runUrl: typeof window !== "undefined" ? `${window.location.origin}${root}` : undefined,
+    includeEvidence: false,
   });
 
   return (

@@ -10,7 +10,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/states";
 import { createIdempotencyKey } from "@/lib/api/client";
-import { qk, useAiPolicy } from "@/lib/api/queries";
+import { qk, useAiPolicy, useRunBudgetLimits } from "@/lib/api/queries";
 import { api } from "@/lib/api/runtime";
 import type { InferenceMode, Repository, RunBudgets } from "@/lib/api/types";
 import { notifyError } from "@/lib/forms";
@@ -96,6 +96,7 @@ export function StartRunForm({
   const queryClient = useQueryClient();
   const { base, workspaceId } = useWorkspace();
   const policy = useAiPolicy();
+  const ceilings = useRunBudgetLimits().data;
   const key = useRef(createIdempotencyKey());
   const [mode, setMode] = useState<InferenceMode | null>(null);
   const [baseBranch, setBaseBranch] = useState<string | null>(null);
@@ -104,7 +105,8 @@ export function StartRunForm({
 
   const effectiveMode = mode ?? policy.data?.default_mode ?? "local";
   const branch = baseBranch ?? repo?.default_branch ?? "main";
-  const cloudAllowed = !!policy.data?.cloud_inference_enabled;
+  const allowed = policy.data?.allowed_modes ?? ["local"];
+  const cloudAllowed = !!policy.data?.cloud.enabled && allowed.includes("cloud");
 
   const start = useMutation({
     mutationFn: () =>
@@ -113,8 +115,8 @@ export function StartRunForm({
         {
           mode: effectiveMode,
           base_branch: branch.trim(),
-          ...(policy.data && Object.keys(budgets).length
-            ? { budgets: clampBudgets(budgets, policy.data.budgets) }
+          ...(ceilings && Object.keys(budgets).length
+            ? { budgets: clampBudgets(budgets, ceilings) }
             : {}),
         },
         key.current,
@@ -146,8 +148,9 @@ export function StartRunForm({
           current={effectiveMode}
           onSelect={setMode}
           icon={<Cpu />}
-          title={`Local · ${policy.data?.local_provider.model ?? "Ollama"}`}
+          title={allowed.includes("local") ? "Local · Ollama" : "Local · disabled by policy"}
           description="Code never leaves your infrastructure."
+          disabled={!allowed.includes("local")}
         />
         <ModeOption
           value="cloud"
@@ -156,7 +159,7 @@ export function StartRunForm({
           icon={<Cloud />}
           title={
             cloudAllowed
-              ? `Cloud · ${policy.data?.cloud_provider?.model ?? "hosted"}`
+              ? `Cloud · ${policy.data?.cloud.model ?? policy.data?.cloud.provider ?? "hosted"}`
               : "Cloud · disabled by policy"
           }
           description={
@@ -171,14 +174,16 @@ export function StartRunForm({
           current={effectiveMode}
           onSelect={setMode}
           icon={<Bot />}
-          title="Dry run · mock model"
+          title={allowed.includes("mock") ? "Dry run · mock model" : "Dry run · disabled by policy"}
           description="Deterministic responses. Useful for testing the workflow (FR-WF-010)."
+          disabled={!allowed.includes("mock")}
         />
       </fieldset>
       {effectiveMode === "cloud" && policy.data && (
         <InlineAlert tone="warning" icon={<Cloud />} title="Data sent to a hosted provider">
-          {policy.data.cloud_provider?.name}: {policy.data.data_categories_disclosed.join(", ")}.
-          Secrets and excluded files are never sent.
+          {policy.data.cloud.provider}:{" "}
+          {policy.data.cloud.data_categories.map((c) => c.replace(/_/g, " ")).join(", ")}. Secrets
+          and excluded files are never sent.
         </InlineAlert>
       )}
       <Field label="Base branch">
@@ -201,15 +206,15 @@ export function StartRunForm({
           />{" "}
           Budgets
         </button>
-        {showBudgets && policy.data && (
+        {showBudgets && ceilings && (
           <div className="mt-3 grid grid-cols-2 gap-3">
             {BUDGET_FIELDS.map(({ key: k, label, unit }) => (
-              <Field key={k} label={label} hint={`Max ${policy.data.budgets[k]}${unit ?? ""}`}>
+              <Field key={k} label={label} hint={`Max ${ceilings[k]}${unit ?? ""}`}>
                 <Input
                   type="number"
                   min={0}
-                  max={policy.data.budgets[k]}
-                  value={budgets[k] ?? policy.data.budgets[k]}
+                  max={ceilings[k]}
+                  value={budgets[k] ?? ceilings[k]}
                   onChange={(e) =>
                     setBudgets((b) => ({
                       ...b,

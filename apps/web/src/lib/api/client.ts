@@ -68,7 +68,33 @@ export class ApiClient {
     return this.workspaceId;
   }
 
+  /**
+   * Cookie-session CSRF tokens can rotate or expire. On 403 CSRF_TOKEN_INVALID for a
+   * mutation, refresh the token once (GET /auth/csrf re-sets the cookie) and retry.
+   */
   async request<T>(
+    method: HttpMethod,
+    path: string,
+    body?: unknown,
+    options: RequestOptions = {},
+  ): Promise<ApiResult<T>> {
+    try {
+      return await this.send<T>(method, path, body, options);
+    } catch (error) {
+      if (
+        method !== "GET" &&
+        error instanceof ApiError &&
+        error.status === 403 &&
+        error.code === "CSRF_TOKEN_INVALID"
+      ) {
+        await this.send<unknown>("GET", "/auth/csrf", undefined, {});
+        return this.send<T>(method, path, body, options);
+      }
+      throw error;
+    }
+  }
+
+  private async send<T>(
     method: HttpMethod,
     path: string,
     body?: unknown,

@@ -3,6 +3,7 @@
  * Persisted to localStorage so reloads keep the session and created records.
  */
 import type * as T from "../types";
+import type * as W from "../wire";
 
 export interface FixtureMembership {
   workspace_id: string;
@@ -34,9 +35,23 @@ export interface FixtureRun extends T.WorkflowRun {
 }
 
 export interface IndexJob {
+  id: string;
   started_at: number;
   duration_ms: number;
   commit_sha: string;
+}
+
+export interface FixtureWorkspace extends Omit<T.Workspace, "role"> {
+  settings: W.WWorkspace["settings"];
+  updated_at: string;
+}
+
+/** Server-held GitHub install state (single-use, expires; GAP-14). */
+export interface InstallState {
+  workspace_id: string;
+  user_id: string;
+  expires_at: number;
+  used: boolean;
 }
 
 export interface FixtureState {
@@ -44,9 +59,10 @@ export interface FixtureState {
   seq: number;
   session_user_id: string | null;
   users: T.User[];
-  workspaces: Omit<T.Workspace, "role">[];
+  workspaces: FixtureWorkspace[];
   memberships: FixtureMembership[];
-  invitations: Scoped<T.Invitation>[];
+  invitations: Scoped<T.Invitation & { token: string }>[];
+  install_states: Record<string, InstallState>;
   installations: Scoped<T.GitInstallation>[];
   available: T.AvailableRepository[];
   repositories: Scoped<T.Repository>[];
@@ -70,7 +86,7 @@ export interface FixtureState {
   idempotency: Record<string, { fingerprint: string; status: number; body: unknown }>;
 }
 
-export const FIXTURE_STATE_VERSION = 3;
+export const FIXTURE_STATE_VERSION = 4;
 
 export const IDS = {
   user: "00000000-0000-4000-8000-000000000001",
@@ -89,31 +105,26 @@ export function daysAgo(days: number, hours = 0): string {
   return new Date(Date.now() - days * 86_400_000 - hours * 3_600_000).toISOString();
 }
 
+/** Mirrors the backend's DEFAULT_RUN_BUDGET (apps/api/src/runs/run.schemas.ts). */
 export const DEFAULT_BUDGETS: T.RunBudgets = {
   max_steps: 8,
-  max_input_tokens: 12000,
-  max_output_tokens: 4000,
+  max_input_tokens: 6000,
+  max_output_tokens: 1024,
   max_duration_seconds: 900,
   max_changed_files: 8,
   max_repair_attempts: 1,
 };
 
+export const LOCAL_MODEL = "qwen2.5-coder:7b";
+export const EMBEDDING_MODEL = "nomic-embed-text";
+
+/** Mirrors the backend's DEFAULT_AI_POLICY: local-first, no cloud. */
 export function defaultPolicy(): T.AiPolicy {
   return {
     default_mode: "local",
-    cloud_inference_enabled: false,
-    allowed_providers: ["ollama"],
-    local_provider: {
-      name: "ollama",
-      model: "qwen2.5-coder:7b",
-      embedding_model: "nomic-embed-text",
-    },
-    cloud_provider: null,
-    data_categories_disclosed: ["code snippets", "task descriptions", "test output excerpts"],
-    budgets: { ...DEFAULT_BUDGETS },
-    monthly_budget_microunits: null,
-    updated_at: daysAgo(12),
-    updated_by: IDS.user,
+    allowed_modes: ["local", "mock"],
+    cloud: { enabled: false, provider: null, model: null, data_categories: [] },
+    limits: { max_input_tokens: 6000, max_output_tokens: 1024, request_timeout_seconds: 300 },
   };
 }
 
@@ -135,7 +146,15 @@ export function createSeedState(): FixtureState {
     session_user_id: null,
     users,
     workspaces: [
-      { id: ws, name: "Acme Engineering", slug: "acme", plan_key: "team", created_at: daysAgo(40) },
+      {
+        id: ws,
+        name: "Acme Engineering",
+        slug: "acme",
+        plan_key: "team",
+        settings: {},
+        created_at: daysAgo(40),
+        updated_at: daysAgo(12),
+      },
     ],
     memberships: [
       { workspace_id: ws, user_id: IDS.user, role: "owner", created_at: daysAgo(40) },
@@ -143,6 +162,7 @@ export function createSeedState(): FixtureState {
       { workspace_id: ws, user_id: IDS.userViewer, role: "viewer", created_at: daysAgo(9) },
     ],
     invitations: [],
+    install_states: {},
     installations: [
       {
         id: IDS.installation,
@@ -184,7 +204,7 @@ export function createSeedState(): FixtureState {
         indexing_status: "ready",
         latest_indexed_commit_sha: PAYMENTS_SHA,
         indexed_at: daysAgo(0, 3),
-        settings: { excluded_paths: ["dist/", "coverage/"] },
+        settings: { exclude_paths: ["dist/", "coverage/"], verification_profiles: [] },
         created_at: daysAgo(37),
         updated_at: daysAgo(0, 3),
       },

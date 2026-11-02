@@ -1,3 +1,4 @@
+import { fieldErrorsFromDetails } from "./mappers";
 import type { ErrorBody } from "./types";
 
 /** Error codes produced by the client itself, never by the server. */
@@ -64,16 +65,9 @@ export class ApiError extends Error {
     return this.isNetwork || [429, 502, 503, 504].includes(this.status);
   }
 
-  /** Field-level validation errors if the server supplied them in details.fields. */
+  /** Field-level validation errors (`details.issues` or `details.fields`). */
   get fieldErrors(): Record<string, string> {
-    const fields = this.details.fields;
-    if (!fields || typeof fields !== "object") return {};
-    const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(fields as Record<string, unknown>)) {
-      if (typeof value === "string") out[key] = value;
-      else if (Array.isArray(value) && typeof value[0] === "string") out[key] = value[0];
-    }
-    return out;
+    return fieldErrorsFromDetails(this.details);
   }
 }
 

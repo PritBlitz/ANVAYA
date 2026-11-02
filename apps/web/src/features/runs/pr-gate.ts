@@ -158,8 +158,16 @@ export function buildPrBody(input: {
   verification?: VerificationReport | null;
   review?: ReviewReport | null;
   runUrl?: string;
+  /**
+   * Include verification and findings sections. The backend appends its own evidence
+   * section to the PR body, so the composer leaves this off to avoid duplication.
+   */
+  includeEvidence?: boolean;
 }): string {
-  const { task, plan, diff, verification, review } = input;
+  const { task, plan, diff } = input;
+  const includeEvidence = input.includeEvidence ?? true;
+  const verification = includeEvidence ? input.verification : null;
+  const review = includeEvidence ? input.review : null;
   const lines: string[] = [];
   lines.push("## Summary", "", plan?.plan.objective ?? task.title, "");
   if (task.source_type === "github_issue" && task.external_number)

@@ -183,7 +183,20 @@ export class FixtureTransport implements Transport {
         return;
       }
       // Fixture replays the full history on connect (see GAP-10).
-      while (sent < run.events.length) handlers.onEvent(structuredClone(run.events[sent++]!));
+      while (sent < run.events.length) {
+        const event = structuredClone(run.events[sent++]!);
+        handlers.onEvent(event);
+        // Mirror the server: the stream ends after a terminal event.
+        if (
+          event.type === "run.completed" ||
+          event.type === "run.failed" ||
+          event.type === "run.cancelled"
+        ) {
+          closed = true;
+          clearInterval(interval);
+          return;
+        }
+      }
       this.save();
     };
     const opened = setTimeout(() => {

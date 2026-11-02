@@ -35,71 +35,92 @@ export function describeEvent(event: RunEvent): EventDescription {
   const p = event.payload;
   const num = (k: string) => (typeof p[k] === "number" ? (p[k] as number) : null);
   const str = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : null);
+  const agent = str("agent");
+  const tool = str("tool");
+  const detail = (...parts: (string | false | null | undefined)[]) =>
+    parts.filter(Boolean).join(" · ") || undefined;
   switch (event.type as RunEventType) {
     case "run.created":
       return { title: "Run created", tone: "neutral" };
-    case "run.status.changed":
+    case "run.status.changed": {
+      const meta = runStatusMeta(str("status") ?? "");
       return {
-        title: runStatusMeta(p.status ?? "").label,
-        tone: runStatusMeta(p.status ?? "").awaiting ? "warning" : "neutral",
+        title: meta.label,
+        detail: str("reason") ?? undefined,
+        tone: meta.awaiting ? "warning" : "neutral",
       };
+    }
     case "run.stage.changed":
-      return { title: `Stage: ${humanize(p.stage ?? "")}`, tone: "neutral", quiet: true };
+      return { title: `Stage: ${humanize(str("stage") ?? "")}`, tone: "neutral", quiet: true };
     case "retrieval.completed": {
-      const chunks = num("chunks");
-      const tokens = num("token_estimate");
+      const count = num("count");
+      const semantic = str("semantic");
       return {
         title: "Evidence retrieved",
-        detail:
-          [chunks !== null && `${chunks} chunks`, tokens !== null && `~${tokens} tokens`]
-            .filter(Boolean)
-            .join(" · ") || undefined,
+        detail: detail(
+          count !== null && `${count} chunks`,
+          semantic && semantic !== "ok" && `semantic search ${semantic}`,
+        ),
         tone: "info",
       };
     }
     case "agent.started":
       return {
-        title: `${agentLabel(p.agent_type)} started`,
-        tone: isDeterministicAgent(p.agent_type ?? "") ? "info" : "ai",
+        title: `${agentLabel(agent)} started`,
+        tone: isDeterministicAgent(agent ?? "") ? "info" : "ai",
       };
-    case "agent.completed":
+    case "agent.completed": {
+      const tokens = (num("input_tokens") ?? 0) + (num("output_tokens") ?? 0);
       return {
-        title: `${agentLabel(p.agent_type)} completed`,
-        tone: isDeterministicAgent(p.agent_type ?? "") ? "info" : "ai",
+        title: `${agentLabel(agent)} completed`,
+        detail: detail(str("model"), tokens > 0 && `${tokens} tokens`),
+        tone: isDeterministicAgent(agent ?? "") ? "info" : "ai",
       };
+    }
     case "agent.failed":
       return {
-        title: `${agentLabel(p.agent_type)} failed`,
-        detail: p.message ?? p.error_code,
+        title: `${agentLabel(agent)} failed`,
+        detail: str("error_code") ?? undefined,
         tone: "danger",
       };
     case "tool.started":
-      return { title: `Tool ${p.tool_name ?? ""} started`, tone: "neutral", quiet: true };
+      return { title: `Tool ${tool ?? ""} started`, tone: "neutral", quiet: true };
     case "tool.completed":
-      return { title: `Tool ${p.tool_name ?? ""}`, tone: "neutral" };
+      return {
+        title: `Tool ${tool ?? ""}`,
+        detail: str("status") ?? undefined,
+        tone: str("status") === "failed" ? "danger" : "neutral",
+      };
     case "patch.proposed": {
       const files = num("changed_files");
       const hash = str("patch_hash");
+      const attempt = num("attempt");
       return {
-        title: "Patch proposed",
-        detail:
-          [files !== null && `${files} files`, hash && hash.slice(0, 19)]
-            .filter(Boolean)
-            .join(" · ") || undefined,
+        title:
+          attempt && attempt > 1 ? `Repair patch proposed (attempt ${attempt})` : "Patch proposed",
+        detail: detail(files !== null && `${files} files`, hash && hash.slice(0, 19)),
         tone: "ai",
       };
     }
     case "sandbox.started":
-      return { title: "Isolated workspace started", detail: p.message, tone: "info" };
-    case "verification.completed":
       return {
-        title: p.passed === false ? "Verification failed" : "Verification completed",
-        tone: p.passed === false ? "danger" : "success",
+        title: "Isolated workspace started",
+        detail: detail(str("profile"), str("command")),
+        tone: "info",
       };
+    case "verification.completed": {
+      const status = str("status");
+      const failed = status !== null && status !== "passed" && status !== "skipped";
+      return {
+        title: `${str("profile") ?? "Verification"} ${status ?? "completed"}`,
+        detail: num("exit_code") !== null ? `exit ${num("exit_code")}` : undefined,
+        tone: failed ? "danger" : status === "skipped" ? "neutral" : "success",
+      };
+    }
     case "review.finding.created":
       return {
         title: `Finding: ${humanize(str("severity") ?? "")}`,
-        detail: humanize(str("source") ?? ""),
+        detail: detail(humanize(str("source") ?? ""), str("file_path")),
         tone: str("source") === "ai_review" ? "ai" : "warning",
       };
     case "approval.required":
@@ -111,16 +132,29 @@ export function describeEvent(event: RunEvent): EventDescription {
         tone: "warning",
       };
     case "pull_request.created":
-      return { title: `Pull request #${num("pr_number") ?? ""} opened`, tone: "success" };
+      return {
+        title: `Pull request #${num("pr_number") ?? ""} opened`,
+        detail: str("head_branch") ?? undefined,
+        tone: "success",
+      };
     case "run.completed":
       return { title: "Run completed", tone: "success" };
     case "run.failed":
-      return { title: "Run failed", detail: p.message ?? p.error_code, tone: "danger" };
+      return {
+        title: "Run failed",
+        detail: detail(str("error_code"), str("error_summary")),
+        tone: "danger",
+      };
     case "run.cancelled":
       return { title: "Run cancelled", tone: "neutral" };
     default:
       return { title: humanize(event.type), tone: "neutral" };
   }
+}
+
+/** Terminal events: the server closes the stream after these (do not reconnect). */
+export function isTerminalEvent(type: string): boolean {
+  return type === "run.completed" || type === "run.failed" || type === "run.cancelled";
 }
 
 const AGENT_PHASE: Record<string, number> = {
@@ -138,7 +172,7 @@ export function reachedPhase(steps: Pick<AgentStep, "agent_type">[], events: Run
   let max = 0;
   for (const s of steps) max = Math.max(max, AGENT_PHASE[s.agent_type] ?? 0);
   for (const e of events)
-    if (e.type === "run.status.changed" && e.payload.status)
+    if (e.type === "run.status.changed" && typeof e.payload.status === "string")
       max = Math.max(max, phaseIndexOf(e.payload.status));
   return max;
 }

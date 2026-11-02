@@ -35,20 +35,17 @@ function task(
 }
 
 function approvePlan(state: FixtureState, run: FixtureRun, at: number) {
-  run.approvals.push({
+  const approval = {
     id: nextId(state, "61000000"),
-    approval_type: "plan",
-    decision: "approved",
+    approval_type: "plan" as const,
+    decision: "approved" as const,
     comment: "Scope looks right.",
     user_id: IDS.user,
+    subject_hash: run.plan!.plan_hash,
     created_at: new Date(at).toISOString(),
-  });
-  run.plan = {
-    ...run.plan!,
-    state: "approved",
-    decided_by: state.users[0],
-    decision_comment: "Scope looks right.",
   };
+  run.approvals.push(approval);
+  run.plan = { ...run.plan!, state: "approved", approval };
   schedule(run, PHASE_TWO, at);
 }
 
@@ -108,11 +105,11 @@ export function createSeededState(): FixtureState {
     decision: "approved",
     comment: null,
     user_id: IDS.userMember,
+    subject_hash: whRun.diff?.patch_hash ?? null,
     created_at: new Date(whStart + step * 45).toISOString(),
   });
   whRun.pull_request = {
     id: nextId(state, "63000000"),
-    provider: "github",
     pr_number: 482,
     pr_url: "https://github.com/acme/payments-api/pull/482",
     head_branch: "anvaya/run-webhook-replay-protection",
@@ -122,7 +119,13 @@ export function createSeededState(): FixtureState {
   whRun.events.push({
     id: `evt_seed_pr_${whRun.id.slice(-6)}`,
     type: "pull_request.created",
-    payload: { run_id: whRun.id, timestamp: whRun.pull_request.created_at, pr_number: 482 },
+    payload: {
+      run_id: whRun.id,
+      timestamp: new Date(whStart + step * 46).toISOString(),
+      pr_number: 482,
+      pr_url: "https://github.com/acme/payments-api/pull/482",
+      head_branch: "anvaya/run-webhook-replay-protection",
+    },
   });
   for (const f of whRun.review?.findings ?? []) f.status = "accepted";
   finish(state, whRun, "completed", whStart + step * 47);
@@ -132,8 +135,8 @@ export function createSeededState(): FixtureState {
     state,
     "Fix failing roundMinor test for USD amounts",
     "CI check `npm test` fails on main: roundMinor returns 1990 for 1999 minor units. Find the precision bug and fix it.",
-    "failing_check",
-    5521,
+    "github_issue",
+    231,
     50,
     ["ci"],
   );

@@ -4,7 +4,7 @@
  */
 import type * as T from "../types";
 import { filesForRepository, type FixtureFile } from "./repo-content";
-import { DEFAULT_BUDGETS, type FixtureRun, type FixtureState } from "./state";
+import { DEFAULT_BUDGETS, LOCAL_MODEL, type FixtureRun, type FixtureState } from "./state";
 
 // ── ids / hashing ────────────────────────────────────────────────────────
 
@@ -722,20 +722,20 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
     case "retrieving_context":
       run.started_at ??= iso;
       addStep(run, state, "context_retriever", at, ["search_repository", "get_related_tests"]);
-      emit(run, "retrieval.completed", at, { chunks: 9, token_estimate: 3120 });
+      emit(run, "retrieval.completed", at, { count: 9, commit_sha: sha, semantic: "ok" });
       break;
     case "investigating":
-      emit(run, "agent.started", at, { agent_type: "investigator" });
+      emit(run, "agent.started", at, { agent: "investigator" });
       addStep(run, state, "investigator", at, [
         "search_repository",
         "read_file",
         "get_architecture_context",
       ]);
       recordUsage(state, run, "investigation", at);
-      emit(run, "agent.completed", at, { agent_type: "investigator" });
+      emit(run, "agent.completed", at, { agent: "investigator" });
       break;
     case "planning": {
-      emit(run, "agent.started", at, { agent_type: "planner" });
+      emit(run, "agent.started", at, { agent: "planner" });
       addStep(run, state, "planner", at);
       recordUsage(state, run, "planning", at);
       const plan = structuredClone(scenario.plan);
@@ -746,13 +746,20 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
         plan_hash: contentHash(JSON.stringify(plan)),
         version: 1,
         state: "proposed",
+        source: "agent",
+        editable: true,
         updated_at: iso,
+        approval: null,
       };
-      emit(run, "agent.completed", at, { agent_type: "planner" });
+      emit(run, "agent.completed", at, { agent: "planner" });
       break;
     }
     case "awaiting_plan_approval":
-      emit(run, "approval.required", at, { approval_type: "plan" });
+      emit(run, "approval.required", at, {
+        approval_type: "plan",
+        plan_hash: run.plan?.plan_hash,
+        plan_version: run.plan?.version,
+      });
       break;
     case "preparing_workspace":
       emit(run, "sandbox.started", at, {
@@ -760,21 +767,25 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
       });
       break;
     case "implementing": {
-      emit(run, "agent.started", at, { agent_type: "developer" });
-      emit(run, "tool.started", at, { tool_name: "propose_patch" });
+      emit(run, "agent.started", at, { agent: "developer" });
+      emit(run, "tool.started", at, { tool: "propose_patch" });
       addStep(run, state, "developer", at, ["read_file", "propose_patch", "inspect_diff"]);
       recordUsage(state, run, "implementation", at);
       run.diff = buildDiff(files, scenario, sha);
-      emit(run, "tool.completed", at, { tool_name: "propose_patch" });
+      emit(run, "tool.completed", at, { tool: "propose_patch" });
       emit(run, "patch.proposed", at, {
+        patch_id: run.diff.patch_id,
         patch_hash: run.diff.patch_hash,
+        attempt: run.diff.attempt,
         changed_files: run.diff.changed_files.length,
+        additions: run.diff.additions,
+        deletions: run.diff.deletions,
       });
-      emit(run, "agent.completed", at, { agent_type: "developer" });
+      emit(run, "agent.completed", at, { agent: "developer" });
       break;
     }
     case "verifying": {
-      emit(run, "tool.started", at, { tool_name: "run_profile" });
+      emit(run, "tool.started", at, { tool: "run_profile" });
       const failed = run.outcome === "verification_failed";
       addStep(
         run,
@@ -785,8 +796,12 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
         failed,
       );
       run.verification = buildVerification(state, failed, at);
-      if (run.diff) run.diff.patch_status = "applied";
-      emit(run, "verification.completed", at, { passed: !failed });
+      emit(run, "verification.completed", at, {
+        profile: "node-test",
+        status: failed ? "failed" : "passed",
+        exit_code: failed ? 1 : 0,
+        attempt: 1,
+      });
       if (failed) {
         run.usage_summary.repair_attempts = 1;
         run.schedule = [];
@@ -802,7 +817,7 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
       break;
     }
     case "reviewing": {
-      emit(run, "agent.started", at, { agent_type: "reviewer" });
+      emit(run, "agent.started", at, { agent: "reviewer" });
       addStep(run, state, "reviewer", at, [
         "inspect_diff",
         "read_file",
@@ -824,7 +839,7 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
           severity: f.severity,
           source: f.source,
         });
-      emit(run, "agent.completed", at, { agent_type: "reviewer" });
+      emit(run, "agent.completed", at, { agent: "reviewer" });
       break;
     }
     case "awaiting_pr_approval":
@@ -860,9 +875,12 @@ function buildDiff(files: FixtureFile[], scenario: Scenario, sha: string): T.Run
     changed.push({ path, status: "added", additions: d.additions, deletions: 0 });
   }
   return {
+    patch_id: `patch-${contentHash(text).slice(7, 19)}`,
     patch_hash: contentHash(text),
+    attempt: 1,
     base_commit_sha: sha,
-    patch_status: "validated",
+    summary: scenario.plan.objective,
+    truncated: false,
     changed_files: changed,
     additions,
     deletions,
@@ -922,6 +940,7 @@ function buildVerification(state: FixtureState, failed: boolean, at: number): T.
     unavailable: [
       { profile_id: "node.build", reason: "No build profile is configured for this repository." },
     ],
+    unavailable_count: 1,
     ai_summary: failed
       ? "The failing assertion is in roundMinor: dividing then multiplying by the factor loses precision for integer minor units. The repair attempt did not change money.ts because it was outside the approved file scope."
       : null,
@@ -952,7 +971,11 @@ export function finish(
       : status === "cancelled"
         ? "run.cancelled"
         : "run.completed";
-  emit(run, type, at, { status, error_code: errorCode, message: errorSummary });
+  emit(run, type, at, {
+    status,
+    error_code: errorCode ?? null,
+    error_summary: errorSummary ?? null,
+  });
   const task = state.tasks.find((t) => t.id === run.task_id);
   if (task) {
     task.status =
@@ -987,14 +1010,19 @@ export function createRun(
   outcome: FixtureRun["outcome"] = "success",
 ): FixtureRun {
   const policy = state.policies[task.workspace_id];
+  const mode: T.InferenceMode = body.mode ?? policy?.default_mode ?? "local";
+  const workspace = state.workspaces.find((w) => w.id === task.workspace_id);
+  const repo = state.repositories.find((r) => r.id === task.repository_id);
   const runNumber = state.runs.filter((r) => r.task_id === task.id).length + 1;
   const iso = new Date(at).toISOString();
   const budget: T.RunBudgets = { ...DEFAULT_BUDGETS };
-  const max = policy?.budgets ?? DEFAULT_BUDGETS;
+  const max: T.RunBudgets = {
+    ...DEFAULT_BUDGETS,
+    ...(workspace?.settings.run_budget_limits ?? {}),
+  };
   for (const key of Object.keys(budget) as (keyof T.RunBudgets)[]) {
     budget[key] = Math.min(body.budgets?.[key] ?? max[key], max[key]); // server clamps (API_SPEC §5)
   }
-  const local = policy?.local_provider;
   const run: FixtureRun = {
     id: nextId(state, "80000000"),
     workspace_id: task.workspace_id,
@@ -1002,19 +1030,15 @@ export function createRun(
     run_number: runNumber,
     status: "queued",
     current_stage: "queued",
-    mode: body.mode,
+    mode: mode,
     provider:
-      body.mode === "mock"
-        ? "mock"
-        : body.mode === "cloud"
-          ? (policy?.cloud_provider?.name ?? "hosted")
-          : (local?.name ?? "ollama"),
+      mode === "mock" ? "mock" : mode === "cloud" ? (policy?.cloud.provider ?? "hosted") : "ollama",
     model:
-      body.mode === "mock"
+      mode === "mock"
         ? "mock-deterministic"
-        : body.mode === "cloud"
-          ? (policy?.cloud_provider?.model ?? "hosted-model")
-          : (local?.model ?? "local-model"),
+        : mode === "cloud"
+          ? (policy?.cloud.model ?? "hosted-model")
+          : LOCAL_MODEL,
     state_version: 1,
     budget,
     usage_summary: {},
@@ -1026,6 +1050,12 @@ export function createRun(
     updated_at: iso,
     base_branch: body.base_branch,
     pull_request: null,
+    task: {
+      id: task.id,
+      title: task.title,
+      repository_id: task.repository_id,
+      repository_full_name: repo?.full_name ?? null,
+    },
     outcome,
     schedule: [],
     events: [],

@@ -153,8 +153,10 @@ describe("FileTree", () => {
     render(<FileTree entries={entries} selectedPath={null} onSelect={onSelect} />);
     const user = userEvent.setup();
     const src = screen.getByRole("treeitem", { name: /src/ });
-    expect(src).toHaveAttribute("aria-expanded", "true");
+    expect(src).toHaveAttribute("aria-expanded", "false");
     src.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(src).toHaveAttribute("aria-expanded", "true");
     await user.keyboard("{ArrowLeft}");
     expect(src).toHaveAttribute("aria-expanded", "false");
     await user.keyboard("{ArrowRight}{ArrowRight}");
@@ -172,5 +174,28 @@ describe("FileTree", () => {
     expect(env).toHaveAttribute("aria-disabled", "true");
     await userEvent.click(env);
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileTree lazy loading", () => {
+  it("asks the parent to load a directory and shows progress until it arrives", async () => {
+    const onExpand = vi.fn();
+    const lazy: TreeEntry[] = [{ path: "src", name: "src", type: "directory" }];
+    const { rerender } = render(
+      <FileTree entries={lazy} selectedPath={null} onSelect={() => {}} onExpand={onExpand} />,
+    );
+    await userEvent.click(screen.getByRole("treeitem", { name: /src/ }));
+    expect(onExpand).toHaveBeenCalledWith("src");
+    expect(screen.getByRole("tree")).toHaveAttribute("aria-busy", "true");
+    rerender(
+      <FileTree
+        entries={[{ ...lazy[0]!, children: [{ path: "src/a.ts", name: "a.ts", type: "file" }] }]}
+        selectedPath={null}
+        onSelect={() => {}}
+        onExpand={onExpand}
+      />,
+    );
+    expect(screen.getByRole("treeitem", { name: /a\.ts/ })).toBeInTheDocument();
+    expect(screen.getByRole("tree")).not.toHaveAttribute("aria-busy");
   });
 });

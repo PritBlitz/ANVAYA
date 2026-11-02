@@ -1,12 +1,15 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, FileSearch, GitPullRequest, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { AnvayaWordmark, GitHubMark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
-import { API_BASE_PATH, API_MODE, getFixtureControls } from "@/lib/api/runtime";
+import { api, API_BASE_PATH, API_MODE, getFixtureControls } from "@/lib/api/runtime";
+import { describeError } from "@/lib/api/errors";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { safeNextPath } from "@/lib/utils/url";
 
 const TRAIL = [
@@ -20,6 +23,19 @@ const TRAIL = [
   { icon: <GitPullRequest />, label: "Pull request opened", detail: "#482 after human approval" },
 ];
 
+/** Codes the API appends as `/login?error=` after a failed GitHub sign-in. */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  github_email_permission:
+    "The GitHub App is missing the “Email addresses” permission, so Anvaya can’t read your verified email. Ask an organization admin to grant it, then try again.",
+  email_in_use:
+    "That email address is already linked to a different Anvaya account. Sign in with that account instead.",
+  oauth_failed: "GitHub sign-in didn’t complete. Please try again.",
+};
+
+function signInErrorMessage(code: string): string {
+  return SIGN_IN_ERRORS[code] ?? "Sign-in didn’t complete. Please try again.";
+}
+
 export function LoginScreen() {
   const params = useSearchParams();
   const router = useRouter();
@@ -28,8 +44,28 @@ export function LoginScreen() {
   const [pending, setPending] = useState<string | null>(null);
   const error = params.get("error");
 
-  // GAP-01: proposed server-side OAuth entry point. The API sets the HttpOnly session
-  // cookie and redirects back to return_to. A plain link (not JS) keeps it robust.
+  // Which sign-in methods the backend enables (public endpoint).
+  const providers = useQuery({
+    queryKey: ["auth", "providers"],
+    queryFn: api.auth.providers,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const githubEnabled = API_MODE === "fixtures" || providers.data?.github !== false;
+  const devEnabled = !!providers.data?.dev;
+  const [devEmail, setDevEmail] = useState("");
+  const [devError, setDevError] = useState<string | null>(null);
+  const devLogin = useMutation({
+    mutationFn: () => api.auth.devLogin(devEmail.trim()),
+    onSuccess: () => {
+      queryClient.clear();
+      router.replace(next);
+    },
+    onError: (e) => setDevError(describeError(e).description),
+  });
+
+  // GitHub OAuth (GAP-01): the API sets the HttpOnly session cookie and redirects back
+  // to return_to (same-origin paths only). A plain link (not JS) keeps it robust.
   const oauthHref = `${API_BASE_PATH}/auth/github/login?return_to=${encodeURIComponent(next)}`;
 
   async function fixtureSignIn(userId?: string, key = "github") {
@@ -110,12 +146,12 @@ export function LoginScreen() {
               role="alert"
               className="mt-5 rounded-md border border-danger-border bg-danger-soft px-3 py-2 text-sm text-danger"
             >
-              Sign-in didn&apos;t complete. Please try again.
+              {signInErrorMessage(error)}
             </p>
           )}
 
           <div className="mt-8 flex flex-col gap-2.5">
-            {API_MODE === "fixtures" ? (
+            {!githubEnabled ? null : API_MODE === "fixtures" ? (
               <Button
                 variant="primary"
                 size="lg"
@@ -146,6 +182,39 @@ export function LoginScreen() {
               </Button>
             )}
           </div>
+
+          {devEnabled && (
+            <form
+              className="mt-6 flex flex-col gap-2 rounded-lg border border-dashed border-border-strong p-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setDevError(null);
+                devLogin.mutate();
+              }}
+            >
+              <Field
+                label="Developer sign-in"
+                hint="Enabled by the API for local development only."
+                error={devError ?? undefined}
+              >
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  placeholder="dev@example.test"
+                  value={devEmail}
+                  onChange={(e) => setDevEmail(e.target.value)}
+                />
+              </Field>
+              <Button
+                type="submit"
+                variant="secondary"
+                loading={devLogin.isPending}
+                disabled={!devEmail.includes("@")}
+              >
+                Sign in with email
+              </Button>
+            </form>
+          )}
 
           {API_MODE === "fixtures" && (
             <p className="mt-6 rounded-md border border-dashed border-highlight-border bg-highlight px-3 py-2 text-xs text-accent-fg">
