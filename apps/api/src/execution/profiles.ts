@@ -68,3 +68,30 @@ export function selectProfiles(configured: readonly string[] | undefined, paths:
   if (configured && configured.length > 0) return configured.map(profileById).filter((p): p is VerificationProfile => p !== undefined);
   return PROFILES.filter((p) => p.detect(paths));
 }
+
+export interface UnavailableCheck {
+  profile_id: string;
+  reason: string;
+}
+
+const NEEDS_DEPENDENCIES = 'needs project dependencies installed; the sandbox has no network access and dependency installation is not supported yet';
+
+/**
+ * Checks a repository evidently uses but that no server-defined profile can run
+ * (FR-VER-005: report "unavailable" separately, never as passed). Derived only
+ * from file paths; repository content is never executed or interpreted here.
+ */
+export function unavailableChecks(paths: ReadonlySet<string>): UnavailableCheck[] {
+  const has = (re: RegExp) => [...paths].some((p) => re.test(p));
+  const out: UnavailableCheck[] = [];
+  const hasPackageJson = has(/(^|\/)package\.json$/);
+  if (has(/\.(ts|tsx|mts|cts)$/)) out.push({ profile_id: 'typescript-typecheck', reason: `TypeScript type checking ${NEEDS_DEPENDENCIES}` });
+  if (hasPackageJson) out.push({ profile_id: 'npm-test', reason: `The package.json test script ${NEEDS_DEPENDENCIES}` });
+  if (has(/(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt|Pipfile|poetry\.lock)$/)) {
+    out.push({ profile_id: 'python-dependencies', reason: `Tests importing third-party Python packages (e.g. pytest) ${NEEDS_DEPENDENCIES}` });
+  }
+  if (has(/(^|\/)go\.mod$/)) out.push({ profile_id: 'go-test', reason: 'No verification profile exists for Go yet' });
+  if (has(/(^|\/)Cargo\.toml$/)) out.push({ profile_id: 'cargo-test', reason: 'No verification profile exists for Rust yet' });
+  if (has(/(^|\/)(pom\.xml|build\.gradle(\.kts)?)$/)) out.push({ profile_id: 'jvm-build', reason: 'No verification profile exists for JVM builds yet' });
+  return out;
+}

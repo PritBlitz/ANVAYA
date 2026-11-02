@@ -12,7 +12,7 @@ import { planSchema } from '../runs/run.schemas.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from '../runs/stage-toolkit.js';
 import { ObjectStorage } from '../storage/object-storage.js';
 import { PatchRejected, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
-import { profileById, selectProfiles } from './profiles.js';
+import { profileById, selectProfiles, unavailableChecks } from './profiles.js';
 import { SandboxDriver } from './sandbox.js';
 import { WorkspaceManager } from './workspace.js';
 
@@ -146,13 +146,14 @@ export class ExecutionPipeline extends ExecutionStages {
     const paths = await this.ensureWorkspace({ ...run, checkpoint: { ...run.checkpoint, current_patch_id: null } });
     const repo = await this.repository(run);
     const profiles = selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths));
+    const unavailable = unavailableChecks(new Set(paths));
     await this.kit.database.transaction(async (tx) => {
       const current = await this.kit.guard(tx, run);
       await this.kit.finishTool(tx, current, toolId, 'succeeded', { files: paths.length, profiles: profiles.map((p) => p.id) }, Date.now() - started, 'prepare_workspace');
       await this.kit.finishStep(tx, stepId, 'succeeded', { files: paths.length, profiles: profiles.map((p) => p.id) }, null);
       await this.kit.transitions.transition(tx, current, 'implementing', { type: 'worker' }, {
         reason: `workspace prepared (${paths.length} files)`,
-        checkpointPatch: { workspace_paths: paths, profiles: profiles.map((p) => p.id), repair_attempts: 0, patch_attempt: 0, last_failure: null, current_patch_id: null },
+        checkpointPatch: { workspace_paths: paths, profiles: profiles.map((p) => p.id), unavailable_profiles: json(unavailable), repair_attempts: 0, patch_attempt: 0, last_failure: null, current_patch_id: null },
       });
     });
     await this.kit.events.notify(run.id);

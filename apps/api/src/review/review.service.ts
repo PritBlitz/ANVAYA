@@ -14,6 +14,12 @@ import { AccessService } from '../workspaces/access.service.js';
 
 const log = logger('review');
 const OUTPUT_EXCERPT_BYTES = 8192;
+
+function stringField(obj: unknown, key: string): string | undefined {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return undefined;
+  const v = (obj as Record<string, unknown>)[key];
+  return typeof v === 'string' ? v : undefined;
+}
 const MAX_DIFF_BYTES = 1024 * 1024;
 
 export const dispositionBody = z.object({ status: z.enum(['accepted', 'dismissed', 'fixed']), comment: z.string().max(2000).optional() }).strict();
@@ -88,7 +94,7 @@ export class ReviewService {
 
   /** Deterministic results, reported separately as passed/failed/skipped/unavailable (FR-VER-005). */
   async verification(userId: string, runId: string) {
-    await this.access.requireRun(userId, runId);
+    const { run } = await this.access.requireRun(userId, runId);
     const rows = await this.database.db.selectFrom('verification_runs').selectAll().where('run_id', '=', runId).orderBy('created_at').execute();
     const excerpt = async (key: string | null) => {
       if (!key) return null;
@@ -117,10 +123,17 @@ export class ReviewService {
     const latest = await this.currentPatch(runId);
     const current = results.filter((r) => r.patch_id === latest?.id);
     const count = (s: string) => current.filter((r) => r.status === s).length;
+    // Unavailable = checks the repository needs but no profile can run, plus profiles the sandbox failed to run (infrastructure, not a test result).
+    const declared = Array.isArray(run.checkpoint.unavailable_profiles) ? (run.checkpoint.unavailable_profiles as Array<{ profile_id: string; reason: string }>) : [];
+    const unavailable = [
+      ...declared.map((u) => ({ profile_id: u.profile_id, reason: u.reason, kind: 'unsupported' as const })),
+      ...current.filter((r) => r.status === 'error').map((r) => ({ profile_id: r.profile_id, reason: 'The execution sandbox failed to run this profile (infrastructure error).', kind: 'sandbox_error' as const })),
+    ];
     return {
       deterministic: true,
       current_patch_id: latest?.id ?? null,
-      summary: { passed: count('passed'), failed: count('failed'), timed_out: count('timed_out'), skipped: count('skipped'), unavailable: count('error') },
+      summary: { passed: count('passed'), failed: count('failed'), timed_out: count('timed_out'), skipped: count('skipped'), unavailable: unavailable.length },
+      unavailable,
       results,
     };
   }
@@ -140,6 +153,9 @@ export class ReviewService {
       title: f.title,
       description: f.description,
       evidence: f.evidence,
+      // AI_WORKFLOW §4.3; lifted out of `evidence` for clients. Null for deterministic findings.
+      confidence: f.source === 'ai_review' ? (stringField(f.evidence, 'confidence') ?? null) : null,
+      suggested_action: f.source === 'ai_review' ? (stringField(f.evidence, 'suggested_action') ?? null) : null,
       status: f.status,
       disposition_by: f.disposition_by,
       disposition_comment: f.disposition_comment,
