@@ -142,11 +142,30 @@ export function useAvailableRepositories(installationId: string | null) {
   });
 }
 
+/**
+ * Follow `next_cursor` for up to `maxPages` pages of 100 so lists aren't silently cut
+ * at the first page; the bound keeps polling cheap and protects the UI.
+ */
+export async function collectPages<X>(
+  fetchPage: (cursor: string | undefined) => Promise<T.Page<X>>,
+  maxPages = 10,
+): Promise<X[]> {
+  const items: X[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < maxPages; i++) {
+    const page = await fetchPage(cursor);
+    items.push(...page.items);
+    if (!page.next_cursor) break;
+    cursor = page.next_cursor;
+  }
+  return items;
+}
+
 export function useRepositories() {
   const ws = useWorkspaceId();
   return useQuery({
     queryKey: qk.repositories(ws),
-    queryFn: async () => (await api.repositories.list({ limit: 100 })).items,
+    queryFn: () => collectPages((cursor) => api.repositories.list({ limit: 100, cursor })),
     // Keep list badges fresh while any repository is indexing.
     refetchInterval: (q) =>
       q.state.data?.some((r) => r.indexing_status === "queued" || r.indexing_status === "indexing")
@@ -286,7 +305,7 @@ export function useTasks(params: T.TaskListParams = {}) {
   const ws = useWorkspaceId();
   return useQuery({
     queryKey: qk.tasks(ws, params),
-    queryFn: async () => (await api.tasks.list({ limit: 100, ...params })).items,
+    queryFn: () => collectPages((cursor) => api.tasks.list({ limit: 100, ...params, cursor })),
     refetchInterval: (q) =>
       q.state.data?.some((t) => t.latest_run && isActiveRun(t.latest_run.status)) ? 5000 : false,
   });
@@ -306,7 +325,7 @@ export function useRuns(params: T.RunListParams = {}, options?: Opts<T.RunListIt
   const ws = useWorkspaceId();
   return useQuery({
     queryKey: qk.runs(ws, params),
-    queryFn: async () => (await api.runs.list({ limit: 100, ...params })).items,
+    queryFn: () => collectPages((cursor) => api.runs.list({ limit: 100, ...params, cursor })),
     refetchInterval: (q) =>
       q.state.data?.some((r) => isActiveRun(r.status) && !r.status.startsWith("awaiting"))
         ? 5000

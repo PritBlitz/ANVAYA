@@ -2113,7 +2113,8 @@ export interface operations {
                                 workspace_id: string;
                                 workspace_name: string;
                                 workspace_slug: string;
-                                role: string;
+                                /** @enum {string} */
+                                role: "owner" | "admin" | "member" | "viewer";
                             }[];
                         };
                         meta: components["schemas"]["Meta"];
@@ -4163,8 +4164,10 @@ export interface operations {
                             full_name: string;
                             default_branch: string;
                             visibility: string;
-                            status: string;
-                            indexing_status: string;
+                            /** @enum {string} */
+                            status: "connected" | "disabled" | "disconnected";
+                            /** @enum {string} */
+                            indexing_status: "pending" | "queued" | "indexing" | "ready" | "partial" | "failed" | "disabled";
                             latest_indexed_commit_sha: string | null;
                             /** Format: date-time */
                             indexed_at: string | null;
@@ -4294,8 +4297,10 @@ export interface operations {
                             full_name: string;
                             default_branch: string;
                             visibility: string;
-                            status: string;
-                            indexing_status: string;
+                            /** @enum {string} */
+                            status: "connected" | "disabled" | "disconnected";
+                            /** @enum {string} */
+                            indexing_status: "pending" | "queued" | "indexing" | "ready" | "partial" | "failed" | "disabled";
                             latest_indexed_commit_sha: string | null;
                             /** Format: date-time */
                             indexed_at: string | null;
@@ -4410,8 +4415,10 @@ export interface operations {
                             full_name: string;
                             default_branch: string;
                             visibility: string;
-                            status: string;
-                            indexing_status: string;
+                            /** @enum {string} */
+                            status: "connected" | "disabled" | "disconnected";
+                            /** @enum {string} */
+                            indexing_status: "pending" | "queued" | "indexing" | "ready" | "partial" | "failed" | "disabled";
                             latest_indexed_commit_sha: string | null;
                             /** Format: date-time */
                             indexed_at: string | null;
@@ -4628,8 +4635,10 @@ export interface operations {
                             full_name: string;
                             default_branch: string;
                             visibility: string;
-                            status: string;
-                            indexing_status: string;
+                            /** @enum {string} */
+                            status: "connected" | "disabled" | "disconnected";
+                            /** @enum {string} */
+                            indexing_status: "pending" | "queued" | "indexing" | "ready" | "partial" | "failed" | "disabled";
                             latest_indexed_commit_sha: string | null;
                             /** Format: date-time */
                             indexed_at: string | null;
@@ -4742,7 +4751,8 @@ export interface operations {
                         data: {
                             /** Format: uuid */
                             indexing_job_id: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
                             trigger: string;
                             requested_ref: string | null;
                             coalesced: boolean;
@@ -4841,13 +4851,15 @@ export interface operations {
                         data: {
                             /** Format: uuid */
                             repository_id: string;
-                            indexing_status: string;
+                            /** @enum {string} */
+                            indexing_status: "pending" | "queued" | "indexing" | "ready" | "partial" | "failed" | "disabled";
                             latest_snapshot: {
                                 /** Format: uuid */
                                 id: string;
                                 commit_sha: string;
                                 branch_name: string;
-                                status: string;
+                                /** @enum {string} */
+                                status: "queued" | "processing" | "ready" | "partial" | "failed";
                                 parser_version: string;
                                 chunker_version: string;
                                 embedding_model: string | null;
@@ -4877,17 +4889,15 @@ export interface operations {
                                 embedded_chunks: number;
                             };
                             active_job: {
-                                [key: string]: unknown;
-                            } | null;
-                            last_job: {
                                 /** Format: uuid */
                                 id: string;
-                                status: string;
-                                stage: string;
+                                /** @enum {string} */
+                                status: "queued" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
+                                stage: string | null;
                                 trigger: string;
-                                commit_sha: string;
+                                commit_sha: string | null;
                                 progress: {
-                                    [key: string]: number;
+                                    [key: string]: unknown;
                                 };
                                 attempts: number;
                                 error_code: string | null;
@@ -4895,10 +4905,31 @@ export interface operations {
                                 /** Format: date-time */
                                 created_at: string;
                                 /** Format: date-time */
-                                started_at: string;
+                                started_at: string | null;
                                 /** Format: date-time */
-                                ended_at: string;
-                            };
+                                ended_at: string | null;
+                            } | null;
+                            last_job: {
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                status: "queued" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
+                                stage: string | null;
+                                trigger: string;
+                                commit_sha: string | null;
+                                progress: {
+                                    [key: string]: unknown;
+                                };
+                                attempts: number;
+                                error_code: string | null;
+                                error_summary: string | null;
+                                /** Format: date-time */
+                                created_at: string;
+                                /** Format: date-time */
+                                started_at: string | null;
+                                /** Format: date-time */
+                                ended_at: string | null;
+                            } | null;
                             supported_parsers: string[];
                         };
                         meta: components["schemas"]["Meta"];
@@ -4998,7 +5029,8 @@ export interface operations {
                             id: string;
                             commit_sha: string;
                             branch_name: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "processing" | "ready" | "partial" | "failed";
                             total_files: number;
                             indexed_files: number;
                             excluded_files: number;
@@ -5111,12 +5143,14 @@ export interface operations {
                             commit_sha: string;
                             path: string;
                             entries: {
-                                type: string;
+                                /** @enum {string} */
+                                type: "directory" | "file";
                                 name: string;
                                 path: string;
                                 file_count?: number;
                                 language?: string | null;
-                                parse_status?: string;
+                                /** @enum {string} */
+                                parse_status?: "parsed" | "unsupported_language" | "parse_error" | "not_parsed" | "excluded";
                                 excluded?: boolean;
                                 exclusion_reason?: string | null;
                                 byte_size?: number;
@@ -5224,7 +5258,8 @@ export interface operations {
                             commit_sha: string;
                             content_hash: string;
                             language: string;
-                            parse_status: string;
+                            /** @enum {string} */
+                            parse_status: "parsed" | "unsupported_language" | "parse_error" | "not_parsed" | "excluded";
                             line_count: number;
                             start_line: number;
                             end_line: number;
@@ -5362,9 +5397,12 @@ export interface operations {
                                 /** Format: uuid */
                                 snapshot_id: string;
                                 commit_sha: string;
-                                snapshot_status: string;
-                                lexical: string;
-                                semantic: string;
+                                /** @enum {string} */
+                                snapshot_status: "queued" | "processing" | "ready" | "partial" | "failed";
+                                /** @enum {string} */
+                                lexical: "ok" | "disabled";
+                                /** @enum {string} */
+                                semantic: "ok" | "unavailable" | "disabled";
                                 semantic_reason: string | null;
                                 embedding_model: string | null;
                                 lexical_candidates: number;
@@ -5473,7 +5511,8 @@ export interface operations {
                             id: string;
                             name: string;
                             qualified_name: string;
-                            kind: string;
+                            /** @enum {string} */
+                            kind: "function" | "class" | "method" | "type" | "interface" | "module";
                             path: string;
                             start_line: number;
                             end_line: number;
@@ -5584,7 +5623,8 @@ export interface operations {
                                 id: string;
                                 name: string;
                                 qualified_name: string;
-                                kind: string;
+                                /** @enum {string} */
+                                kind: "function" | "class" | "method" | "type" | "interface" | "module";
                                 path: string;
                                 start_line: number;
                                 end_line: number;
@@ -5592,14 +5632,16 @@ export interface operations {
                                 signature: string;
                             };
                             outgoing: {
-                                type: string;
+                                /** @enum {string} */
+                                type: "calls" | "extends" | "instantiates" | "imports";
                                 line: number;
                                 target: {
                                     /** Format: uuid */
                                     id: string;
                                     name: string;
                                     qualified_name: string;
-                                    kind: string;
+                                    /** @enum {string} */
+                                    kind: "function" | "class" | "method" | "type" | "interface" | "module";
                                     path: string;
                                     start_line: number;
                                     end_line: number;
@@ -5609,14 +5651,16 @@ export interface operations {
                                 target_name: string;
                             }[];
                             incoming: {
-                                type: string;
+                                /** @enum {string} */
+                                type: "calls" | "extends" | "instantiates" | "imports";
                                 line: number;
                                 source: {
                                     /** Format: uuid */
                                     id: string;
                                     name: string;
                                     qualified_name: string;
-                                    kind: string;
+                                    /** @enum {string} */
+                                    kind: "function" | "class" | "method" | "type" | "interface" | "module";
                                     path: string;
                                     start_line: number;
                                     end_line: number;
@@ -5850,7 +5894,8 @@ export interface operations {
                             citations: {
                                 path: string | null;
                                 title: string | null;
-                                source: string;
+                                /** @enum {string} */
+                                source: "code" | "knowledge";
                                 symbol: string | null;
                                 end_line: number;
                                 supports: string;
@@ -5864,7 +5909,8 @@ export interface operations {
                             limitations: string[];
                             provider: string | null;
                             model: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             commit_sha: string;
                             /** Format: date-time */
                             created_at: string;
@@ -5986,7 +6032,8 @@ export interface operations {
                             answer: string;
                             insufficient_evidence: boolean;
                             citations: {
-                                source: string;
+                                /** @enum {string} */
+                                source: "code" | "knowledge";
                                 evidence_id: string;
                                 path: string | null;
                                 start_line: number;
@@ -6002,7 +6049,8 @@ export interface operations {
                             limitations: string[];
                             provider: string | null;
                             model: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             prompt_version: string | null;
                             data_disclosure: {
                                 provider: string | null;
@@ -6012,9 +6060,12 @@ export interface operations {
                                 /** Format: uuid */
                                 snapshot_id: string;
                                 commit_sha: string;
-                                snapshot_status: string;
-                                lexical: string;
-                                semantic: string;
+                                /** @enum {string} */
+                                snapshot_status: "queued" | "processing" | "ready" | "partial" | "failed";
+                                /** @enum {string} */
+                                lexical: "ok" | "disabled";
+                                /** @enum {string} */
+                                semantic: "ok" | "unavailable" | "disabled";
                                 semantic_reason: string | null;
                                 embedding_model: string;
                                 lexical_candidates: number;
@@ -6131,7 +6182,8 @@ export interface operations {
                             citations: {
                                 path: string;
                                 title: string | null;
-                                source: string;
+                                /** @enum {string} */
+                                source: "code" | "knowledge";
                                 symbol: string;
                                 end_line: number;
                                 supports: string;
@@ -6146,7 +6198,8 @@ export interface operations {
                             limitations: string[];
                             provider: string | null;
                             model: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             commit_sha: string;
                             /** Format: date-time */
                             created_at: string;
@@ -6328,7 +6381,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: {
-                            default_mode: string;
+                            /** @enum {string} */
+                            default_mode: "local" | "cloud" | "mock";
                             allowed_modes: string[];
                             cloud: {
                                 enabled: boolean;
@@ -6454,7 +6508,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: {
-                            default_mode: string;
+                            /** @enum {string} */
+                            default_mode: "local" | "cloud" | "mock";
                             allowed_modes: string[];
                             cloud: {
                                 enabled: boolean;
@@ -6569,7 +6624,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: {
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string;
                             available: boolean;
                             models: string[];
@@ -6815,7 +6871,8 @@ export interface operations {
                             workspace_id: string;
                             /** Format: uuid */
                             repository_id: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "readme" | "architecture" | "decision" | "issue" | "pull_request" | "engineering_note";
                             title: string;
                             content_hash: string;
                             source_url: string | null;
@@ -6936,7 +6993,8 @@ export interface operations {
                             workspace_id: string;
                             /** Format: uuid */
                             repository_id: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "readme" | "architecture" | "decision" | "issue" | "pull_request" | "engineering_note";
                             title: string;
                             content_hash: string;
                             source_url: string | null;
@@ -7046,7 +7104,8 @@ export interface operations {
                             workspace_id: string;
                             /** Format: uuid */
                             repository_id: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "readme" | "architecture" | "decision" | "issue" | "pull_request" | "engineering_note";
                             title: string;
                             content_hash: string;
                             source_url: string | null;
@@ -7258,11 +7317,13 @@ export interface operations {
                             repository_id: string;
                             /** Format: uuid */
                             created_by: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
                             title: string;
                             description: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "open" | "active" | "completed" | "failed" | "cancelled" | "archived";
                             labels: string[];
                             /** Format: date-time */
                             created_at: string;
@@ -7373,11 +7434,13 @@ export interface operations {
                             repository_id: string;
                             /** Format: uuid */
                             created_by: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
                             title: string;
                             description: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "open" | "active" | "completed" | "failed" | "cancelled" | "archived";
                             labels: string[];
                             /** Format: date-time */
                             created_at: string;
@@ -7388,7 +7451,8 @@ export interface operations {
                                 /** Format: uuid */
                                 id: string;
                                 run_number: number;
-                                status: string;
+                                /** @enum {string} */
+                                status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                                 current_stage: string | null;
                                 /** Format: date-time */
                                 created_at: string;
@@ -7492,11 +7556,13 @@ export interface operations {
                             repository_id: string;
                             /** Format: uuid */
                             created_by: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
                             title: string;
                             description: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "open" | "active" | "completed" | "failed" | "cancelled" | "archived";
                             labels: string[];
                             /** Format: date-time */
                             created_at: string;
@@ -7507,7 +7573,8 @@ export interface operations {
                                 /** Format: uuid */
                                 id: string;
                                 run_number: number;
-                                status: string;
+                                /** @enum {string} */
+                                status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                                 current_stage: string | null;
                                 /** Format: date-time */
                                 created_at: string;
@@ -7623,11 +7690,13 @@ export interface operations {
                             repository_id: string;
                             /** Format: uuid */
                             created_by: string;
-                            source_type: string;
+                            /** @enum {string} */
+                            source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
                             title: string;
                             description: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "open" | "active" | "completed" | "failed" | "cancelled" | "archived";
                             labels: string[];
                             /** Format: date-time */
                             created_at: string;
@@ -7736,9 +7805,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string;
                             model: string;
                             base_branch: string;
@@ -7892,9 +7963,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string | null;
                             model: string | null;
                             base_branch: string;
@@ -8036,9 +8109,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string;
                             model: string;
                             base_branch: string;
@@ -8175,9 +8250,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string | null;
                             model: string | null;
                             base_branch: string;
@@ -8223,8 +8300,10 @@ export interface operations {
                             approvals: {
                                 /** Format: uuid */
                                 id: string;
-                                approval_type: string;
-                                decision: string;
+                                /** @enum {string} */
+                                approval_type: "plan" | "pull_request" | "other";
+                                /** @enum {string} */
+                                decision: "approved" | "rejected";
                                 subject_hash: string;
                                 comment: string | null;
                                 /** Format: uuid */
@@ -8440,9 +8519,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string | null;
                             model: string | null;
                             base_branch: string;
@@ -8580,9 +8661,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string | null;
                             model: string | null;
                             base_branch: string;
@@ -8712,7 +8795,8 @@ export interface operations {
                             id: string;
                             sequence_number: number;
                             agent_type: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
                             prompt_version: string | null;
                             provider: string | null;
                             model: string | null;
@@ -8868,8 +8952,34 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: {
-                            patches: unknown[];
-                            verification_logs: unknown[];
+                            patches: {
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                type: "patch";
+                                patch_hash: string;
+                                base_commit_sha: string;
+                                changed_files: unknown;
+                                additions: number;
+                                deletions: number;
+                                /** @enum {string} */
+                                status: "proposed" | "validated" | "applied" | "rejected";
+                                /** Format: date-time */
+                                created_at: string;
+                            }[];
+                            verification_logs: {
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                type: "verification";
+                                profile_id: string;
+                                /** @enum {string} */
+                                status: "passed" | "failed" | "timed_out" | "skipped" | "error";
+                                exit_code: number | null;
+                                duration_ms: number | null;
+                                /** Format: date-time */
+                                created_at: string;
+                            }[];
                         };
                         meta: components["schemas"]["Meta"];
                     };
@@ -9007,7 +9117,14 @@ export interface operations {
                                 candidate_files: string[];
                             };
                             approval: {
-                                [key: string]: unknown;
+                                /** @enum {string} */
+                                decision: "approved" | "rejected";
+                                /** Format: uuid */
+                                user_id: string;
+                                comment: string | null;
+                                subject_hash: string;
+                                /** Format: date-time */
+                                created_at: string;
                             } | null;
                         };
                         meta: components["schemas"]["Meta"];
@@ -9240,9 +9357,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string;
                             model: string;
                             base_branch: string;
@@ -9387,7 +9506,8 @@ export interface operations {
                                 /** Format: uuid */
                                 id: string;
                                 attempt: number;
-                                status: string;
+                                /** @enum {string} */
+                                status: "proposed" | "validated" | "applied" | "rejected";
                                 patch_hash: string;
                                 /** Format: date-time */
                                 created_at: string;
@@ -9507,7 +9627,8 @@ export interface operations {
                                 profile_id: string;
                                 command_display: string;
                                 image: string;
-                                status: string;
+                                /** @enum {string} */
+                                status: "passed" | "failed" | "timed_out" | "skipped" | "error";
                                 exit_code: number;
                                 duration_ms: number;
                                 output_truncated: boolean;
@@ -9614,7 +9735,8 @@ export interface operations {
                                 /** Format: uuid */
                                 patch_id: string;
                                 source: string;
-                                severity: string;
+                                /** @enum {string} */
+                                severity: "info" | "low" | "medium" | "high" | "critical";
                                 file_path: string;
                                 start_line: number;
                                 end_line: number;
@@ -9626,7 +9748,8 @@ export interface operations {
                                 /** @enum {string|null} */
                                 confidence: "low" | "medium" | "high" | null;
                                 suggested_action: string | null;
-                                status: string;
+                                /** @enum {string} */
+                                status: "open" | "accepted" | "dismissed" | "fixed";
                                 /** Format: uuid */
                                 disposition_by: string | null;
                                 disposition_comment: string | null;
@@ -9641,7 +9764,8 @@ export interface operations {
                                 /** Format: uuid */
                                 patch_id: string;
                                 source: string;
-                                severity: string;
+                                /** @enum {string} */
+                                severity: "info" | "low" | "medium" | "high" | "critical";
                                 file_path: string;
                                 start_line: number;
                                 end_line: number;
@@ -9652,7 +9776,8 @@ export interface operations {
                                 };
                                 confidence: string;
                                 suggested_action: string;
-                                status: string;
+                                /** @enum {string} */
+                                status: "open" | "accepted" | "dismissed" | "fixed";
                                 /** Format: uuid */
                                 disposition_by: string | null;
                                 disposition_comment: string | null;
@@ -9765,7 +9890,8 @@ export interface operations {
                         data: {
                             /** Format: uuid */
                             id: string;
-                            status: string;
+                            /** @enum {string} */
+                            status: "open" | "accepted" | "dismissed" | "fixed";
                             /** Format: uuid */
                             disposition_by: string;
                             disposition_comment: string;
@@ -9883,9 +10009,11 @@ export interface operations {
                             /** Format: uuid */
                             repository_id: string;
                             run_number: number;
-                            status: string;
+                            /** @enum {string} */
+                            status: "queued" | "retrieving_context" | "investigating" | "planning" | "awaiting_plan_approval" | "preparing_workspace" | "implementing" | "verifying" | "reviewing" | "awaiting_pr_approval" | "creating_pr" | "completed" | "failed" | "cancelled" | "timed_out" | "rejected" | "completed_without_pr";
                             current_stage: string | null;
-                            mode: string;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
                             provider: string;
                             model: string;
                             base_branch: string;
