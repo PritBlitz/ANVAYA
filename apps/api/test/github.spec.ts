@@ -259,4 +259,48 @@ describe('GitHub App integration', () => {
       expect(list.body.data.map((i: { id: string }) => i.id)).not.toContain(inst.id);
     });
   });
+  describe('GitHub sign-in', () => {
+    async function signIn(profile: Parameters<typeof gh.oauthProfiles.set>[1]) {
+      const agent = request.agent(app.getHttpServer());
+      const start = await agent.get('/api/v1/auth/github/login?return_to=/dashboard').expect(302);
+      const state = new URL(start.headers.location as string).searchParams.get('state')!;
+      const code = `code-${randomUUID()}`;
+      gh.oauthProfiles.set(code, profile);
+      const cb = await agent.get(`/api/v1/auth/github/callback?code=${code}&state=${state}`).expect(302);
+      return { agent, location: cb.headers.location as string };
+    }
+
+    it('signs in with the verified primary email', async () => {
+      const id = uid();
+      const { agent, location } = await signIn({ id, login: `octo${id}`, emails: [{ email: `other${id}@example.test`, primary: false, verified: true }, { email: `octo${id}@example.test`, primary: true, verified: true }] });
+      expect(new URL(location).pathname).toBe('/dashboard');
+      const me = await agent.get('/api/v1/me').expect(200);
+      expect(me.body.data.email ?? me.body.data.user?.email).toBe(`octo${id}@example.test`);
+    });
+
+    it('falls back to the public profile email when the App cannot read /user/emails', async () => {
+      const id = uid();
+      const { agent, location } = await signIn({ id, login: `pub${id}`, publicEmail: `pub${id}@example.test`, emails: 'forbidden' });
+      expect(new URL(location).pathname).toBe('/dashboard');
+      const me = await agent.get('/api/v1/me').expect(200);
+      expect(me.body.data.email ?? me.body.data.user?.email).toBe(`pub${id}@example.test`);
+    });
+
+    it('falls back to the GitHub noreply address when no email is readable', async () => {
+      const id = uid();
+      const { agent } = await signIn({ id, login: `priv${id}`, publicEmail: null, emails: 'forbidden' });
+      const me = await agent.get('/api/v1/me').expect(200);
+      expect(me.body.data.email ?? me.body.data.user?.email).toBe(`${id}+priv${id}@users.noreply.github.com`);
+      // Signing in again resolves to the same account (keyed on the GitHub user id).
+      const again = await signIn({ id, login: `priv${id}`, publicEmail: null, emails: 'forbidden' });
+      const me2 = await again.agent.get('/api/v1/me').expect(200);
+      expect(me2.body.data.id ?? me2.body.data.user?.id).toBe(me.body.data.id ?? me.body.data.user?.id);
+    });
+
+    it('refuses an account without a verified primary email when emails are readable', async () => {
+      const id = uid();
+      const { location } = await signIn({ id, login: `unv${id}`, emails: [{ email: `unv${id}@example.test`, primary: true, verified: false }] });
+      expect(location).toContain('/login?error=oauth_failed');
+    });
+  });
 });
