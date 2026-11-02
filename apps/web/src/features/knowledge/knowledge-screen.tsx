@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -261,10 +262,12 @@ function KnowledgeList({
 }
 
 function RepoKnowledgeSection({ repoId, title }: { repoId: string; title?: ReactNode }) {
+  const searchParams = useSearchParams();
   const { can } = useWorkspace();
   const docs = useKnowledge(repoId);
   const [adding, setAdding] = useState(false);
-  const [openDoc, setOpenDoc] = useState<string | null>(null);
+  // Q&A knowledge citations deep-link here with ?doc=<id>.
+  const [openDoc, setOpenDoc] = useState<string | null>(() => searchParams.get("doc"));
   const addButton = can("knowledge.write") && (
     <Button size="sm" onClick={() => setAdding(true)}>
       <Plus /> Add note

@@ -316,21 +316,45 @@ export interface SearchResponse {
 
 export type InferenceMode = "local" | "cloud" | "mock";
 
-export interface Citation {
+/** A cited range of indexed code at a commit. */
+export interface CodeCitation {
+  source: "code";
   path: string;
   start_line: number;
   end_line: number;
   commit_sha: string;
   content_hash: string;
+  symbol: string | null;
+  supports: string | null;
 }
+
+/** A cited range inside a knowledge note (B-2); the line range is within the note. */
+export interface KnowledgeCitation {
+  source: "knowledge";
+  knowledge_document_id: UUID;
+  title: string;
+  start_line: number;
+  end_line: number;
+  content_hash: string;
+  supports: string | null;
+}
+
+export type Citation = CodeCitation | KnowledgeCitation;
 
 export interface AskQuestionRequest {
   question: string;
   snapshot?: "latest" | string;
   mode?: InferenceMode;
+  /** Search knowledge notes too (backend default true). */
+  include_knowledge?: boolean;
 }
 
 export interface QuestionAnswer {
+  /** Saved history entry id (B-8); null for answers that were not persisted. */
+  id: UUID | null;
+  created_at: ISODateTime | null;
+  /** Snapshot commit the answer was grounded in, when known. */
+  commit_sha: string | null;
   question: string;
   answer: string;
   /** True when retrieval found nothing usable; the model was not called. */
@@ -346,6 +370,7 @@ export interface QuestionAnswer {
   retrieval: {
     chunks_considered: number | null;
     chunks_used: number;
+    knowledge_results: number | null;
     token_estimate: number | null;
     latency_ms: number | null;
   };
@@ -937,4 +962,95 @@ export interface RunEvent {
   id: string;
   type: RunEventType;
   payload: RunEventPayload;
+}
+
+// ── Code intelligence (GAP-15; backend contract 3a53222) ─────────────────
+
+export const SYMBOL_KINDS = ["function", "class", "method", "type", "interface", "module"] as const;
+export type SymbolKind = (typeof SYMBOL_KINDS)[number];
+
+export interface CodeSymbol {
+  id: UUID;
+  name: string;
+  qualified_name: string;
+  /** Unknown kinds from newer parsers render generically. */
+  kind: SymbolKind | (string & {});
+  path: string;
+  start_line: number;
+  end_line: number;
+  language: string | null;
+  signature: string | null;
+  snapshot_id: UUID;
+  commit_sha: string;
+}
+
+export type SymbolReferenceType = "calls" | "extends" | "instantiates" | "imports";
+
+export interface SymbolOutgoing {
+  type: SymbolReferenceType | (string & {});
+  line: number;
+  /** null when the reference is external or unresolved. */
+  target: CodeSymbol | null;
+  target_name: string;
+}
+
+export interface SymbolIncoming {
+  type: SymbolReferenceType | (string & {});
+  line: number;
+  source: CodeSymbol;
+}
+
+export interface SymbolDetail {
+  snapshot_id: UUID;
+  commit_sha: string;
+  symbol: CodeSymbol;
+  outgoing: SymbolOutgoing[];
+  incoming: SymbolIncoming[];
+  /** At most 200 references each way. */
+  truncated: boolean;
+}
+
+export interface SymbolListParams extends PageParams {
+  /** "latest" (default) or a 40-char commit SHA. */
+  snapshot?: string;
+  q?: string;
+  kind?: SymbolKind[];
+  /** Exact file, or a directory prefix ending in "/". */
+  path?: string;
+}
+
+export interface DependencyNode {
+  path: string;
+  language: string | null;
+  line_count: number;
+  symbol_count: number;
+  imports: number;
+  imported_by: number;
+  /** false for files outside `path` that in-scope files import. */
+  in_scope: boolean;
+}
+
+export interface DependencyEdge {
+  source: string;
+  target: string;
+  count: number;
+  lines: number[];
+}
+
+export interface ExternalDependency {
+  name: string;
+  count: number;
+  importer_count: number;
+}
+
+export interface DependencyMap {
+  snapshot_id: UUID;
+  commit_sha: string;
+  path: string | null;
+  nodes: DependencyNode[];
+  edges: DependencyEdge[];
+  external: ExternalDependency[];
+  unresolved_imports: number;
+  truncated: boolean;
+  limitations: string[];
 }

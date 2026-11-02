@@ -291,17 +291,24 @@ export interface WSearch {
 }
 
 export interface WCitation {
+  /** B-2; absent on older backends (= "code"). */
+  source?: "code" | "knowledge";
   evidence_id?: string;
-  path: string;
+  path: string | null;
   start_line: number;
   end_line: number;
-  commit_sha: string;
+  commit_sha: string | null;
   content_hash: string;
   symbol?: string | null;
+  knowledge_document_id?: UUID | null;
+  title?: string | null;
   supports?: string | null;
 }
 
 export interface WQuestionAnswer {
+  /** B-8: saved history entry. */
+  id?: UUID;
+  created_at?: ISO;
   answer: string;
   insufficient_evidence: boolean;
   citations: WCitation[];
@@ -311,7 +318,11 @@ export interface WQuestionAnswer {
   mode: WMode;
   prompt_version?: string | null;
   data_disclosure: { provider: string; data_categories: string[] } | null;
-  retrieval?: { result_count?: number; evidence_included?: string[] } & Record<string, unknown>;
+  retrieval?: {
+    result_count?: number;
+    knowledge_result_count?: number;
+    evidence_included?: string[];
+  } & Record<string, unknown>;
   usage?: {
     input_tokens?: number;
     output_tokens?: number;
@@ -634,4 +645,65 @@ export interface WReview {
   summary: string | null;
   deterministic_findings: WFinding[];
   ai_findings: WFinding[];
+}
+
+// ── Code intelligence (GAP-15; backend 3a53222) ──────────────────────────
+
+export interface WSymbol {
+  id: UUID;
+  name: string;
+  qualified_name: string | null;
+  kind: string;
+  path: string;
+  start_line: number;
+  end_line: number;
+  language: string | null;
+  signature: string | null;
+  snapshot_id: UUID;
+  commit_sha: string;
+}
+
+export interface WSymbolDetail {
+  snapshot_id: UUID;
+  commit_sha: string;
+  symbol: WSymbol;
+  outgoing: { type: string; line: number; target: WSymbol | null; target_name: string }[];
+  incoming: { type: string; line: number; source: WSymbol }[];
+  truncated: boolean;
+}
+
+export interface WDependencyMap {
+  snapshot_id: UUID;
+  commit_sha: string;
+  path: string | null;
+  nodes: {
+    path: string;
+    language: string | null;
+    line_count: number;
+    symbol_count: number;
+    imports: number;
+    imported_by: number;
+    in_scope: boolean;
+  }[];
+  edges: { source: string; target: string; count: number; lines: number[] }[];
+  external: { name: string; count: number; importer_count: number }[];
+  unresolved_imports: number;
+  truncated: boolean;
+  limitations: string[];
+}
+
+/** B-8: one saved Q&A history entry (caller's own only). */
+export interface WQuestionHistoryItem {
+  id: UUID;
+  repository_id: UUID;
+  question: string;
+  answer: string;
+  insufficient_evidence: boolean;
+  citations: WCitation[];
+  limitations: string[];
+  provider: string | null;
+  model: string | null;
+  mode: WMode;
+  commit_sha: string | null;
+  created_at: ISO;
 }

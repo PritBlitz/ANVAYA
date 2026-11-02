@@ -38,6 +38,13 @@ export const qk = {
     ["ws", ws, "repositories", id, "file", path, sha] as const,
   search: (ws: string, id: string, req: T.SearchRequest) =>
     ["ws", ws, "repositories", id, "search", req] as const,
+  symbols: (ws: string, id: string, params: object) =>
+    ["ws", ws, "repositories", id, "symbols", params] as const,
+  symbol: (ws: string, id: string, symbolId: string, snapshot: string) =>
+    ["ws", ws, "repositories", id, "symbol", symbolId, snapshot] as const,
+  dependencyMap: (ws: string, id: string, path: string, snapshot: string) =>
+    ["ws", ws, "repositories", id, "dependency-map", path, snapshot] as const,
+  questions: (ws: string, id: string) => ["ws", ws, "repositories", id, "questions"] as const,
   knowledge: (ws: string, id: string) => ["ws", ws, "repositories", id, "knowledge"] as const,
   knowledgeDoc: (ws: string, docId: string) => ["ws", ws, "knowledge", docId] as const,
   tasks: (ws: string, params?: T.TaskListParams) =>
@@ -206,6 +213,52 @@ export function useSearch(id: string, request: T.SearchRequest | null) {
     enabled: !!request && request.query.trim().length >= 2,
     staleTime: 60_000,
     placeholderData: (prev) => prev,
+  });
+}
+
+/** Symbol explorer: cursor-paged, 50 per page (GAP-15). */
+export function useSymbols(id: string, params: Omit<T.SymbolListParams, "cursor" | "limit">) {
+  const ws = useWorkspaceId();
+  return useInfiniteQuery({
+    queryKey: qk.symbols(ws, id, params),
+    queryFn: ({ pageParam }) =>
+      api.repositories.symbols(id, { ...params, limit: 50, cursor: pageParam ?? undefined }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useSymbol(id: string, symbolId: string | null, snapshot = "latest") {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: qk.symbol(ws, id, symbolId ?? "", snapshot),
+    queryFn: () => api.repositories.symbol(id, symbolId!, snapshot),
+    enabled: !!symbolId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useDependencyMap(id: string, path: string, snapshot = "latest") {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: qk.dependencyMap(ws, id, path, snapshot),
+    queryFn: () => api.repositories.dependencyMap(id, path || undefined, snapshot),
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/** B-8: saved Q&A history for the current user, 20 per page, newest first. */
+export function useQuestionHistory(id: string) {
+  const ws = useWorkspaceId();
+  return useInfiniteQuery({
+    queryKey: qk.questions(ws, id),
+    queryFn: ({ pageParam }) =>
+      api.repositories.questions(id, { limit: 20, cursor: pageParam ?? undefined }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
   });
 }
 

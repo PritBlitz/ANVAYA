@@ -395,6 +395,51 @@ describe("fixture adapter contract", () => {
     expect(answer.limitations.length).toBeGreaterThan(0);
   });
 
+  it("cites knowledge notes and keeps Q&A history private to the asker (B-2, B-8)", async () => {
+    const { api, transport } = setup();
+    const answer = await api.repositories.ask(IDS.repoPayments, {
+      question: "What happens when a charge request fails?",
+    });
+    expect(answer.id).toEqual(expect.any(String));
+    expect(answer.citations.some((c) => c.source === "knowledge")).toBe(true);
+    const without = await api.repositories.ask(IDS.repoPayments, {
+      question: "What happens when a charge request fails?",
+      include_knowledge: false,
+    });
+    expect(without.citations.every((c) => c.source === "code")).toBe(true);
+
+    const page = await api.repositories.questions(IDS.repoPayments);
+    expect(page.items.map((q) => q.id)).toEqual([without.id, answer.id]);
+    expect((await api.questions.get(answer.id!)).question).toMatch(/charge request/);
+
+    // Another member (even with access to the repo) sees neither the list nor the entry.
+    transport.signIn(IDS.userViewer);
+    expect((await api.repositories.questions(IDS.repoPayments)).items).toEqual([]);
+    expect((await fail(api.questions.get(answer.id!)))?.status).toBe(404);
+    expect((await fail(api.questions.remove(answer.id!)))?.status).toBe(404);
+
+    transport.signIn(IDS.user);
+    await api.questions.remove(answer.id!);
+    expect((await api.repositories.questions(IDS.repoPayments)).items).toHaveLength(1);
+  });
+
+  it("serves symbols, symbol references and the dependency map (GAP-15)", async () => {
+    const { api } = setup();
+    const page = await api.repositories.symbols(IDS.repoPayments, { q: "refresh", limit: 5 });
+    const refresh = page.items.find((s) => s.name === "refreshSession")!;
+    expect(refresh).toMatchObject({ kind: "function", path: "src/auth/refresh.ts" });
+    const classes = await api.repositories.symbols(IDS.repoPayments, { kind: ["class"] });
+    expect(classes.items.every((s) => s.kind === "class")).toBe(true);
+    const detail = await api.repositories.symbol(IDS.repoPayments, refresh.id);
+    expect(detail.outgoing.length).toBeGreaterThan(0);
+    expect((await fail(api.repositories.symbol(IDS.repoPayments, "missing")))?.status).toBe(404);
+    const map = await api.repositories.dependencyMap(IDS.repoPayments, "src/payments");
+    expect(map.nodes.some((n) => n.in_scope && n.path === "src/payments/charge.ts")).toBe(true);
+    expect(
+      (await fail(api.repositories.symbols(IDS.repoPayments, { snapshot: "bogus" })))?.status,
+    ).toBe(422);
+  });
+
   it("never serves excluded files", async () => {
     const { api } = setup();
     expect(
