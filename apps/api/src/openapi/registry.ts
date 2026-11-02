@@ -1,4 +1,5 @@
 import { z, type ZodType } from 'zod';
+import { refine } from './refinements.js';
 import { RESPONSES } from './responses.generated.js';
 import { updateAiPolicyBody } from '../ai/ai-policy.service.js';
 import { healthCheckBody, usageQuery } from '../ai/ai.controller.js';
@@ -163,7 +164,7 @@ const derived: Record<string, ZodType> = {
   // PATCH returns the task without the joined repository name and latest run.
   'patch /tasks/{taskId}': taskDetail.omit({ repository_full_name: true, latest_run: true }),
 };
-for (const r of ROUTES) r.response ??= derived[`${r.method} ${r.path}`] ?? RESPONSES[`${r.method} ${r.path}`];
+for (const r of ROUTES) r.response ??= refine(`${r.method} ${r.path}`, derived[`${r.method} ${r.path}`] ?? RESPONSES[`${r.method} ${r.path}`]);
 
 /** Shapes referenced from docs (not request validation). */
 export const SCHEMA_COMPONENTS: Record<string, ZodType> = { Plan: planSchema };
