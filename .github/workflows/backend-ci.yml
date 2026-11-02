@@ -1,0 +1,92 @@
+name: backend-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "services/ai-service/**"
+      - "infra/**"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "services/ai-service/**"
+      - "infra/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: anvaya
+          POSTGRES_PASSWORD: anvaya_local_only
+          POSTGRES_DB: anvaya_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U anvaya -d anvaya_test" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://anvaya:anvaya_local_only@127.0.0.1:5433/anvaya_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379/1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run typecheck
+      # Includes real-Docker sandbox security tests (Docker is available on ubuntu runners).
+      - run: npm test
+      - run: npm run build
+      - name: OpenAPI is up to date
+        run: node dist/openapi/generate.cli.js && git diff --exit-code openapi.json
+      - name: Dependency audit (production)
+        run: npm audit --omit=dev --audit-level=high
+
+  ai-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]" pip-audit
+      - run: ruff check app tests && ruff format --check app tests
+      - run: mypy app
+      - run: pytest -q
+      - run: pip-audit --skip-editable
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
