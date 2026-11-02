@@ -5,7 +5,7 @@ import { sha256Hex } from '../common/crypto.js';
 import { logger } from '../common/logger.js';
 import { DatabaseService } from '../database/database.service.js';
 import { chunkFile } from '../indexing/chunker.js';
-import { lexicalTerms } from '../retrieval/retrieval.service.js';
+import { lexicalTerms, withVectorScan } from '../retrieval/retrieval.service.js';
 import { ObjectStorage } from '../storage/object-storage.js';
 
 const log = logger('knowledge-index');
@@ -128,16 +128,19 @@ export class KnowledgeIndexService {
     const semantic = new Map<string, number>();
     if (queryEmbedding) {
       const vec = `[${queryEmbedding.vector.join(',')}]`;
-      const rows = await db
-        .selectFrom('knowledge_chunks as k')
-        .select(['k.id'])
-        .where('k.repository_id', '=', repositoryId)
-        .where('k.embedding', 'is not', null)
-        .where('k.embedding_model', '=', queryEmbedding.model)
-        .where('k.embedding_version', '=', queryEmbedding.version)
-        .orderBy(sql`k.embedding <=> ${vec}::vector`)
-        .limit(CANDIDATES)
-        .execute();
+      const rows = await this.database.transaction(async (tx) => {
+        await withVectorScan(tx);
+        return tx
+          .selectFrom('knowledge_chunks as k')
+          .select(['k.id'])
+          .where('k.repository_id', '=', repositoryId)
+          .where('k.embedding', 'is not', null)
+          .where('k.embedding_model', '=', queryEmbedding.model)
+          .where('k.embedding_version', '=', queryEmbedding.version)
+          .orderBy(sql`k.embedding <=> ${vec}::vector`)
+          .limit(CANDIDATES)
+          .execute();
+      });
       rows.forEach((r, i) => semantic.set(r.id, i + 1));
     }
     const scored = [...new Set([...lexical.keys(), ...semantic.keys()])]
