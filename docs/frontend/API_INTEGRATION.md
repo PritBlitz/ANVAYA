@@ -1,6 +1,6 @@
 # Frontend ↔ API integration
 
-**Owner:** frontend session · **Contract:** `docs/API_SPEC.md` (canonical) · **Status:** integrated against the fixture adapter; not yet run against the real NestJS API.
+**Owner:** frontend session · **Contract:** `docs/API_SPEC.md` (canonical) plus the backend's implemented contract (`apps/api/openapi.json`, `docs/backend/API_CONTRACT_NOTES.md`) · **Status:** adapted to backend commit `c2f3813`. The live end-to-end run against the NestJS API is pending (see §4).
 
 This document records how the web app consumes the API, every assumption it makes where `API_SPEC.md` is silent, and the changes the backend needs to make (or confirm). Each gap has an ID (`GAP-xx`) that also appears as a comment on the matching type or endpoint in `apps/web/src/lib/api/`.
 
@@ -8,18 +8,23 @@ This document records how the web app consumes the API, every assumption it make
 
 ```
 UI component ─► typed hook (lib/api/queries.ts, TanStack Query)
-             ─► endpoint function (lib/api/endpoints.ts)
-             ─► ApiClient (lib/api/client.ts): envelope, errors, headers
+             ─► endpoint function (lib/api/endpoints.ts)  ── request bodies match backend schemas
+             ─► mapper (lib/api/mappers.ts)               ── wire.ts → UI model (types.ts)
+             ─► ApiClient (lib/api/client.ts): envelope, errors, headers, CSRF refresh
              ─► Transport
                    ├─ HttpTransport  → fetch("/api/v1/…") → Next rewrite → NestJS
-                   └─ FixtureTransport → in-browser emulation (development only)
+                   └─ FixtureTransport → in-browser emulation that speaks the same wire format
 ```
+
+`wire.ts` mirrors the backend's responses; `mappers.ts` is the only place that knows about them. A backend shape change is absorbed in one pure, unit-tested function (`mappers.test.ts`, which uses the backend's documented payloads). The fixture adapter emits the wire format too, so the mappers run in every fixture-backed test.
 
 - **Base path:** the browser always calls same-origin `/api/v1`. `next.config.ts` rewrites it to `ANVAYA_API_ORIGIN` (server-only env). Same-origin keeps the HttpOnly session cookie first-party and avoids CORS for SSE.
 - **Mode switch:** `NEXT_PUBLIC_API_MODE=http | fixtures` (default `fixtures`). No UI code changes between modes; the fixture adapter is dynamically imported only in fixtures mode. A visible "Development fixtures" notice is shown whenever it is active.
 - **Headers sent on every request:** `X-Request-Id` (UUID), `X-Workspace-Id` (see GAP-02), `Idempotency-Key` on creation and side-effect endpoints, `X-CSRF-Token` on mutations when the CSRF cookie is present (GAP-01).
 - **Envelope:** `{ data, meta }` is unwrapped; `{ error: { code, message, details }, meta }` becomes a typed `ApiError` (status, code, details, request ID). Responses that match neither raise `INVALID_RESPONSE`.
-- **Field validation:** on 400/409/422 the UI maps `error.details.fields` — `{ fieldName: "message" }` — onto form fields. **Please return field errors in this shape.**
+- **Field validation:** on 400/409/422 the UI maps `error.details.issues[{ path, message }]` onto form fields (by the last path segment, e.g. `plan.objective` → `objective`).
+- **Pagination:** lists return `data: T[]` with `meta.page.{ next_cursor, has_more }`.
+- **CSRF:** mutations send `X-CSRF-Token` from the `anvaya_csrf` cookie. On `403 CSRF_TOKEN_INVALID` the client calls `GET /auth/csrf` once and retries the request.
 - **Retries:** reads retry at most twice, only for network errors, 429, 502, 503, 504; `details.retry_after_seconds` is honoured on 429. 4xx are never retried. Mutations are never retried automatically.
 - **401:** any 401 redirects to `/login?next=<current path>` (the `next` value is validated against open redirects).
 - **Idempotency keys** are bound to a user intent (one dialog / one form instance) and reused if the user retries the same intent after a network failure; a corrected resubmission after a 4xx gets a new key. PR creation keeps one key per composer so a retry can never open two PRs.
@@ -28,13 +33,44 @@ UI component ─► typed hook (lib/api/queries.ts, TanStack Query)
 
 `GET /api/v1/runs/:runId/events` via `EventSource` (`withCredentials`). The client listens for every event name in API_SPEC §8, de-duplicates by event `id`, and batches cache invalidation (≈120 ms). **Events are treated as change signals, not as state:** after each batch the UI refetches the affected resources (`run`, `steps`, `plan`, `diff`, `verification`, `review`, `artifacts`). While the stream is not `open`, run detail falls back to polling every 4 s and the header shows "Reconnecting".
 
-Payload fields read (all optional except `run_id`, `timestamp`): `status`, `stage`, `agent_type`, `tool_name`, `approval_type`, `message`, `error_code`, `chunks`, `token_estimate`, `patch_hash`, `changed_files`, `passed`, `severity`, `source`, `pr_number`.
+Payload fields read (backend names; all optional except `run_id`, `timestamp`): `status`, `from`, `reason`, `stage`, `agent`, `model`, `input_tokens`, `output_tokens`, `tool`, `count`, `semantic`, `patch_hash`, `attempt`, `changed_files`, `profile`, `exit_code`, `severity`, `source`, `file_path`, `approval_type`, `pr_number`, `head_branch`, `error_code`, `error_summary`.
+
+The server replays history when no `Last-Event-ID` is sent and **closes the stream after `run.completed|run.failed|run.cancelled`**. Both transports close their side too, so `EventSource` doesn't reconnect forever.
 
 ## 3. Endpoints used
 
 All endpoints in API_SPEC §2–§7 are used except `POST /webhooks/github` (server-to-server). Additional **proposed** endpoints are listed in §4.
 
-## 4. Gaps, assumptions and requested changes
+## 4. Resolution status (frontend ↔ backend, 2026-11-02)
+
+| ID                         | Resolution                                                                                                                                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GAP-01                     | ✅ Backend: `GET /auth/providers`, `GET /auth/github/login?return_to=` (same-origin paths only, fallback `/app`), `POST /auth/dev-login` (development), `POST /auth/logout`, `GET /auth/csrf`. The frontend shows only the enabled sign-in methods.                                         |
+| GAP-02                     | ✅ Backend accepts `X-Workspace-Id`; header and param both sent and different → 400 `WORKSPACE_MISMATCH`.                                                                                                                                                                                   |
+| GAP-03                     | ✅ `GET /integrations/github/installations/:id/repositories` (items flagged `connected`).                                                                                                                                                                                                   |
+| GAP-04                     | ✅ `GET /repositories/:id/files/content?path=&commit_sha=`; excluded → 403 `FILE_EXCLUDED`.                                                                                                                                                                                                 |
+| GAP-05                     | ✅ `GET /runs?status=…&repository_id=&task_id=`.                                                                                                                                                                                                                                            |
+| GAP-06, 09, 11, 16, 18, 20 | ✅ Frontend adopted the backend's implemented shapes via `mappers.ts`.                                                                                                                                                                                                                      |
+| GAP-07 / GAP-08            | ✅ Approvals carry `plan_hash` / `patch_hash`; stale → 409 `PLAN_CHANGED` / `PATCH_CHANGED`; `PATCH /plan` uses `base_plan_hash`.                                                                                                                                                           |
+| GAP-10                     | ✅ Full replay without `Last-Event-ID`; stream closes after terminal events.                                                                                                                                                                                                                |
+| GAP-14                     | ✅ Server-issued install URL with single-use, server-held state. The callback forwards `code`, `installation_id`, `setup_action`, `state`; a missing `code` shows "Installation not linked".                                                                                                |
+| GAP-17                     | ✅ Invitations: list, revoke, accept (`/invitations/accept#token=`); the accept link is shown once at creation.                                                                                                                                                                             |
+| GAP-19 / R1 / R2           | ✅ Run detail includes `task_title`, `repository_full_name`, `approvals`, `pull_request`; task items include `repository_full_name` and `latest_run`.                                                                                                                                       |
+| R3 / R4 / R5               | ✅ Usage `daily`; verification `unavailable[{profile_id, reason, kind}]`; AI findings `confidence`/`suggested_action`.                                                                                                                                                                      |
+| R7                         | ⏳ Backend is adding Zod response schemas to `openapi.json`; then `wire.ts` can be generated instead of hand-maintained.                                                                                                                                                                    |
+| GAP-15                     | ⏳ Symbol and module-map endpoints don't exist yet; the UI feature is deferred.                                                                                                                                                                                                             |
+| GAP-21                     | ⏳ `GET /runs/:id/plan` returns `investigation.findings[].evidence_ids` (retrieval chunk ids) instead of resolved `evidence[{path,start_line,end_line,commit_sha}]`. The UI accepts both and says when locations are missing. Backend has been asked to resolve the ids when it serializes. |
+| Sign-in errors             | ✅ `/login?error=` codes `oauth_failed`, `email_in_use`, `github_email_permission` each have their own message.                                                                                                                                                                             |
+| Task sources               | ⏳ API accepts `manual` and `github_issue` only; the UI hides pull-request and failing-check sources until supported.                                                                                                                                                                       |
+
+### Local integration setup (same-origin)
+
+Run the API with `PUBLIC_API_URL=http://localhost:3000` and `WEB_APP_URL=http://localhost:3000`, and the web app with `NEXT_PUBLIC_API_MODE=http ANVAYA_API_ORIGIN=http://localhost:3001`. Cookies are host-only, with no CORS involved. The GitHub App's callback URLs, in this order:
+
+1. `http://localhost:3000/integrations/github/callback` (installation + user authorization; the web page POSTs `/complete`)
+2. `http://localhost:3000/api/v1/auth/github/callback` (sign-in, proxied to the API)
+
+## 5. Original gap log (historical)
 
 | ID     | Area                  | Gap in API_SPEC.md                                                                                                         | Frontend assumption / request                                                                                                                                                                                                                                                                                                                                                                           | Blocking for real integration?                                                                                |
 | ------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -68,7 +104,7 @@ All endpoints in API_SPEC §2–§7 are used except `POST /webhooks/github` (ser
 - Rejecting a plan or dismissing a finding requires a `comment` (UI enforces; server should too).
 - Retrying a failed run creates a **new** run (terminal states never become active again — ARCHITECTURE §6).
 
-## 5. Security notes for reviewers
+## 6. Security notes for reviewers
 
 - No secrets in the bundle; only `NEXT_PUBLIC_API_MODE`, `NEXT_PUBLIC_GITHUB_APP_SLUG`, and fixture timing values are public.
 - Model output and repository content are rendered as text only (`RichText`, `CodeView`); there is no `dangerouslySetInnerHTML` outside the static theme script.
