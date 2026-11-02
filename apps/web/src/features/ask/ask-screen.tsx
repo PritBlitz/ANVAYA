@@ -84,6 +84,7 @@ function CodeCitationPreview({ repo, citation }: { repo: Repository; citation: C
       highlight={{ start: citation.start_line, end: citation.end_line }}
       maxHeight={260}
       label={`Cited lines from ${citation.path}`}
+      language={file.data.language}
     />
   );
 }
@@ -103,6 +104,7 @@ function KnowledgeCitationPreview({ citation }: { citation: KnowledgeCitation })
       startLine={from}
       maxHeight={220}
       label={`Cited lines from note ${citation.title}`}
+      language="markdown"
     />
   );
 }

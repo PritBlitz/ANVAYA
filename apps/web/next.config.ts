@@ -12,7 +12,33 @@ import type { NextConfig } from "next";
  */
 const apiOrigin = process.env.ANVAYA_API_ORIGIN;
 
+/**
+ * Content-Security-Policy. Static (no nonces) on purpose: nonces force every page to
+ * render dynamically, and the public homepage must stay static (M11). Next's inline
+ * bootstrap scripts therefore need 'unsafe-inline'; everything else is locked to
+ * same-origin, framing is denied, plugins are off, and forms/base URIs can't be
+ * redirected. GitHub avatars are the only third-party images. Dev needs eval for
+ * React Refresh and a websocket for HMR.
+ */
+const isDev = process.env.NODE_ENV !== "production";
+const csp = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://avatars.githubusercontent.com",
+  "font-src 'self' data:",
+  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
+  "frame-src 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https://github.com",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+].join("; ");
+
 const securityHeaders = [
+  { key: "Content-Security-Policy", value: csp },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "DENY" },
