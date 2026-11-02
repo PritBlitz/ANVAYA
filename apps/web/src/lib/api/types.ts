@@ -595,6 +595,8 @@ export interface EvidenceRef {
 export interface InvestigationFinding {
   claim: string;
   evidence: EvidenceRef[];
+  /** Evidence the server cited but didn't resolve to a file location. */
+  unresolved_evidence?: number;
   kind: "observed" | "inferred";
 }
 

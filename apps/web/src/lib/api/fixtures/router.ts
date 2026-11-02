@@ -1330,28 +1330,27 @@ route("DELETE", "/integrations/github/installations/:id", (req) => {
 });
 
 route("GET", "/integrations/github/installations/:id/repositories", (req) => {
-  const inst = findScoped(req, req.state.installations, req.params.id!);
-  const connected = new Set(
+  const inst = findScoped(req, req.state.installations, req.params.id!, "admin");
+  if (inst.status !== "active")
+    throw new FixtureHttpError(409, "INVALID_STATE_TRANSITION", "The installation is not active.");
+  const connected = new Map(
     req.state.repositories
       .filter((r) => r.workspace_id === inst.workspace_id && r.status !== "disconnected")
-      .map((r) => r.external_repository_id),
+      .map((r) => [r.external_repository_id, r.id] as const),
   );
-  return ok(
-    req.state.available
-      .filter((a) => a.installation_id === inst.id)
-      .map(
-        (a) =>
-          ({
-            external_repository_id: a.external_repository_id,
-            full_name: a.full_name,
-            owner: a.owner,
-            name: a.name,
-            default_branch: a.default_branch,
-            visibility: a.visibility,
-            connected: connected.has(a.external_repository_id),
-          }) satisfies W.WAvailableRepository,
-      ),
-  );
+  const page = Math.max(1, Math.min(100, Number(req.query.get("page") ?? 1) || 1));
+  const all = req.state.available.filter((a) => a.installation_id === inst.id);
+  const repositories: W.WAvailableRepository[] = all
+    .slice((page - 1) * 100, page * 100)
+    .map((a) => ({
+      external_repository_id: a.external_repository_id,
+      full_name: a.full_name,
+      private: a.visibility !== "public",
+      default_branch: a.default_branch,
+      archived: false,
+      connected_repository_id: connected.get(a.external_repository_id) ?? null,
+    }));
+  return ok({ total_count: all.length, page, repositories } satisfies W.WAvailableRepositoriesPage);
 });
 
 // ── repositories ─────────────────────────────────────────────────────────

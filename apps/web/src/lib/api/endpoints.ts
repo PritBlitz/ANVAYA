@@ -122,14 +122,19 @@ export function createEndpoints(client: ApiClient) {
         ),
       disconnect: (installationId: string) =>
         client.delete(`/integrations/github/installations/${enc(installationId)}`),
-      availableRepositories: async (installationId: string) =>
-        (
-          await client.get<W.WAvailableRepository[]>(
+      /** GitHub-paged (100 per page): fetch pages while page * 100 < total_count (max 10). */
+      availableRepositories: async (installationId: string) => {
+        const out: T.AvailableRepository[] = [];
+        for (let page = 1; page <= 10; page++) {
+          const res = await client.get<W.WAvailableRepositoriesPage>(
             `/integrations/github/installations/${enc(installationId)}/repositories`,
-          )
-        )
-          .filter((r) => !r.connected)
-          .map((r) => M.toAvailableRepository(r, installationId)),
+            { query: { page } },
+          );
+          out.push(...M.selectableRepositories(res, installationId));
+          if (page * 100 >= res.total_count || res.repositories.length === 0) break;
+        }
+        return out;
+      },
     },
 
     repositories: {

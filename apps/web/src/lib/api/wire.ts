@@ -138,15 +138,21 @@ export interface WInstallUrl {
   expires_in_seconds: number;
 }
 
+/** One item of GET /integrations/github/installations/:id/repositories (GitHub-paged). */
 export interface WAvailableRepository {
   external_repository_id: number;
   full_name: string;
-  owner?: string;
-  name: string;
+  private: boolean;
   default_branch: string | null;
-  visibility?: "public" | "private" | "internal" | null;
-  private?: boolean;
-  connected?: boolean;
+  archived: boolean;
+  /** Set when this repository is already connected to the workspace. */
+  connected_repository_id: string | null;
+}
+
+export interface WAvailableRepositoriesPage {
+  total_count: number;
+  page: number;
+  repositories: WAvailableRepository[];
 }
 
 export interface WRepositorySettings {
@@ -534,7 +540,10 @@ export interface WInvestigation {
   summary: string;
   findings: {
     claim: string;
-    evidence: { path: string; start_line: number; end_line: number; commit_sha: string }[];
+    /** Documented shape: resolved locations. */
+    evidence?: { path: string; start_line: number; end_line: number; commit_sha: string }[];
+    /** Implemented today: retrieval chunk ids only (see API_INTEGRATION §4, GAP-21). */
+    evidence_ids?: string[];
     kind: "observed" | "inferred";
   }[];
   hypotheses: string[];

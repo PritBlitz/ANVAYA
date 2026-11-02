@@ -402,3 +402,77 @@ describe("wire → UI mappers", () => {
     });
   });
 });
+
+describe("available repositories (GitHub-paged)", () => {
+  it("derives owner/name/visibility and hides connected or archived repositories", () => {
+    const list = M.selectableRepositories(
+      {
+        total_count: 3,
+        page: 1,
+        repositories: [
+          {
+            external_repository_id: 1,
+            full_name: "acme/api",
+            private: true,
+            default_branch: "main",
+            archived: false,
+            connected_repository_id: null,
+          },
+          {
+            external_repository_id: 2,
+            full_name: "acme/old",
+            private: false,
+            default_branch: null,
+            archived: true,
+            connected_repository_id: null,
+          },
+          {
+            external_repository_id: 3,
+            full_name: "acme/web",
+            private: false,
+            default_branch: "main",
+            archived: false,
+            connected_repository_id: "uuid",
+          },
+        ],
+      },
+      "inst-1",
+    );
+    expect(list).toEqual([
+      {
+        external_repository_id: 1,
+        full_name: "acme/api",
+        owner: "acme",
+        name: "api",
+        default_branch: "main",
+        visibility: "private",
+        installation_id: "inst-1",
+      },
+    ]);
+  });
+});
+
+describe("investigation (live payload)", () => {
+  it("tolerates evidence_ids without resolved locations", () => {
+    const inv = M.toInvestigation({
+      summary: "s",
+      findings: [
+        { kind: "observed", claim: "a is relevant", evidence_ids: ["id-1", "id-2"] },
+        { kind: "inferred", claim: "b", evidence_ids: [] },
+        {
+          kind: "observed",
+          claim: "c",
+          evidence: [{ path: "src/c.ts", start_line: 1, end_line: 2, commit_sha: "abc" }],
+        },
+      ],
+      unknowns: [],
+      hypotheses: ["h"],
+      candidate_files: ["src/a.ts"],
+    });
+    expect(inv.findings.map((f) => [f.evidence.length, f.unresolved_evidence])).toEqual([
+      [0, 2],
+      [0, 0],
+      [1, 0],
+    ]);
+  });
+});

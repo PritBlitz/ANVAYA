@@ -114,8 +114,8 @@ function InvestigationCard({
       <CardBody className="flex flex-col gap-5">
         <p className="text-sm text-fg">{investigation.summary}</p>
         <div className="flex flex-col gap-3">
-          {investigation.findings.map((f) => (
-            <div key={f.claim} className="rounded-md border border-border p-3">
+          {investigation.findings.map((f, i) => (
+            <div key={i} className="rounded-md border border-border p-3">
               <div className="flex items-start gap-2">
                 <Badge tone={f.kind === "observed" ? "success" : "warning"}>
                   {f.kind === "observed" ? "Observed" : "Inferred"}
@@ -128,6 +128,12 @@ function InvestigationCard({
                     <EvidenceLink key={`${e.path}:${e.start_line}`} evidence={e} repoId={repoId} />
                   ))}
                 </div>
+              ) : (f.unresolved_evidence ?? 0) > 0 ? (
+                <p className="mt-2 text-xs text-fg-muted">
+                  Cites {f.unresolved_evidence} retrieved{" "}
+                  {f.unresolved_evidence === 1 ? "excerpt" : "excerpts"}; file locations aren’t
+                  available for this run.
+                </p>
               ) : (
                 <p className="mt-2 text-xs text-warning">No evidence cited for this claim.</p>
               )}

@@ -106,15 +106,26 @@ export function toAvailableRepository(
   w: W.WAvailableRepository,
   installationId: string,
 ): T.AvailableRepository {
+  const [owner = "", ...rest] = w.full_name.split("/");
   return {
     external_repository_id: w.external_repository_id,
     full_name: w.full_name,
-    owner: w.owner ?? w.full_name.split("/")[0] ?? "",
-    name: w.name,
+    owner,
+    name: rest.join("/") || w.full_name,
     default_branch: w.default_branch,
-    visibility: w.visibility ?? (w.private === undefined ? null : w.private ? "private" : "public"),
+    visibility: w.private ? "private" : "public",
     installation_id: installationId,
   };
+}
+
+/** Selectable repositories: not yet connected and not archived. */
+export function selectableRepositories(
+  page: W.WAvailableRepositoriesPage,
+  installationId: string,
+): T.AvailableRepository[] {
+  return page.repositories
+    .filter((r) => r.connected_repository_id === null && !r.archived)
+    .map((r) => toAvailableRepository(r, installationId));
 }
 
 export function toRepository(w: W.WRepository): T.Repository {
@@ -507,12 +518,30 @@ export function toArtifacts(w: W.WArtifacts): T.RunArtifact[] {
   ];
 }
 
+export function toInvestigation(w: W.WInvestigation): T.Investigation {
+  return {
+    summary: w.summary ?? "",
+    hypotheses: w.hypotheses ?? [],
+    unknowns: w.unknowns ?? [],
+    candidate_files: w.candidate_files ?? [],
+    findings: (w.findings ?? []).map((f) => {
+      const evidence = f.evidence ?? [];
+      return {
+        claim: f.claim,
+        kind: f.kind,
+        evidence,
+        unresolved_evidence: evidence.length > 0 ? 0 : (f.evidence_ids?.length ?? 0),
+      };
+    }),
+  };
+}
+
 export function toRunPlan(w: W.WPlan): T.RunPlan {
   const approval = w.approval ? toApproval(w.approval, "plan") : null;
   return {
     run_id: w.run_id,
     plan: w.plan,
-    investigation: w.investigation,
+    investigation: w.investigation ? toInvestigation(w.investigation) : null,
     plan_hash: w.plan_hash,
     version: w.version,
     source: w.source,
