@@ -1,0 +1,234 @@
+import { Injectable } from '@nestjs/common';
+import { sql } from 'kysely';
+import { AiClient, AiServiceError } from '../ai/ai-client.js';
+import { Errors } from '../common/errors.js';
+import { logger } from '../common/logger.js';
+import { DatabaseService } from '../database/database.service.js';
+import type { Repository } from '../database/types.js';
+
+const log = logger('retrieval');
+const RRF_K = 60;
+const CANDIDATES = 50;
+const SNIPPET_CHARS = 1500;
+
+export interface RetrievalFilters {
+  languages?: string[];
+  /** Path prefixes, e.g. "src/auth/". */
+  paths?: string[];
+}
+
+export interface RetrievalQuery {
+  query: string;
+  /** 'latest' or a 40-char commit SHA. */
+  snapshot: string;
+  topK: number;
+  filters?: RetrievalFilters;
+  mode?: 'hybrid' | 'lexical' | 'semantic';
+}
+
+export interface RetrievedChunk {
+  chunk_id: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  commit_sha: string;
+  /** Content hash of the source file at this commit (detects stale citations). */
+  content_hash: string;
+  chunk_hash: string;
+  language: string | null;
+  symbol_name: string | null;
+  snippet: string;
+  content: string;
+  lexical_score: number | null;
+  semantic_score: number | null;
+  score: number;
+}
+
+export interface RetrievalResult {
+  results: RetrievedChunk[];
+  retrieval: {
+    snapshot_id: string;
+    commit_sha: string;
+    snapshot_status: string;
+    lexical: 'ok' | 'disabled';
+    semantic: 'ok' | 'unavailable' | 'disabled';
+    semantic_reason: string | null;
+    embedding_model: string | null;
+    lexical_candidates: number;
+    semantic_candidates: number;
+    duration_ms: number;
+  };
+}
+
+/** Splits identifiers the same way the index does (camelCase, snake_case, paths). */
+export function lexicalTerms(query: string): string[] {
+  const spaced = query.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_./\\-]/g, ' ');
+  const terms = spaced
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 2 && t.length <= 64);
+  return [...new Set(terms)].slice(0, 32);
+}
+
+/**
+ * Hybrid retrieval (ARCHITECTURE §8, AI_WORKFLOW §7). Context Retriever stage:
+ * deterministic, no LLM. The caller must have authorized access to `repo`.
+ */
+@Injectable()
+export class RetrievalService {
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly ai: AiClient,
+  ) {}
+
+  async resolveSnapshot(repo: Repository, snapshot: string) {
+    const sha = snapshot === 'latest' ? repo.latest_indexed_commit_sha : snapshot;
+    if (!sha) throw Errors.conflict('REPOSITORY_NOT_INDEXED', 'This repository has not been indexed yet.');
+    if (!/^[0-9a-f]{40}$/.test(sha)) throw Errors.validation({ issues: [{ path: 'snapshot', message: 'must be "latest" or a 40-character commit SHA', code: 'invalid_snapshot' }] });
+    const snap = await this.database.db
+      .selectFrom('repository_snapshots')
+      .select(['id', 'commit_sha', 'status', 'embedding_model'])
+      .where('repository_id', '=', repo.id)
+      .where('commit_sha', '=', sha)
+      .where('status', 'in', ['ready', 'partial'])
+      .executeTakeFirst();
+    if (!snap) throw Errors.notFound('Snapshot');
+    return snap;
+  }
+
+  async search(repo: Repository, q: RetrievalQuery): Promise<RetrievalResult> {
+    const started = Date.now();
+    const snap = await this.resolveSnapshot(repo, q.snapshot);
+    const mode = q.mode ?? 'hybrid';
+    const filters = q.filters ?? {};
+
+    const base = () => {
+      let b = this.database.db
+        .selectFrom('code_chunks as c')
+        .innerJoin('repository_files as f', 'f.id', 'c.repository_file_id')
+        // Scope first: repository AND snapshot (tenant isolation is enforced by the caller's repository access check).
+        .where('c.repository_id', '=', repo.id)
+        .where('c.snapshot_id', '=', snap.id);
+      if (filters.languages?.length) b = b.where('c.language', 'in', filters.languages);
+      if (filters.paths?.length) {
+        const prefixes = filters.paths;
+        b = b.where((eb) => eb.or(prefixes.map((p) => eb('f.path', 'like', `${escapeLike(p)}%`))));
+      }
+      return b;
+    };
+
+    const lexical = new Map<string, { rank: number; score: number }>();
+    const semantic = new Map<string, { rank: number; score: number }>();
+    let semanticStatus: RetrievalResult['retrieval']['semantic'] = mode === 'lexical' ? 'disabled' : 'ok';
+    let semanticReason: string | null = null;
+
+    if (mode !== 'semantic') {
+      const terms = lexicalTerms(q.query);
+      if (terms.length > 0) {
+        const tsq = terms.map((t) => `${t}:*`).join(' | ');
+        const rows = await base()
+          .select(['c.id', sql<number>`ts_rank_cd(c.search_vector, to_tsquery('simple', ${tsq}))`.as('rank_score')])
+          .where(sql<boolean>`c.search_vector @@ to_tsquery('simple', ${tsq})`)
+          .orderBy('rank_score', 'desc')
+          .orderBy('c.id')
+          .limit(CANDIDATES)
+          .execute();
+        rows.forEach((r, i) => lexical.set(r.id, { rank: i + 1, score: Number(r.rank_score) }));
+      }
+    }
+
+    if (mode !== 'lexical') {
+      try {
+        const emb = await this.ai.embed([q.query], 'query');
+        const modelTag = `${emb.model}@${emb.model_version}`;
+        if (snap.embedding_model && snap.embedding_model !== modelTag) {
+          semanticStatus = 'unavailable';
+          semanticReason = `query embedding model ${modelTag} does not match the index (${snap.embedding_model}); re-index required`;
+        } else {
+          const vec = `[${emb.embeddings[0]!.join(',')}]`;
+          const rows = await base()
+            .select(['c.id', sql<number>`1 - (c.embedding <=> ${vec}::vector)`.as('similarity')])
+            .where('c.embedding', 'is not', null)
+            .where('c.embedding_model', '=', emb.model)
+            .where('c.embedding_version', '=', emb.model_version)
+            .orderBy(sql`c.embedding <=> ${vec}::vector`)
+            .orderBy('c.id')
+            .limit(CANDIDATES)
+            .execute();
+          rows.forEach((r, i) => semantic.set(r.id, { rank: i + 1, score: Number(r.similarity) }));
+        }
+      } catch (err) {
+        if (!(err instanceof AiServiceError)) throw err;
+        semanticStatus = 'unavailable';
+        semanticReason = err.code;
+        log.warn({ code: err.code }, 'semantic retrieval unavailable; lexical results only');
+      }
+    }
+
+    // Deterministic reciprocal-rank fusion with id tiebreak.
+    const ids = new Set([...lexical.keys(), ...semantic.keys()]);
+    const fused = [...ids]
+      .map((id) => ({
+        id,
+        score: (lexical.has(id) ? 1 / (RRF_K + lexical.get(id)!.rank) : 0) + (semantic.has(id) ? 1 / (RRF_K + semantic.get(id)!.rank) : 0),
+      }))
+      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+      .slice(0, q.topK);
+
+    const details = fused.length
+      ? await this.database.db
+          .selectFrom('code_chunks as c')
+          .innerJoin('repository_files as f', 'f.id', 'c.repository_file_id')
+          .select(['c.id', 'f.path', 'c.start_line', 'c.end_line', 'f.content_hash', 'c.content_hash as chunk_hash', 'c.language', 'c.symbol_name', 'c.content'])
+          .where(
+            'c.id',
+            'in',
+            fused.map((f) => f.id),
+          )
+          .where('c.snapshot_id', '=', snap.id)
+          .execute()
+      : [];
+    const byId = new Map(details.map((d) => [d.id, d]));
+    const results: RetrievedChunk[] = fused
+      .filter((f) => byId.has(f.id))
+      .map((f) => {
+        const d = byId.get(f.id)!;
+        return {
+          chunk_id: d.id,
+          file_path: d.path,
+          start_line: d.start_line,
+          end_line: d.end_line,
+          commit_sha: snap.commit_sha,
+          content_hash: d.content_hash,
+          chunk_hash: d.chunk_hash,
+          language: d.language,
+          symbol_name: d.symbol_name,
+          snippet: d.content.length > SNIPPET_CHARS ? `${d.content.slice(0, SNIPPET_CHARS)}…` : d.content,
+          content: d.content,
+          lexical_score: lexical.get(f.id)?.score ?? null,
+          semantic_score: semantic.get(f.id)?.score ?? null,
+          score: Number(f.score.toFixed(6)),
+        };
+      });
+
+    return {
+      results,
+      retrieval: {
+        snapshot_id: snap.id,
+        commit_sha: snap.commit_sha,
+        snapshot_status: snap.status,
+        lexical: mode === 'semantic' ? 'disabled' : 'ok',
+        semantic: semanticStatus,
+        semantic_reason: semanticReason,
+        embedding_model: snap.embedding_model,
+        lexical_candidates: lexical.size,
+        semantic_candidates: semantic.size,
+        duration_ms: Date.now() - started,
+      },
+    };
+  }
+}
+
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
