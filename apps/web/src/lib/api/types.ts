@@ -938,3 +938,94 @@ export interface RunEvent {
   type: RunEventType;
   payload: RunEventPayload;
 }
+
+// ── Code intelligence (GAP-15; backend contract 3a53222) ─────────────────
+
+export const SYMBOL_KINDS = ["function", "class", "method", "type", "interface", "module"] as const;
+export type SymbolKind = (typeof SYMBOL_KINDS)[number];
+
+export interface CodeSymbol {
+  id: UUID;
+  name: string;
+  qualified_name: string;
+  /** Unknown kinds from newer parsers render generically. */
+  kind: SymbolKind | (string & {});
+  path: string;
+  start_line: number;
+  end_line: number;
+  language: string | null;
+  signature: string | null;
+  snapshot_id: UUID;
+  commit_sha: string;
+}
+
+export type SymbolReferenceType = "calls" | "extends" | "instantiates" | "imports";
+
+export interface SymbolOutgoing {
+  type: SymbolReferenceType | (string & {});
+  line: number;
+  /** null when the reference is external or unresolved. */
+  target: CodeSymbol | null;
+  target_name: string;
+}
+
+export interface SymbolIncoming {
+  type: SymbolReferenceType | (string & {});
+  line: number;
+  source: CodeSymbol;
+}
+
+export interface SymbolDetail {
+  snapshot_id: UUID;
+  commit_sha: string;
+  symbol: CodeSymbol;
+  outgoing: SymbolOutgoing[];
+  incoming: SymbolIncoming[];
+  /** At most 200 references each way. */
+  truncated: boolean;
+}
+
+export interface SymbolListParams extends PageParams {
+  /** "latest" (default) or a 40-char commit SHA. */
+  snapshot?: string;
+  q?: string;
+  kind?: SymbolKind[];
+  /** Exact file, or a directory prefix ending in "/". */
+  path?: string;
+}
+
+export interface DependencyNode {
+  path: string;
+  language: string | null;
+  line_count: number;
+  symbol_count: number;
+  imports: number;
+  imported_by: number;
+  /** false for files outside `path` that in-scope files import. */
+  in_scope: boolean;
+}
+
+export interface DependencyEdge {
+  source: string;
+  target: string;
+  count: number;
+  lines: number[];
+}
+
+export interface ExternalDependency {
+  name: string;
+  count: number;
+  importer_count: number;
+}
+
+export interface DependencyMap {
+  snapshot_id: UUID;
+  commit_sha: string;
+  path: string | null;
+  nodes: DependencyNode[];
+  edges: DependencyEdge[];
+  external: ExternalDependency[];
+  unresolved_imports: number;
+  truncated: boolean;
+  limitations: string[];
+}

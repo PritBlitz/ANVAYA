@@ -181,6 +181,32 @@ export function createEndpoints(client: ApiClient) {
             signal,
           }),
         ),
+      /** Symbol explorer (GAP-15): paged, ordered by name; `kind` may repeat. */
+      symbols: (repositoryId: string, params: T.SymbolListParams = {}) =>
+        list(client, `/repositories/${enc(repositoryId)}/symbols`, M.toSymbol, {
+          query: {
+            snapshot: params.snapshot,
+            q: params.q || undefined,
+            kind: params.kind?.length ? params.kind : undefined,
+            path: params.path || undefined,
+            limit: params.limit,
+            cursor: params.cursor,
+          },
+        }),
+      symbol: async (repositoryId: string, symbolId: string, snapshot?: string) =>
+        M.toSymbolDetail(
+          await client.get<W.WSymbolDetail>(
+            `/repositories/${enc(repositoryId)}/symbols/${enc(symbolId)}`,
+            { query: { snapshot } },
+          ),
+        ),
+      /** File-level import graph, optionally scoped to a directory. */
+      dependencyMap: async (repositoryId: string, path?: string, snapshot?: string) =>
+        M.toDependencyMap(
+          await client.get<W.WDependencyMap>(`/repositories/${enc(repositoryId)}/dependency-map`, {
+            query: { path: path || undefined, snapshot },
+          }),
+        ),
       snapshots: (repositoryId: string) =>
         client.get<T.RepositorySnapshot[]>(`/repositories/${enc(repositoryId)}/snapshots`),
       ask: async (repositoryId: string, body: T.AskQuestionRequest, signal?: AbortSignal) =>

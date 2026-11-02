@@ -21,6 +21,7 @@ import {
   stageDurationMs,
   tick,
 } from "./engine";
+import { dependencyMap, parseSymbols, symbolDetail, toWire } from "./code-intel";
 import { filesForRepository } from "./repo-content";
 import {
   DEFAULT_BUDGETS,
@@ -1605,6 +1606,56 @@ route("POST", "/repositories/:repositoryId/search", (req) => {
       embedding_model: EMBEDDING_MODEL,
     },
   } satisfies W.WSearch);
+});
+
+// ── code intelligence (GAP-15) ───────────────────────────────────────────
+
+function snapshotSha(req: FixtureRequest, repo: Scoped<T.Repository>): string {
+  const sha = requireIndexed(repo);
+  const snap = req.query.get("snapshot");
+  if (!snap || snap === "latest") return sha;
+  if (!/^[0-9a-f]{40}$/.test(snap))
+    throw validation("snapshot", "must be latest or a 40-char commit SHA");
+  if (snap !== sha) throw new FixtureHttpError(404, "NOT_FOUND", "Snapshot not found.");
+  return sha;
+}
+
+const KINDS = ["function", "class", "method", "type", "interface", "module"];
+
+route("GET", "/repositories/:repositoryId/symbols", (req) => {
+  const repo = repoForRead(req);
+  const sha = snapshotSha(req, repo);
+  const q = (req.query.get("q") ?? "").toLowerCase();
+  const kinds = req.query.getAll("kind");
+  for (const k of kinds)
+    if (!KINDS.includes(k)) throw validation("kind", `must be one of ${KINDS.join(", ")}`);
+  const path = req.query.get("path") ?? "";
+  const items = parseSymbols(filesForRepository(repo.full_name), sha)
+    .filter(
+      (s) => !q || s.name.toLowerCase().includes(q) || s.qualified_name!.toLowerCase().includes(q),
+    )
+    .filter((s) => !kinds.length || kinds.includes(s.kind))
+    .filter((s) => !path || (path.endsWith("/") ? s.path.startsWith(path) : s.path === path))
+    .map(toWire);
+  if (req.query.get("limit") === null) req.query.set("limit", "50");
+  return paginate(items, req.query);
+});
+
+route("GET", "/repositories/:repositoryId/symbols/:symbolId", (req) => {
+  const repo = repoForRead(req);
+  const sha = snapshotSha(req, repo);
+  const detail = symbolDetail(filesForRepository(repo.full_name), sha, req.params.symbolId!);
+  if (!detail) throw new FixtureHttpError(404, "NOT_FOUND", "Symbol not found.");
+  return ok(detail);
+});
+
+route("GET", "/repositories/:repositoryId/dependency-map", (req) => {
+  const repo = repoForRead(req);
+  const sha = snapshotSha(req, repo);
+  const path = (req.query.get("path") ?? "").replace(/^\/+/, "");
+  if (path.split("/").includes(".."))
+    throw new FixtureHttpError(400, "BAD_REQUEST", "Invalid path.");
+  return ok(dependencyMap(filesForRepository(repo.full_name), sha, path));
 });
 
 route("GET", "/repositories/:repositoryId/snapshots", (req) => {

@@ -635,3 +635,48 @@ export interface WReview {
   deterministic_findings: WFinding[];
   ai_findings: WFinding[];
 }
+
+// ── Code intelligence (GAP-15; backend 3a53222) ──────────────────────────
+
+export interface WSymbol {
+  id: UUID;
+  name: string;
+  qualified_name: string | null;
+  kind: string;
+  path: string;
+  start_line: number;
+  end_line: number;
+  language: string | null;
+  signature: string | null;
+  snapshot_id: UUID;
+  commit_sha: string;
+}
+
+export interface WSymbolDetail {
+  snapshot_id: UUID;
+  commit_sha: string;
+  symbol: WSymbol;
+  outgoing: { type: string; line: number; target: WSymbol | null; target_name: string }[];
+  incoming: { type: string; line: number; source: WSymbol }[];
+  truncated: boolean;
+}
+
+export interface WDependencyMap {
+  snapshot_id: UUID;
+  commit_sha: string;
+  path: string | null;
+  nodes: {
+    path: string;
+    language: string | null;
+    line_count: number;
+    symbol_count: number;
+    imports: number;
+    imported_by: number;
+    in_scope: boolean;
+  }[];
+  edges: { source: string; target: string; count: number; lines: number[] }[];
+  external: { name: string; count: number; importer_count: number }[];
+  unresolved_imports: number;
+  truncated: boolean;
+  limitations: string[];
+}

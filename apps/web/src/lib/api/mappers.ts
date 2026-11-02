@@ -686,3 +686,55 @@ export function fieldErrorsFromDetails(details: Record<string, unknown>): Record
   }
   return out;
 }
+
+// ── Code intelligence (GAP-15) ───────────────────────────────────────────
+
+export function toSymbol(w: W.WSymbol): T.CodeSymbol {
+  return {
+    id: w.id,
+    name: w.name,
+    qualified_name: w.qualified_name || w.name,
+    kind: w.kind,
+    path: w.path,
+    start_line: w.start_line,
+    end_line: Math.max(w.end_line, w.start_line),
+    language: w.language ?? null,
+    signature: w.signature ?? null,
+    snapshot_id: w.snapshot_id,
+    commit_sha: w.commit_sha,
+  };
+}
+
+export function toSymbolDetail(w: W.WSymbolDetail): T.SymbolDetail {
+  return {
+    snapshot_id: w.snapshot_id,
+    commit_sha: w.commit_sha,
+    symbol: toSymbol(w.symbol),
+    outgoing: (w.outgoing ?? []).map((o) => ({
+      type: o.type,
+      line: o.line,
+      target: o.target ? toSymbol(o.target) : null,
+      target_name: o.target_name || o.target?.name || "unknown",
+    })),
+    incoming: (w.incoming ?? []).map((i) => ({
+      type: i.type,
+      line: i.line,
+      source: toSymbol(i.source),
+    })),
+    truncated: !!w.truncated,
+  };
+}
+
+export function toDependencyMap(w: W.WDependencyMap): T.DependencyMap {
+  return {
+    snapshot_id: w.snapshot_id,
+    commit_sha: w.commit_sha,
+    path: w.path || null,
+    nodes: (w.nodes ?? []).map((n) => ({ ...n, language: n.language ?? null })),
+    edges: (w.edges ?? []).map((e) => ({ ...e, lines: e.lines ?? [] })),
+    external: w.external ?? [],
+    unresolved_imports: w.unresolved_imports ?? 0,
+    truncated: !!w.truncated,
+    limitations: w.limitations ?? [],
+  };
+}

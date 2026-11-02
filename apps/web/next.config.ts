@@ -20,6 +20,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // E2E builds into its own directory so it never overwrites a running server's build.
+  distDir: process.env.ANVAYA_DIST_DIR || ".next",
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,

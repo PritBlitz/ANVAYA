@@ -152,6 +152,42 @@ test("search and grounded Q&A open cited lines", async ({ page }) => {
   await expect(page.getByText("No supporting evidence")).toBeVisible();
 });
 
+test("symbol explorer and dependency map link to source", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/w/acme/repositories");
+  await page.getByRole("link", { name: "acme/payments-api" }).click();
+
+  await page.getByRole("link", { name: "Symbols", exact: true }).click();
+  await page.getByLabel("Symbol name").fill("decode");
+  await page.getByRole("button", { name: "Filter" }).click();
+  await expect(page).toHaveURL(/q=decode/);
+  await page.getByRole("list", { name: "Symbol results" }).getByRole("button").first().click();
+  await expect(page.getByRole("heading", { level: 2, name: "decodeJwt" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Source of decodeJwt" })).toBeVisible();
+  // Used by refreshSession / getAccessToken in src/auth/refresh.ts.
+  await expect(page.getByRole("button", { name: /Called by|Imported by/ }).first()).toBeVisible();
+  await expectAccessible(page);
+
+  // Kind filter round-trips through the URL.
+  await page.getByRole("button", { name: "class", exact: true }).click();
+  await expect(page).toHaveURL(/kind=class/);
+
+  await page.getByRole("link", { name: "Dependencies", exact: true }).click();
+  await expect(page.getByLabel("Dependency map summary")).toBeVisible();
+  await page
+    .getByRole("list", { name: "Files" })
+    .getByRole("button", { name: /src\/auth\/token\.ts/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "src/auth/token.ts" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "External packages" })).toContainText("express");
+  await expectAccessible(page);
+  await page
+    .getByRole("link", { name: /import in src\/auth\/refresh\.ts/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/code\?path=src%2Fauth%2Frefresh\.ts&lines=/);
+});
+
 test("onboarding: new workspace, GitHub install, select repositories, index", async ({ page }) => {
   await signIn(page);
   await page.goto("/onboarding");

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -19,13 +23,18 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": [
+      "vitest/globals",
+      "@testing-library/jest-dom"
+    ]
   },
   "include": [
     "next-env.d.ts",
@@ -33,7 +42,13 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    ".next-e2e/types/**/*.ts",
+    ".next-e2e/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "playwright-report", "test-results"]
+  "exclude": [
+    "node_modules",
+    "playwright-report",
+    "test-results"
+  ]
 }

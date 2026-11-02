@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { BookOpen, Code2, Gauge, ListTodo, MessageSquareText, Search } from "lucide-react";
+import {
+  BookOpen,
+  Braces,
+  Code2,
+  Gauge,
+  ListTodo,
+  MessageSquareText,
+  Network,
+  Search,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { IndexingBadge } from "@/components/domain/badges";
 import { Mono, Skeleton } from "@/components/ui/misc";
@@ -76,6 +85,8 @@ export function RepoLayout({ children }: { children: ReactNode }) {
             tabs={[
               { href: root, label: "Overview", icon: <Gauge />, exact: true },
               { href: `${root}/code`, label: "Code", icon: <Code2 /> },
+              { href: `${root}/symbols`, label: "Symbols", icon: <Braces /> },
+              { href: `${root}/dependencies`, label: "Dependencies", icon: <Network /> },
               { href: `${root}/search`, label: "Search", icon: <Search /> },
               { href: `${root}/ask`, label: "Ask", icon: <MessageSquareText /> },
               { href: `${root}/knowledge`, label: "Knowledge", icon: <BookOpen /> },

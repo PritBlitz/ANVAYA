@@ -34,6 +34,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
     env: {
+      ANVAYA_DIST_DIR: ".next-e2e",
       NEXT_PUBLIC_API_MODE: "fixtures",
       NEXT_PUBLIC_FIXTURE_STAGE_MS: "250",
       NEXT_PUBLIC_FIXTURE_LATENCY_MS: "30",
