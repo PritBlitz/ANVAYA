@@ -264,6 +264,9 @@ def test_ollama_request_shape_and_usage() -> None:
     sent = seen[0]
     assert sent["stream"] is False and sent["options"]["temperature"] == 0 and sent["options"]["num_predict"] == 512
     assert sent["format"]["title"] == "QaAnswer"
+    # Grammar-unsafe bounds are stripped from the hint (they crash Ollama's grammar compiler).
+    dumped = json.dumps(sent["format"])
+    assert "maxLength" not in dumped and "maxItems" not in dumped and "pattern" not in dumped
     assert sent["messages"][0]["role"] == "system" and "UNTRUSTED DATA" in sent["messages"][0]["content"]
 
 
@@ -343,3 +346,18 @@ def test_untrusted_inputs_are_fenced_and_redacted() -> None:
     assert prompt.user.count("</untrusted_input>") == 1
     assert "ghp_bbbb" not in prompt.user
     assert '<untrusted_input label="task_description">' in prompt.user
+
+
+def test_grammar_safe_schema_keeps_property_names() -> None:
+    from app.providers.ollama import grammar_safe_schema
+
+    schema = {
+        "type": "object",
+        "properties": {"format": {"type": "string", "maxLength": 9}, "pattern": {"type": "array", "maxItems": 3, "items": {"type": "string"}}},
+        "required": ["format", "pattern"],
+    }
+    out = grammar_safe_schema(schema)
+    assert out["properties"]["format"] == {"type": "string"}
+    assert out["properties"]["pattern"] == {"type": "array", "items": {"type": "string"}}
+    assert out["required"] == ["format", "pattern"]
+    assert schema["properties"]["format"]["maxLength"] == 9  # input untouched
