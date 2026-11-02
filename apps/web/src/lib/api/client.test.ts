@@ -206,4 +206,20 @@ describe("retry policy", () => {
     expect(describeError(err(502)).description).toBe("m"); // server message wins when present
     expect(describeError(new Error("secret stack")).description).not.toMatch(/secret/);
   });
+
+  it("explains hosted-provider outcomes without implying a fallback (B-1)", () => {
+    const refused = describeError(
+      new ApiError({ status: 422, code: "PROVIDER_REFUSED", message: "x" }),
+    );
+    expect(refused.title).toMatch(/declined/);
+    expect(refused.description).toMatch(/Nothing was retried on another provider/);
+    expect(
+      describeError(new ApiError({ status: 429, code: "PROVIDER_RATE_LIMITED", message: "x" }))
+        .title,
+    ).toMatch(/rate limiting/);
+    expect(
+      describeError(new ApiError({ status: 504, code: "PROVIDER_TIMEOUT", message: "x" }))
+        .description,
+    ).toMatch(/request timeout/);
+  });
 });

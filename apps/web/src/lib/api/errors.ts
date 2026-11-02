@@ -75,6 +75,34 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+const PROVIDER_ERRORS: Record<string, { title: string; description: string }> = {
+  PROVIDER_REFUSED: {
+    title: "The model declined this request",
+    description:
+      "The hosted model refused to answer. Nothing was retried on another provider. Rephrase the request or use local mode.",
+  },
+  PROVIDER_RATE_LIMITED: {
+    title: "Model provider is rate limiting",
+    description:
+      "The hosted provider asked us to slow down. Nothing was retried on another provider. Try again in a moment.",
+  },
+  PROVIDER_TIMEOUT: {
+    title: "The model took too long",
+    description:
+      "The model didn't answer within the workspace's request timeout. Local models on CPU can be slow; an admin can raise the timeout in AI settings.",
+  },
+  PROVIDER_UNAVAILABLE: {
+    title: "Model provider unavailable",
+    description:
+      "The model service didn't respond. No paid fallback was used. Check that the local model server is running.",
+  },
+  PROVIDER_NOT_CONFIGURED: {
+    title: "Cloud model not configured",
+    description:
+      "This mode needs a hosted provider that the server hasn't configured. Use local mode, or ask an admin to set it up.",
+  },
+};
+
 /** Human-readable, safe message for any thrown value. Never surfaces stack traces. */
 export function describeError(error: unknown): {
   title: string;
@@ -89,6 +117,9 @@ export function describeError(error: unknown): {
     };
   }
   const requestId = error.requestId;
+  // Model-provider outcomes (B-1): explicit, and never followed by a silent fallback.
+  const provider = PROVIDER_ERRORS[error.code];
+  if (provider) return { ...provider, requestId };
   if (error.isNetwork) {
     return {
       title: "Can't reach Anvaya",
