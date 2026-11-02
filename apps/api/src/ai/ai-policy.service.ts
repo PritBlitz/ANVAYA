@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import { Errors } from '../common/errors.js';
+import { AppError, Errors } from '../common/errors.js';
 import { DatabaseService } from '../database/database.service.js';
 import { json, type RunMode } from '../database/types.js';
 import { AccessService } from '../workspaces/access.service.js';
@@ -155,6 +155,12 @@ export function aiErrorToApp(err: unknown): Error {
       return Errors.budgetExceeded('The request exceeds the configured token budget.');
     case 'INVALID_MODEL_OUTPUT':
       return Errors.upstream('INVALID_MODEL_OUTPUT', 'The model did not produce a valid structured answer.');
+    case 'PROVIDER_REFUSED':
+      return Errors.unprocessable('PROVIDER_REFUSED', 'The hosted model declined this request. No other model was tried.');
+    case 'PROVIDER_RATE_LIMITED':
+      return new AppError(429, 'PROVIDER_RATE_LIMITED', 'The hosted provider is rate limiting requests. Retry later.');
+    case 'PROVIDER_BAD_REQUEST':
+      return Errors.upstream('PROVIDER_BAD_REQUEST', 'The hosted provider rejected the request.');
     case 'PROVIDER_NOT_CONFIGURED':
     case 'MODEL_NOT_AVAILABLE':
     case 'PROVIDER_UNAVAILABLE':

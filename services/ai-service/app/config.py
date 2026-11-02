@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +32,12 @@ class Settings(BaseSettings):
     embedding_dimension: int = Field(default=768, alias="EMBEDDING_DIMENSION")
 
     # Hosted inference is opt-in; no hosted adapter is enabled unless explicitly configured.
-    hosted_provider: Literal["none"] = Field(default="none", alias="HOSTED_PROVIDER")
+    hosted_provider: Literal["none", "anthropic"] = Field(default="none", alias="HOSTED_PROVIDER")
+    anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    hosted_model: str = Field(default="claude-opus-5-5", alias="HOSTED_MODEL")
+    hosted_effort: Literal["low", "medium", "high", "xhigh", "max"] = Field(default="medium", alias="HOSTED_EFFORT")
+    # Only for tests / a reviewed egress proxy; defaults to the public API.
+    hosted_base_url: str | None = Field(default=None, alias="HOSTED_BASE_URL")
 
     max_evidence_items: int = Field(default=24, alias="MAX_EVIDENCE_ITEMS", ge=1, le=100)
 
@@ -40,6 +45,8 @@ class Settings(BaseSettings):
     def _production_rules(self) -> Settings:
         if self.env == "production" and not self.service_token:
             raise ValueError("AI_SERVICE_TOKEN is required in production")
+        if self.hosted_provider == "anthropic" and not self.anthropic_api_key:
+            raise ValueError("ANTHROPIC_API_KEY is required when HOSTED_PROVIDER=anthropic")
         return self
 
 
