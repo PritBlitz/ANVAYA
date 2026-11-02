@@ -44,6 +44,44 @@ export function runView(r: WorkflowRun) {
   };
 }
 
+interface EvidenceRef {
+  id: string;
+  path: string;
+  start_line: number;
+  end_line: number;
+  commit_sha: string;
+  content_hash?: string;
+  symbol?: string | null;
+}
+
+/**
+ * GAP-21: resolve each investigation finding's `evidence_ids` into file:line
+ * references, using only the run's server-side retrieval records (the same set
+ * as `retrieval.completed`). Model output never supplies a location, and
+ * unknown ids are dropped.
+ */
+export function withResolvedEvidence(investigation: unknown, evidence: unknown): unknown {
+  if (!investigation || typeof investigation !== 'object' || Array.isArray(investigation)) return investigation ?? null;
+  const inv = investigation as { findings?: unknown };
+  if (!Array.isArray(inv.findings)) return investigation;
+  const refs = new Map<string, EvidenceRef>();
+  for (const e of Array.isArray(evidence) ? evidence : []) {
+    const r = e as Partial<EvidenceRef>;
+    if (typeof r.id === 'string' && typeof r.path === 'string' && typeof r.start_line === 'number' && typeof r.end_line === 'number' && typeof r.commit_sha === 'string') {
+      refs.set(r.id, { id: r.id, path: r.path, start_line: r.start_line, end_line: r.end_line, commit_sha: r.commit_sha, content_hash: r.content_hash, symbol: r.symbol ?? null });
+    }
+  }
+  return {
+    ...inv,
+    findings: (inv.findings as unknown[]).map((f: unknown): unknown => {
+      if (!f || typeof f !== 'object') return f;
+      const ids = (f as { evidence_ids?: unknown }).evidence_ids;
+      const resolved = Array.isArray(ids) ? (ids as unknown[]).flatMap((id) => (typeof id === 'string' && refs.has(id) ? [refs.get(id)!] : [])) : [];
+      return { ...(f as Record<string, unknown>), evidence: resolved };
+    }),
+  };
+}
+
 /** Clamp: a client can never raise its own maximums above workspace policy (API_SPEC §5). */
 export function clampBudget(requested: Partial<RunBudget> | undefined, ceilings: Partial<RunBudget>, aiLimits: { max_input_tokens: number; max_output_tokens: number }): RunBudget {
   const ceiling: RunBudget = {
@@ -253,7 +291,7 @@ export class RunsService {
       created_at: plan.created_at.toISOString(),
       editable: run.status === 'awaiting_plan_approval',
       plan: plan.content,
-      investigation: run.checkpoint.investigation ?? null,
+      investigation: withResolvedEvidence(run.checkpoint.investigation, run.checkpoint.evidence),
       approval: approval ? { ...approval, created_at: approval.created_at.toISOString() } : null,
     };
   }
