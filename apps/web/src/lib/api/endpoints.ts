@@ -294,14 +294,15 @@ export function createEndpoints(client: ApiClient) {
         M.toArtifacts(await client.get<W.WArtifacts>(`/runs/${enc(runId)}/artifacts`)),
       plan: async (runId: string) =>
         M.toRunPlan(await client.get<W.WPlan>(`/runs/${enc(runId)}/plan`)),
-      /** Edits are optimistic-concurrency checked against the plan hash (409 PLAN_CHANGED). */
-      updatePlan: async (runId: string, plan: T.EngineeringPlan, basePlanHash: string) =>
-        M.toRunPlan(
-          await client.patch<W.WPlan>(`/runs/${enc(runId)}/plan`, {
-            plan,
-            base_plan_hash: basePlanHash,
-          }),
-        ),
+      /**
+       * Edits are optimistic-concurrency checked against the plan hash (409 PLAN_CHANGED).
+       * Returns the new revision only; callers merge it and refetch the full plan.
+       */
+      updatePlan: (runId: string, plan: T.EngineeringPlan, basePlanHash: string) =>
+        client.patch<W.WPlanRevision>(`/runs/${enc(runId)}/plan`, {
+          plan,
+          base_plan_hash: basePlanHash,
+        }),
       decidePlan: (runId: string, body: T.PlanApprovalRequest, idempotencyKey: string) =>
         client.post<unknown>(`/runs/${enc(runId)}/plan-approval`, body, { idempotencyKey }),
       diff: async (runId: string) =>
@@ -310,12 +311,11 @@ export function createEndpoints(client: ApiClient) {
         M.toVerification(await client.get<W.WVerification>(`/runs/${enc(runId)}/verification`)),
       review: async (runId: string) =>
         M.toReview(await client.get<W.WReview>(`/runs/${enc(runId)}/review`)),
-      disposeFinding: async (runId: string, findingId: string, body: T.FindingDispositionRequest) =>
-        M.toFinding(
-          await client.post<W.WFinding>(
-            `/runs/${enc(runId)}/findings/${enc(findingId)}/disposition`,
-            body,
-          ),
+      /** Returns only the decision; callers merge it into the cached finding. */
+      disposeFinding: (runId: string, findingId: string, body: T.FindingDispositionRequest) =>
+        client.post<T.FindingDisposition>(
+          `/runs/${enc(runId)}/findings/${enc(findingId)}/disposition`,
+          body,
         ),
       decidePullRequest: (runId: string, body: T.PrApprovalRequest, idempotencyKey: string) =>
         client.post<unknown>(`/runs/${enc(runId)}/pr-approval`, body, { idempotencyKey }),

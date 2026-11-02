@@ -366,7 +366,7 @@ export interface QuestionAnswer {
   mode: InferenceMode;
   limitations: string[];
   /** Present when a hosted provider was used (FR-AI-008). */
-  data_disclosure: { provider: string; data_categories: string[] } | null;
+  data_disclosure: { provider: string | null; data_categories: string[] } | null;
   retrieval: {
     chunks_considered: number | null;
     chunks_used: number;
@@ -542,7 +542,7 @@ export interface WorkflowRun extends RunSummary {
   plan_hash?: string | null;
   retry_of_run_id?: UUID | null;
   /** Present when a hosted provider is used (FR-AI-008). */
-  data_disclosure?: { provider: string; data_categories: string[] } | null;
+  data_disclosure?: { provider: string | null; data_categories: string[] } | null;
   pull_request?: PullRequest | null;
   /** GAP-19: approvals recorded on this run, needed to render the PR gate after reload. */
   approvals?: Approval[];
@@ -1053,4 +1053,13 @@ export interface DependencyMap {
   unresolved_imports: number;
   truncated: boolean;
   limitations: string[];
+}
+
+/** Result of a finding disposition; merge into the cached finding. */
+export interface FindingDisposition {
+  id: UUID;
+  status: FindingStatus;
+  disposition_by: UUID | null;
+  disposition_comment: string | null;
+  disposition_at: ISODateTime | null;
 }

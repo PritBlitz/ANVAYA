@@ -96,7 +96,12 @@ function useDisposition(finding: ReviewFinding, onDone?: () => void) {
         qk.runPart(workspaceId, run.id, "review"),
         (prev: { findings: ReviewFinding[] } | undefined) =>
           prev
-            ? { ...prev, findings: prev.findings.map((f) => (f.id === updated.id ? updated : f)) }
+            ? {
+                ...prev,
+                findings: prev.findings.map((f) =>
+                  f.id === updated.id ? { ...f, status: updated.status } : f,
+                ),
+              }
             : prev,
       );
       toast.success(`Finding ${STATUS_LABEL[updated.status].toLowerCase()}`);
