@@ -1,0 +1,527 @@
+@import "tailwindcss";
+
+/*
+ * Anvaya design tokens. Full reference: docs/DESIGN_SYSTEM.md
+ *
+ * Layering:
+ *   1. Brand primitives (--wine-*, --sand-*, --ink-*) never used directly in components.
+ *   2. Semantic tokens (--bg, --fg, --primary, --success…) switch per theme.
+ *   3. Tailwind @theme exposes semantic tokens as utilities (bg-surface, text-fg-muted…).
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* ── Brand primitives ─────────────────────────────────────────────── */
+  --wine-50: #fbf1f3;
+  --wine-100: #f5dde2;
+  --wine-200: #ebb8c2;
+  --wine-300: #dc8496;
+  --wine-400: #c44d66;
+  --wine-500: #a3122f;
+  --wine-600: #7f011f; /* Brand Wine Red */
+  --wine-700: #650018; /* Primary hover */
+  --wine-800: #4a0012;
+  --wine-900: #2e000b;
+
+  --sand-50: #fcfaf6; /* App background */
+  --sand-100: #f9f3e6;
+  --sand-200: #f5ebd0; /* Brand Light Sand */
+  --sand-300: #eadbb4;
+  --sand-400: #d8c08a;
+
+  --ink-950: #141011;
+  --ink-900: #1b1618;
+  --ink-850: #221c1e;
+  --ink-800: #2b2427;
+  --ink-700: #3a3135;
+  --ink-600: #241d20; /* Main text (light) */
+  --ink-500: #756b6e; /* Secondary text (light) */
+  --ink-400: #9a8f92;
+  --ink-300: #c9bfbb;
+  --ink-200: #e8dfd9; /* Border (light) */
+  --ink-100: #f2ece7;
+
+  /* ── Semantic: light theme ───────────────────────────────────────── */
+  color-scheme: light;
+  --bg: var(--sand-50);
+  --bg-subtle: #f6f1ea; /* sidebar, table headers */
+  --surface: #ffffff; /* cards */
+  --surface-raised: #ffffff; /* popovers, dialogs */
+  --surface-sunken: #f7f3ee; /* code, inputs on cards */
+  --surface-hover: #f3ede6;
+  --surface-selected: var(--sand-100);
+  --border: var(--ink-200);
+  --border-strong: #d6cbc4;
+  --fg: var(--ink-600);
+  --fg-muted: var(--ink-500);
+  --fg-subtle: #6f6568; /* placeholders, meta; ≥4.5:1 on bg/surface/sunken (axe-verified) */
+  --fg-inverse: #ffffff;
+
+  --primary: var(--wine-600);
+  --primary-hover: var(--wine-700);
+  --primary-fg: #ffffff;
+  --primary-soft: var(--wine-50);
+  --primary-soft-fg: var(--wine-600);
+  --link: var(--wine-600);
+  --ring: color-mix(in oklab, var(--wine-600) 55%, transparent);
+
+  --accent: var(--sand-200);
+  --accent-fg: #5c4a1f;
+  --highlight: #fbf3dc; /* cited line ranges, search hits */
+  --highlight-border: #e3cf98;
+
+  --success: #1f7a4d;
+  --success-soft: #e8f4ed;
+  --success-border: #b9dcc8;
+  --warning: #9a5b00;
+  --warning-soft: #fdf3e1;
+  --warning-border: #efd29c;
+  --danger: #b4232f;
+  --danger-soft: #fcebec;
+  --danger-border: #f0bfc3;
+  --info: #1f5fa8;
+  --info-soft: #e9f1fb;
+  --info-border: #bcd3ef;
+  --neutral-soft: #f5f2ef; /* fg-muted on it: 4.61:1 */
+
+  /* AI-generated content is always visually distinct from deterministic results (FR-VER-004). */
+  --ai: #5b47c2;
+  --ai-soft: #f0edfb;
+  --ai-border: #d5cdf3;
+
+  /* Chart marks: validated (dataviz validate_palette.js) for lightness band and ≥3:1 vs surface. */
+  --chart-1: #a3122f;
+
+  --diff-add-bg: #e9f6ee;
+  --diff-add-gutter: #d2ecdc;
+  --diff-add-fg: #1a6b43;
+  --diff-del-bg: #fcedee;
+  --diff-del-gutter: #f6d6d9;
+  --diff-del-fg: #a12330;
+
+  --shadow-color: 340 20% 20%;
+  --shadow-xs: 0 1px 0 hsl(var(--shadow-color) / 0.04);
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 1px 1px hsl(var(--shadow-color) / 0.03);
+  --shadow-md:
+    0 4px 12px -2px hsl(var(--shadow-color) / 0.1), 0 2px 4px -2px hsl(var(--shadow-color) / 0.06);
+  --shadow-lg:
+    0 16px 40px -8px hsl(var(--shadow-color) / 0.18),
+    0 4px 12px -4px hsl(var(--shadow-color) / 0.08);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: var(--ink-950);
+  --bg-subtle: #181314;
+  --surface: var(--ink-900);
+  --surface-raised: var(--ink-850);
+  --surface-sunken: #110d0e;
+  --surface-hover: #262022;
+  --surface-selected: #2c2225;
+  --border: #2f272a;
+  --border-strong: #41373b;
+  --fg: #efe7e2;
+  --fg-muted: #a69a9d;
+  --fg-subtle: #988c8f;
+  --fg-inverse: var(--ink-950);
+
+  --primary: #b0213f; /* lifted wine: ≥4.5:1 with white text, visible on ink */
+  --primary-hover: #c22e4d;
+  --primary-fg: #ffffff;
+  --primary-soft: #3a1520;
+  --primary-soft-fg: #f2a3b4;
+  --link: #f08aa0;
+  --ring: color-mix(in oklab, #e0566f 60%, transparent);
+
+  --accent: #3b3222;
+  --accent-fg: #f0dcae;
+  --highlight: #33291a;
+  --highlight-border: #6b5528;
+
+  --success: #5cc48f;
+  --success-soft: #13261c;
+  --success-border: #24563b;
+  --warning: #f0b45a;
+  --warning-soft: #2a1f0e;
+  --warning-border: #5f4417;
+  --danger: #f07c86;
+  --danger-soft: #2d1316;
+  --danger-border: #6a2a31;
+  --info: #79acee;
+  --info-soft: #121e2e;
+  --info-border: #284670;
+  --neutral-soft: #262022;
+
+  --ai: #a99bf2;
+  --ai-soft: #1d1933;
+  --ai-border: #3c3470;
+
+  --chart-1: #d24a64;
+
+  --diff-add-bg: #12261b;
+  --diff-add-gutter: #173322;
+  --diff-add-fg: #7fd6a6;
+  --diff-del-bg: #2c1316;
+  --diff-del-gutter: #3a171b;
+  --diff-del-fg: #f39aa3;
+
+  --shadow-color: 0 0% 0%;
+  --shadow-xs: 0 1px 0 hsl(var(--shadow-color) / 0.3);
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.4);
+  --shadow-md: 0 6px 16px -4px hsl(var(--shadow-color) / 0.5), 0 0 0 1px hsl(0 0% 100% / 0.03);
+  --shadow-lg: 0 20px 48px -12px hsl(var(--shadow-color) / 0.65), 0 0 0 1px hsl(0 0% 100% / 0.04);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-inverse: var(--fg-inverse);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-fg: var(--primary-soft-fg);
+  --color-link: var(--link);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-highlight: var(--highlight);
+  --color-highlight-border: var(--highlight-border);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-border: var(--danger-border);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-border: var(--info-border);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  --color-ai-border: var(--ai-border);
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-add-gutter: var(--diff-add-gutter);
+  --color-diff-add-fg: var(--diff-add-fg);
+  --color-diff-del-bg: var(--diff-del-bg);
+  --color-diff-del-gutter: var(--diff-del-gutter);
+  --color-diff-del-fg: var(--diff-del-fg);
+  --color-chart-1: var(--chart-1);
+  --color-wine: var(--wine-600);
+  --color-sand: var(--sand-200);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+
+  /* Type scale — dense, product-grade. Base UI text is 13px (text-sm). */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 2.375rem;
+  --text-3xl: 2.75rem;
+  --text-3xl--line-height: 3rem;
+
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-in: fade-in 120ms var(--ease-out-quint);
+  --animate-pop-in: pop-in 140ms var(--ease-out-quint);
+  --animate-slide-in-right: slide-in-right 200ms var(--ease-out-quint);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px) scale(0.98);
+    }
+  }
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(16px);
+      opacity: 0;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--wine-600) 22%, transparent);
+  }
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings: "liga" 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Marketing motion (public homepage) ───────────────────────────────────
+ * Reveal-on-scroll is progressive enhancement: elements are hidden only when JS is
+ * running (html.js) and the user hasn't asked for reduced motion; the observer sets
+ * data-inview="true". Without JS or with reduced motion, everything is visible.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal]:not([data-inview="true"]) {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  .js [data-reveal] {
+    transition:
+      opacity 700ms var(--ease-out-quint) var(--reveal-delay, 0ms),
+      transform 700ms var(--ease-out-quint) var(--reveal-delay, 0ms);
+  }
+}
+
+@keyframes mk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes mk-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.03);
+  }
+}
+@keyframes mk-draw {
+  from {
+    stroke-dashoffset: var(--dash, 400);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes mk-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@keyframes mk-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+@keyframes mk-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes mk-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes mk-float {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes mk-glow {
+  50% {
+    opacity: 0.85;
+    transform: scale(1.06);
+  }
+}
+@keyframes mk-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes mk-press {
+  0%,
+  70%,
+  100% {
+    transform: scale(1);
+  }
+  78% {
+    transform: scale(0.94);
+  }
+}
+/* Hero loop (9s): evidence items appear in sequence, hold together, then reset. */
+@keyframes mk-seq-1 {
+  0%,
+  6% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  11%,
+  92% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes mk-seq-2 {
+  0%,
+  26% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  31%,
+  92% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes mk-seq-3 {
+  0%,
+  46% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  51%,
+  92% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes mk-seq-4 {
+  0%,
+  66% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  71%,
+  92% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@utility mk-anim {
+  animation-fill-mode: both;
+  animation-timing-function: var(--ease-out-quint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[mk-"],
+  .mk-anim {
+    animation: none !important;
+    clip-path: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
