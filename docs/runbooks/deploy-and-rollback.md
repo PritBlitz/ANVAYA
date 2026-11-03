@@ -35,3 +35,22 @@ database (`backup-and-restore.md`) to just before the deploy.
 
 Record the incident, keep the failed image for analysis, and add a regression test before
 re-releasing.
+
+## Production-like local deployment (tested)
+
+`infra/compose/docker-compose.prod.yml` runs the same images with production configuration (no dev
+login, secure cookies, AI service token, no container sandbox) and its own data stores.
+
+```sh
+tag=$(scripts/deploy/build-images.sh)     # anvaya-{api,ai-service,web}:<commit>
+scripts/deploy/deploy.sh "$tag"           # waits for health, smoke-tests through the web origin
+```
+
+`deploy.sh` records the deployed tag in `.deploy/current`. If the new tag fails its health checks
+or the smoke test, it redeploys the previous tag, re-verifies it, and exits 1.
+
+**Tested 2026-11-03:** release `d5fd1dc88a09` deployed with all six services healthy; in
+production mode the dev-login route does not exist, `/api/v1/internal/metrics` is hidden, and the
+API has no published port. A deliberately broken release (the API crashes on start) was detected as
+unhealthy and rolled back automatically to `d5fd1dc88a09`, which then served `/login` and the
+proxied readiness check with 200.

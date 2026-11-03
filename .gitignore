@@ -14,3 +14,6 @@ Thumbs.db
 *.pem
 # Agent worktrees
 /.claude/
+
+# Local deploy state (scripts/deploy)
+/.deploy/

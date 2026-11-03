@@ -1,0 +1,113 @@
+# Production-like local deployment (ROADMAP Phase 8): production configuration, immutable image
+# tags, health checks, and rollback via scripts/deploy/deploy.sh. Separate project, volumes and data
+# stores from the development stack, so a deploy here never touches dev data.
+#
+#   ANVAYA_TAG=<git sha> docker compose -p anvaya-prod -f infra/compose/docker-compose.prod.yml up -d --wait
+#
+# Production rules enforced by the API config: no dev login, secure cookies, GitHub repository
+# source, an AI service token, and no container sandbox (verification needs the gVisor execution
+# plane, which runs on Linux execution hosts; here EXECUTION_DRIVER=disabled).
+name: anvaya-prod
+
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+x-api-env: &api-env
+  NODE_ENV: production
+  PORT: "3001"
+  LOG_LEVEL: info
+  DATABASE_URL: postgres://anvaya:${ANVAYA_PROD_DB_PASSWORD:-prod_local_only_change_me}@postgres:5432/anvaya
+  REDIS_URL: redis://redis:6379/0
+  WEB_ORIGINS: http://localhost:3080
+  WEB_APP_URL: http://localhost:3080
+  PUBLIC_API_URL: http://localhost:3080
+  TRUST_PROXY: "true"
+  COOKIE_SECURE: "true"
+  AUTH_DEV_LOGIN_ENABLED: "false"
+  REPOSITORY_SOURCE: github
+  AI_SERVICE_URL: http://ai-service:8001
+  AI_SERVICE_TOKEN: ${ANVAYA_PROD_AI_TOKEN:-prod-local-ai-service-token-change-me}
+  STORAGE_DIR: /app/storage
+  EXECUTION_DRIVER: disabled
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: anvaya
+      POSTGRES_PASSWORD: ${ANVAYA_PROD_DB_PASSWORD:-prod_local_only_change_me}
+      POSTGRES_DB: anvaya
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anvaya -d anvaya"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  ai-service:
+    image: anvaya-ai-service:${ANVAYA_TAG:?set ANVAYA_TAG}
+    environment:
+      NODE_ENV: production
+      AI_SERVICE_TOKEN: ${ANVAYA_PROD_AI_TOKEN:-prod-local-ai-service-token-change-me}
+      EMBEDDING_PROVIDER: ${ANVAYA_EMBEDDING_PROVIDER:-mock}
+      OLLAMA_BASE_URL: ${ANVAYA_OLLAMA_URL:-http://host.docker.internal:11434}
+    read_only: true
+    <<: *hardening
+
+  api:
+    image: anvaya-api:${ANVAYA_TAG:?set ANVAYA_TAG}
+    command: ["sh", "-c", "node dist/database/migrate.cli.js && node dist/main.js"]
+    environment: *api-env
+    volumes: [storage:/app/storage]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      ai-service: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/v1/health/ready >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    <<: *hardening
+
+  worker:
+    image: anvaya-api:${ANVAYA_TAG:?set ANVAYA_TAG}
+    command: ["node", "dist/main.worker.js"]
+    environment: *api-env
+    volumes: [storage:/app/storage]
+    healthcheck:
+      disable: true
+    depends_on:
+      api: { condition: service_healthy }
+    <<: *hardening
+
+  web:
+    image: anvaya-web:${ANVAYA_TAG:?set ANVAYA_TAG}
+    ports: ["127.0.0.1:3080:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    <<: *hardening
+
+volumes:
+  pgdata:
+  storage:
