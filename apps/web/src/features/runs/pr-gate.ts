@@ -4,12 +4,25 @@ import type {
   RunDiff,
   RunPlan,
   VerificationReport,
+  VerificationResult,
   WorkflowRun,
 } from "@/lib/api/types";
 import { outOfScopeFiles, parseUnifiedDiff } from "@/lib/diff";
 import { findingSourceMeta, severityMeta } from "@/lib/domain/status";
 
 export type GateStatus = "pass" | "fail" | "warn" | "pending";
+
+/**
+ * Results for the patch awaiting approval. A repaired run keeps the failed results of
+ * earlier attempts for the record; those must not block approving the repaired patch.
+ */
+export function currentResults(verification: VerificationReport): VerificationResult[] {
+  const { results, current_patch_id } = verification;
+  if (current_patch_id) return results.filter((r) => r.patch_id === current_patch_id);
+  const attempts = results.map((r) => r.attempt ?? 1);
+  const latest = attempts.length ? Math.max(...attempts) : 1;
+  return results.filter((r) => (r.attempt ?? 1) === latest);
+}
 
 export interface GateCheck {
   id: string;
@@ -83,10 +96,9 @@ export function prGateChecks(input: {
       detail: "Loading results",
     });
   } else {
-    const failed = verification.results.filter((r) =>
-      ["failed", "timed_out", "error"].includes(r.status),
-    );
-    const passed = verification.results.filter((r) => r.status === "passed");
+    const current = currentResults(verification);
+    const failed = current.filter((r) => ["failed", "timed_out", "error"].includes(r.status));
+    const passed = current.filter((r) => r.status === "passed");
     checks.push(
       failed.length
         ? {
@@ -185,7 +197,7 @@ export function buildPrBody(input: {
   }
   if (verification) {
     lines.push("## Verification", "", "| Check | Command | Result | Exit |", "|---|---|---|---|");
-    for (const r of verification.results)
+    for (const r of currentResults(verification))
       lines.push(
         `| ${r.profile_id} | \`${r.command_display}\` | ${r.status} | ${r.exit_code ?? "—"} |`,
       );
