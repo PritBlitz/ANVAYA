@@ -1685,6 +1685,30 @@
                                   }
                                 },
                                 "additionalProperties": false
+                              },
+                              "run_quotas": {
+                                "type": "object",
+                                "properties": {
+                                  "max_active_runs": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 1000
+                                  },
+                                  "daily_runs": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100000
+                                  },
+                                  "daily_tokens": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 1000,
+                                    "maximum": 1000000000
+                                  }
+                                },
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -1952,6 +1976,30 @@
                                 }
                               },
                               "additionalProperties": false
+                            },
+                            "run_quotas": {
+                              "type": "object",
+                              "properties": {
+                                "max_active_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 1000
+                                },
+                                "daily_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 100000
+                                },
+                                "daily_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 1000000000
+                                }
+                              },
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -2182,6 +2230,30 @@
                                 }
                               },
                               "additionalProperties": false
+                            },
+                            "run_quotas": {
+                              "type": "object",
+                              "properties": {
+                                "max_active_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 1000
+                                },
+                                "daily_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 100000
+                                },
+                                "daily_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 1000000000
+                                }
+                              },
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -2393,6 +2465,30 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "run_quotas": {
+                        "type": "object",
+                        "properties": {
+                          "max_active_runs": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          },
+                          "daily_runs": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100000
+                          },
+                          "daily_tokens": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1000,
+                            "maximum": 1000000000
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": false
@@ -2497,6 +2593,30 @@
                                   "type": "integer",
                                   "minimum": 0,
                                   "maximum": 5
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "run_quotas": {
+                              "type": "object",
+                              "properties": {
+                                "max_active_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 1000
+                                },
+                                "daily_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 100000
+                                },
+                                "daily_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 1000000000
                                 }
                               },
                               "additionalProperties": false
@@ -3772,6 +3892,30 @@
                                   "type": "integer",
                                   "minimum": 0,
                                   "maximum": 5
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "run_quotas": {
+                              "type": "object",
+                              "properties": {
+                                "max_active_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 1000
+                                },
+                                "daily_runs": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 100000
+                                },
+                                "daily_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 1000000000
                                 }
                               },
                               "additionalProperties": false
@@ -10758,6 +10902,234 @@
         }
       }
     },
+    "/workspaces/{workspaceId}/quotas": {
+      "get": {
+        "tags": [
+          "AI"
+        ],
+        "summary": "Run quotas and concurrency limits with current usage (FR-OBS-004)",
+        "operationId": "get_workspaces_workspaceId_quotas",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "workspace_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "active_runs": {
+                          "type": "object",
+                          "properties": {
+                            "limit": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "used": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "remaining": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "limit",
+                            "used",
+                            "remaining"
+                          ]
+                        },
+                        "daily_runs": {
+                          "type": "object",
+                          "properties": {
+                            "limit": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "used": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "remaining": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "limit",
+                            "used",
+                            "remaining"
+                          ]
+                        },
+                        "daily_tokens": {
+                          "type": "object",
+                          "properties": {
+                            "limit": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "used": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "remaining": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "limit",
+                            "used",
+                            "remaining"
+                          ]
+                        },
+                        "window_start": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "resets_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "workspace_id",
+                        "active_runs",
+                        "daily_runs",
+                        "daily_tokens",
+                        "window_start",
+                        "resets_at"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{workspaceId}/usage": {
       "get": {
         "tags": [
@@ -14119,7 +14491,7 @@
         "tags": [
           "Runs"
         ],
-        "summary": "Start workflow run (budgets clamped to policy)",
+        "summary": "Start workflow run (budgets clamped to policy; 429 CONCURRENCY_LIMIT_REACHED / QUOTA_EXCEEDED)",
         "operationId": "post_tasks_taskId_runs",
         "parameters": [
           {

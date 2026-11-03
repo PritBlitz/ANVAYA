@@ -29,10 +29,27 @@ export const runBudgetLimitsSchema = z
   })
   .strict();
 
+/**
+ * Workspace quotas and concurrency limits (FR-OBS-004). Absent = unlimited; on
+ * update, `null` removes a limit. Daily windows are UTC calendar days.
+ */
+export const runQuotasSchema = z
+  .object({
+    /** Non-terminal runs (including runs waiting at an approval gate) at any one time. */
+    max_active_runs: z.number().int().min(1).max(1000).nullable().optional(),
+    /** Runs started per UTC day. */
+    daily_runs: z.number().int().min(1).max(100_000).nullable().optional(),
+    /** Model input + output tokens per UTC day, across runs and repository Q&A. */
+    daily_tokens: z.number().int().min(1000).max(1_000_000_000).nullable().optional(),
+  })
+  .strict();
+export type RunQuotas = { max_active_runs?: number; daily_runs?: number; daily_tokens?: number };
+
 export const workspaceSettingsSchema = z
   .object({
     retention: retentionSettingsSchema.optional(),
     run_budget_limits: runBudgetLimitsSchema.optional(),
+    run_quotas: runQuotasSchema.optional(),
   })
   .strict();
 
@@ -71,6 +88,19 @@ export const workspaceView = z.object({
   settings: workspaceSettingsSchema,
   created_at: z.iso.datetime(),
   updated_at: z.iso.datetime(),
+});
+
+const limitAndUsage = z.object({ limit: z.number().int().nullable(), used: z.number().int(), remaining: z.number().int().nullable() });
+
+/** `GET /workspaces/:id/quotas`: configured limits and current usage. */
+export const quotaStatusView = z.object({
+  workspace_id: z.uuid(),
+  active_runs: limitAndUsage,
+  daily_runs: limitAndUsage,
+  daily_tokens: limitAndUsage,
+  /** Start of the current UTC day window and when it resets. */
+  window_start: z.iso.datetime(),
+  resets_at: z.iso.datetime(),
 });
 
 export const memberView = z.object({

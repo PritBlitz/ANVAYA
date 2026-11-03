@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 import { AiPolicyService } from '../ai/ai-policy.service.js';
+import { QuotaService } from '../ai/quota.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { Errors } from '../common/errors.js';
 import { decodeCursor, type Page, toPage, zodIssues } from '../common/http.js';
@@ -108,6 +109,7 @@ export class RunsService {
     private readonly events: RunEventsService,
     private readonly queues: QueueService,
     private readonly aiPolicy: AiPolicyService,
+    private readonly quotas: QuotaService,
   ) {}
 
   async start(userId: string, taskId: string, body: z.infer<typeof startRunBody>) {
@@ -129,6 +131,8 @@ export class RunsService {
     const budget = clampBudget(body.budgets, limits.success ? limits.data : {}, policy.limits);
 
     const run = await this.database.transaction(async (tx) => {
+      // FR-OBS-004: concurrency limit and daily quotas (locks the workspace row first).
+      await this.quotas.assertCanStartRun(tx, task.organization_id);
       await tx.selectFrom('engineering_tasks').select('id').where('id', '=', taskId).forUpdate().executeTakeFirstOrThrow();
       const active = await tx
         .selectFrom('workflow_runs')
