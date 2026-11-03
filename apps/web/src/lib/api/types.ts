@@ -869,13 +869,18 @@ export interface VerificationResult {
   output_truncated?: boolean;
   /** Repair attempt this result belongs to. */
   attempt?: number;
+  /** Patch this result verified; only the current patch's results gate PR approval. */
+  patch_id?: UUID | null;
   created_at: ISODateTime | null;
   /** Heuristic test selection that narrowed this run; null = the full profile ran. */
   test_selection?: TestSelection | null;
 }
 
 export interface VerificationReport {
+  /** Every attempt's results, oldest first (superseded attempts kept for the record). */
   results: VerificationResult[];
+  /** Patch awaiting approval; null when unknown (the latest attempt is used instead). */
+  current_patch_id?: UUID | null;
   /** Profiles configured but unavailable for this repository (FR-VER-005). */
   unavailable: { profile_id: string; reason: string; kind?: "unsupported" | "sandbox_error" }[];
   /** Count of unavailable profiles (may exceed `unavailable.length` if reasons aren't listed). */

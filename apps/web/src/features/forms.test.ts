@@ -230,6 +230,39 @@ describe("pull-request gate", () => {
     expect(gateAllows(prGateChecks({ run }))).toBe(false);
   });
 
+  it("judges only the patch awaiting approval, not superseded repair attempts", () => {
+    const attempt = (n: number, patch: string, status: string) =>
+      ["compile", "test"].map((p) => ({
+        profile_id: p,
+        command_display: p,
+        status,
+        exit_code: status === "passed" ? 0 : 1,
+        attempt: n,
+        patch_id: patch,
+      }));
+    const repaired = {
+      results: [...attempt(1, "p1", "failed"), ...attempt(2, "p2", "passed")],
+      current_patch_id: "p2",
+      unavailable: [],
+    } as unknown as VerificationReport;
+    const checks = prGateChecks({ run, plan: runPlan, diff, verification: repaired, review });
+    expect(checks.find((c) => c.id === "verification")).toMatchObject({
+      status: "pass",
+      detail: "2 passed",
+    });
+    expect(gateAllows(checks)).toBe(true);
+    // Without a current patch id, the latest attempt decides.
+    const noId = { ...repaired, current_patch_id: null } as VerificationReport;
+    expect(gateAllows(prGateChecks({ run, plan: runPlan, diff, verification: noId, review }))).toBe(
+      true,
+    );
+    // A failing current patch still blocks.
+    const stillFailing = { ...repaired, current_patch_id: "p1" } as VerificationReport;
+    expect(
+      gateAllows(prGateChecks({ run, plan: runPlan, diff, verification: stillFailing, review })),
+    ).toBe(false);
+  });
+
   it("builds an evidence-backed description", () => {
     const body = buildPrBody({
       task: { title: "T", source_type: "github_issue", external_number: 214 },
