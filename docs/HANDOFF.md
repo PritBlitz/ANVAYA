@@ -23,10 +23,10 @@ and merged except GitLab/Bitbucket (out of scope by the owner's decision).
 
 ## 2. What is left (in order)
 
-### 2.1 Live-embedding retrieval benchmark (cheap: ≈300 MB model)
+### 2.1 Live-embedding retrieval benchmark — DONE 2026-11-04 (see docs/evaluations/retrieval.md)
 Start Ollama + AI service (§3), then in `apps/api`:
 ```sh
-EVAL_EMBEDDINGS=live AI_SERVICE_URL=http://127.0.0.1:8001 AI_SERVICE_TOKEN=<from apps/api/.env> \
+EVAL_EMBEDDINGS=live EVAL_AI_SERVICE_URL=http://127.0.0.1:8001 EVAL_AI_SERVICE_TOKEN=<from apps/api/.env> \
   EVAL_OUT='Z:\ANVAYA\docs\evaluations\retrieval-live.json' npx vitest run test/retrieval.eval.spec.ts
 ```
 The AI service must run with `EMBEDDING_PROVIDER=ollama` (its default). Add the numbers to

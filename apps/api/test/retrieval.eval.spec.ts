@@ -17,8 +17,9 @@ import { buildTarball } from './tarball.js';
  *
  *   default             mock embeddings (deterministic, CI): lexical is meaningful; semantic is noise
  *                       by construction, so only lexical/hybrid thresholds are enforced.
- *   EVAL_EMBEDDINGS=live real embeddings: AI_SERVICE_URL / AI_SERVICE_TOKEN point at a running AI
- *                       service with EMBEDDING_PROVIDER=ollama (nomic-embed-text).
+ *   EVAL_EMBEDDINGS=live real embeddings: EVAL_AI_SERVICE_URL / EVAL_AI_SERVICE_TOKEN point at a
+ *                       running AI service with EMBEDDING_PROVIDER=ollama (nomic-embed-text). Separate
+ *                       names are needed because vitest.config.ts pins AI_SERVICE_URL/TOKEN for tests.
  *   EVAL_OUT=<file>     also write the results as JSON.
  */
 
@@ -52,6 +53,15 @@ const QUESTIONS: Array<{ q: string; relevant: string[] }> = [
 
 const MODES = ['lexical', 'semantic', 'hybrid'] as const;
 const live = process.env.EVAL_EMBEDDINGS === 'live';
+// CPU-only nomic-embed-text indexes the corpus in roughly 15-30 minutes; mock embeddings take seconds.
+const TIMEOUT_MS = live ? 3_600_000 : 600_000;
+
+function liveAiEnv(): Record<string, string> {
+  const url = process.env.EVAL_AI_SERVICE_URL;
+  const token = process.env.EVAL_AI_SERVICE_TOKEN;
+  if (!url || !token) throw new Error('EVAL_EMBEDDINGS=live needs EVAL_AI_SERVICE_URL and EVAL_AI_SERVICE_TOKEN');
+  return { AI_SERVICE_URL: url, AI_SERVICE_TOKEN: token };
+}
 
 function corpus(): Array<{ name: string; content: string }> {
   const root = path.resolve(__dirname, '..');
@@ -80,7 +90,7 @@ describe('retrieval benchmark', () => {
   beforeAll(async () => {
     await gh.start();
     if (!live) await ai.start();
-    Object.assign(process.env, gh.env(), live ? {} : { AI_SERVICE_URL: ai.url });
+    Object.assign(process.env, gh.env(), live ? liveAiEnv() : { AI_SERVICE_URL: ai.url });
     app = await bootApp();
     owner = await login(app);
     const ws = await createWorkspace(owner);
@@ -94,7 +104,7 @@ describe('retrieval benchmark', () => {
     const res = await as(owner, 'post', '/repositories').send({ workspace_id: ws, installation_id: link.installationUuid, external_repository_id: ext }).expect(201);
     repoUuid = res.body.data.id;
     await runIndexing(app, repoUuid);
-  }, 600_000);
+  }, TIMEOUT_MS);
 
   afterAll(async () => {
     await app.close();
@@ -134,5 +144,5 @@ describe('retrieval benchmark', () => {
     expect(results.lexical!.recall_at_10).toBeGreaterThanOrEqual(0.6);
     expect(results.hybrid!.recall_at_10).toBeGreaterThanOrEqual(0.6);
     if (live) expect(results.semantic!.recall_at_10).toBeGreaterThanOrEqual(0.5);
-  }, 600_000);
+  }, TIMEOUT_MS);
 });

@@ -46,11 +46,32 @@ membership checks. Their answers use vocabulary the questions do not (`allowed`/
 `chunk`/`split`), which is what real semantic embeddings should close; the live run below is the
 measurement for that.
 
-## Live embeddings
+## Live embeddings (2026-11-04)
 
-Not yet measured: it needs the AI service with Ollama (`nomic-embed-text`) running. Command:
+AI service with `EMBEDDING_PROVIDER=ollama`, `nomic-embed-text` on CPU (Ollama 0.24, one loaded
+model, one parallel request). The corpus had grown to 107 files since the mock run. Indexing took
+about 15 minutes (≈50 s per 32-chunk embedding batch on a machine under memory pressure). Raw output:
+[`retrieval-live.json`](retrieval-live.json).
+
+| Mode | recall@5 | recall@10 | MRR |
+|---|---|---|---|
+| Lexical | 0.56 | 0.60 | 0.380 |
+| **Semantic (live)** | **0.84** | **0.88** | **0.712** |
+| **Hybrid (live)** | **0.88** | **0.92** | **0.638** |
+| Hybrid, mock baseline (above) | 0.68 | 0.76 | 0.428 |
+
+- Real embeddings close most of the vocabulary-gap misses listed above: hybrid recall@10 rises from
+  0.76 to 0.92 and semantic alone reaches 0.88 (floor 0.5).
+- Hybrid has higher recall but lower MRR than semantic alone: the fusion lets lexical matches outrank the
+  best semantic hit on some questions. Tuning the fusion weights is a possible follow-up; the
+  benchmark is the measurement for it.
+- Remaining hybrid misses: "Which run status transitions are legal?" (`state-machine.ts`) and
+  "Which files are skipped during indexing…" (`classifier.ts`).
+- Fixed while measuring: `vitest.config.ts` pins `AI_SERVICE_URL`/`AI_SERVICE_TOKEN`, so live mode
+  reads `EVAL_AI_SERVICE_URL`/`EVAL_AI_SERVICE_TOKEN`; live mode also gets a 60-minute timeout.
+
+Command (in `apps/api`):
 
 ```sh
-EVAL_EMBEDDINGS=live AI_SERVICE_URL=http://127.0.0.1:8001 AI_SERVICE_TOKEN=... \
-  EVAL_OUT=docs/evaluations/retrieval-live.json npx vitest run test/retrieval.eval.spec.ts
+EVAL_EMBEDDINGS=live EVAL_AI_SERVICE_URL=http://127.0.0.1:8001 EVAL_AI_SERVICE_TOKEN=...   EVAL_OUT=docs/evaluations/retrieval-live.json npx vitest run test/retrieval.eval.spec.ts
 ```
