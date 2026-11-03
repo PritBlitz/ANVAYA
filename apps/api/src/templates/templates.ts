@@ -188,11 +188,11 @@ const snapshotSchema = z.object({
 /** Reads a stored snapshot; unknown or malformed content means "no template". */
 export function parseSnapshot(value: unknown): TemplateSnapshot | null {
   const parsed = snapshotSchema.safeParse(value);
-  return parsed.success ? (parsed.data as TemplateSnapshot) : null;
+  return parsed.success ? (parsed.data) : null;
 }
 
 export function toSnapshotJson(s: TemplateSnapshot): JsonObject {
-  return { ...s } as unknown as JsonObject;
+  return { ...s };
 }
 
 /** Lowers each budget field to the template ceiling; never raises one (server policy wins). */

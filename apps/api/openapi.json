@@ -44,10 +44,13 @@
       "name": "Code intelligence"
     },
     {
+      "name": "Knowledge"
+    },
+    {
       "name": "AI"
     },
     {
-      "name": "Knowledge"
+      "name": "Templates"
     },
     {
       "name": "Tasks"
@@ -5295,6 +5298,9 @@
                                   "type": "number"
                                 },
                                 {
+                                  "type": "string"
+                                },
+                                {
                                   "type": "array",
                                   "items": {}
                                 }
@@ -5593,6 +5599,9 @@
                                 "type": "number"
                               },
                               {
+                                "type": "string"
+                              },
+                              {
                                 "type": "array",
                                 "items": {}
                               }
@@ -5834,6 +5843,9 @@
                                 "type": "number"
                               },
                               {
+                                "type": "string"
+                              },
+                              {
                                 "type": "array",
                                 "items": {
                                   "type": "string"
@@ -6028,6 +6040,13 @@
                             "python-pytest"
                           ]
                         }
+                      },
+                      "test_selection": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "narrow"
+                        ]
                       }
                     },
                     "additionalProperties": false
@@ -6140,6 +6159,9 @@
                               },
                               {
                                 "type": "number"
+                              },
+                              {
+                                "type": "string"
                               },
                               {
                                 "type": "array",
@@ -8991,6 +9013,3920 @@
         }
       }
     },
+    "/repositories/{repositoryId}/symbols/{symbolId}/call-graph": {
+      "get": {
+        "tags": [
+          "Code intelligence"
+        ],
+        "summary": "Callers/callees of a symbol (bounded depth, offset-paged nodes)",
+        "operationId": "get_repositories_repositoryId_symbols_symbolId_call_graph",
+        "parameters": [
+          {
+            "name": "repositoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "symbolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "snapshot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "latest",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "latest"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                }
+              ]
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "both",
+              "type": "string",
+              "enum": [
+                "callers",
+                "callees",
+                "both"
+              ]
+            }
+          },
+          {
+            "name": "depth",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "snapshot_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "commit_sha": {
+                          "type": "string"
+                        },
+                        "root": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "qualified_name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "start_line": {
+                              "type": "number"
+                            },
+                            "end_line": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "qualified_name",
+                            "kind",
+                            "path",
+                            "start_line",
+                            "end_line"
+                          ]
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "callers",
+                            "callees",
+                            "both"
+                          ]
+                        },
+                        "depth": {
+                          "type": "number"
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "symbol": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "qualified_name": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "start_line": {
+                                    "type": "number"
+                                  },
+                                  "end_line": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "qualified_name",
+                                  "kind",
+                                  "path",
+                                  "start_line",
+                                  "end_line"
+                                ]
+                              },
+                              "depth": {
+                                "type": "number"
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": [
+                                  "caller",
+                                  "callee"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "symbol",
+                              "depth",
+                              "direction"
+                            ]
+                          }
+                        },
+                        "edges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "source_id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "target_id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "line": {
+                                "nullable": true,
+                                "type": "number"
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "source_id",
+                              "target_id",
+                              "type",
+                              "line",
+                              "path"
+                            ]
+                          }
+                        },
+                        "unresolved_callees": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "line": {
+                                "nullable": true,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "type",
+                              "line"
+                            ]
+                          }
+                        },
+                        "total_nodes": {
+                          "type": "number"
+                        },
+                        "next_cursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "truncated": {
+                          "type": "boolean"
+                        },
+                        "limitations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "snapshot_id",
+                        "commit_sha",
+                        "root",
+                        "direction",
+                        "depth",
+                        "nodes",
+                        "edges",
+                        "unresolved_callees",
+                        "total_nodes",
+                        "next_cursor",
+                        "truncated",
+                        "limitations"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/impact": {
+      "post": {
+        "tags": [
+          "Code intelligence"
+        ],
+        "summary": "Heuristic change-impact prediction and test selection for changed files",
+        "description": "Static analysis over parsed imports and name-resolved calls. Labelled heuristic: it is never a verification result.",
+        "operationId": "post_repositories_repositoryId_impact",
+        "parameters": [
+          {
+            "name": "repositoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Value of the anvaya_csrf cookie"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "snapshot": {
+                    "default": "latest",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "latest"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$"
+                      }
+                    ]
+                  },
+                  "changed_files": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            "ranges": {
+                              "maxItems": 200,
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    }
+                                  ]
+                                },
+                                "minItems": 2,
+                                "maxItems": 2
+                              }
+                            }
+                          },
+                          "required": [
+                            "path"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "max_tests": {
+                    "default": 20,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  }
+                },
+                "required": [
+                  "changed_files"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "snapshot_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "commit_sha": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "request"
+                          ]
+                        },
+                        "heuristic": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "disclaimer": {
+                          "type": "string"
+                        },
+                        "changed_files": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "indexed": {
+                                "type": "boolean"
+                              },
+                              "symbols": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "indexed",
+                              "symbols"
+                            ]
+                          }
+                        },
+                        "changed_symbols": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "qualified_name": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "start_line": {
+                                "type": "number"
+                              },
+                              "end_line": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "qualified_name",
+                              "kind",
+                              "path",
+                              "start_line",
+                              "end_line"
+                            ]
+                          }
+                        },
+                        "impacted_files": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "distance": {
+                                "type": "number"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "imports",
+                                  "calls"
+                                ]
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "imports"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "calls"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        },
+                                        "caller": {
+                                          "type": "string"
+                                        },
+                                        "callee": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line",
+                                        "caller",
+                                        "callee"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "changed"
+                                          ]
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "path"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "naming"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "distance",
+                              "reason",
+                              "evidence"
+                            ]
+                          }
+                        },
+                        "impacted_symbols": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "symbol": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "qualified_name": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "start_line": {
+                                    "type": "number"
+                                  },
+                                  "end_line": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "qualified_name",
+                                  "kind",
+                                  "path",
+                                  "start_line",
+                                  "end_line"
+                                ]
+                              },
+                              "depth": {
+                                "type": "number"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "imports"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "calls"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        },
+                                        "caller": {
+                                          "type": "string"
+                                        },
+                                        "callee": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line",
+                                        "caller",
+                                        "callee"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "changed"
+                                          ]
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "path"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "naming"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "symbol",
+                              "depth",
+                              "evidence"
+                            ]
+                          }
+                        },
+                        "selected_tests": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "reasons": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "changed",
+                                        "imports",
+                                        "calls",
+                                        "naming"
+                                      ]
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "evidence": {
+                                      "type": "array",
+                                      "items": {
+                                        "oneOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "imports"
+                                                ]
+                                              },
+                                              "from": {
+                                                "type": "string"
+                                              },
+                                              "to": {
+                                                "type": "string"
+                                              },
+                                              "line": {
+                                                "nullable": true,
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "from",
+                                              "to",
+                                              "line"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "calls"
+                                                ]
+                                              },
+                                              "from": {
+                                                "type": "string"
+                                              },
+                                              "to": {
+                                                "type": "string"
+                                              },
+                                              "line": {
+                                                "nullable": true,
+                                                "type": "number"
+                                              },
+                                              "caller": {
+                                                "type": "string"
+                                              },
+                                              "callee": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "from",
+                                              "to",
+                                              "line",
+                                              "caller",
+                                              "callee"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "changed"
+                                                ]
+                                              },
+                                              "path": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "path"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "naming"
+                                                ]
+                                              },
+                                              "from": {
+                                                "type": "string"
+                                              },
+                                              "to": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "from",
+                                              "to"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "description",
+                                    "evidence"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "score",
+                              "reasons"
+                            ]
+                          }
+                        },
+                        "test_files_total": {
+                          "type": "number"
+                        },
+                        "truncated": {
+                          "type": "boolean"
+                        },
+                        "limitations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "snapshot_id",
+                        "commit_sha",
+                        "source",
+                        "heuristic",
+                        "disclaimer",
+                        "changed_files",
+                        "changed_symbols",
+                        "impacted_files",
+                        "impacted_symbols",
+                        "selected_tests",
+                        "test_files_total",
+                        "truncated",
+                        "limitations"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{runId}/impact": {
+      "get": {
+        "tags": [
+          "Code intelligence"
+        ],
+        "summary": "Heuristic impact and test selection for a run's patch (or plan files)",
+        "operationId": "get_runs_runId_impact",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "max_tests",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "run_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "patch",
+                            "plan",
+                            "none"
+                          ]
+                        },
+                        "patch_id": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "plan_version": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "snapshot_id": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "commit_sha": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "applied_selections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "profile_id": {
+                                "type": "string"
+                              },
+                              "attempt": {
+                                "type": "number"
+                              },
+                              "selection": {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "profile_id",
+                              "attempt",
+                              "selection"
+                            ]
+                          }
+                        },
+                        "heuristic": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "disclaimer": {
+                          "type": "string"
+                        },
+                        "changed_files": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "indexed": {
+                                "type": "boolean"
+                              },
+                              "symbols": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "indexed",
+                              "symbols"
+                            ]
+                          }
+                        },
+                        "changed_symbols": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "qualified_name": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "start_line": {
+                                "type": "number"
+                              },
+                              "end_line": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "qualified_name",
+                              "kind",
+                              "path",
+                              "start_line",
+                              "end_line"
+                            ]
+                          }
+                        },
+                        "impacted_files": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "distance": {
+                                "type": "number"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "imports",
+                                  "calls"
+                                ]
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "imports"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "calls"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        },
+                                        "caller": {
+                                          "type": "string"
+                                        },
+                                        "callee": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line",
+                                        "caller",
+                                        "callee"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "changed"
+                                          ]
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "path"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "naming"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "distance",
+                              "reason",
+                              "evidence"
+                            ]
+                          }
+                        },
+                        "impacted_symbols": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "symbol": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "qualified_name": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "start_line": {
+                                    "type": "number"
+                                  },
+                                  "end_line": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "qualified_name",
+                                  "kind",
+                                  "path",
+                                  "start_line",
+                                  "end_line"
+                                ]
+                              },
+                              "depth": {
+                                "type": "number"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "imports"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "calls"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "number"
+                                        },
+                                        "caller": {
+                                          "type": "string"
+                                        },
+                                        "callee": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to",
+                                        "line",
+                                        "caller",
+                                        "callee"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "changed"
+                                          ]
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "path"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "naming"
+                                          ]
+                                        },
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "to": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "from",
+                                        "to"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "symbol",
+                              "depth",
+                              "evidence"
+                            ]
+                          }
+                        },
+                        "selected_tests": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "reasons": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "changed",
+                                        "imports",
+                                        "calls",
+                                        "naming"
+                                      ]
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "evidence": {
+                                      "type": "array",
+                                      "items": {
+                                        "oneOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "imports"
+                                                ]
+                                              },
+                                              "from": {
+                                                "type": "string"
+                                              },
+                                              "to": {
+                                                "type": "string"
+                                              },
+                                              "line": {
+                                                "nullable": true,
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "from",
+                                              "to",
+                                              "line"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "calls"
+                                                ]
+                                              },
+                                              "from": {
+                                                "type": "string"
+                                              },
+                                              "to": {
+                                                "type": "string"
+                                              },
+                                              "line": {
+                                                "nullable": true,
+                                                "type": "number"
+                                              },
+                                              "caller": {
+                                                "type": "string"
+                                              },
+                                              "callee": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "from",
+                                              "to",
+                                              "line",
+                                              "caller",
+                                              "callee"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "changed"
+                                                ]
+                                              },
+                                              "path": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "path"
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "naming"
+                                                ]
+                                              },
+                                              "from": {
+                                                "type": "string"
+                                              },
+                                              "to": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "from",
+                                              "to"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "description",
+                                    "evidence"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "score",
+                              "reasons"
+                            ]
+                          }
+                        },
+                        "test_files_total": {
+                          "type": "number"
+                        },
+                        "truncated": {
+                          "type": "boolean"
+                        },
+                        "limitations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "run_id",
+                        "source",
+                        "patch_id",
+                        "plan_version",
+                        "snapshot_id",
+                        "commit_sha",
+                        "applied_selections",
+                        "heuristic",
+                        "disclaimer",
+                        "changed_files",
+                        "changed_symbols",
+                        "impacted_files",
+                        "impacted_symbols",
+                        "selected_tests",
+                        "test_files_total",
+                        "truncated",
+                        "limitations"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceId}/search": {
+      "post": {
+        "tags": [
+          "Knowledge"
+        ],
+        "summary": "Search all indexed repositories of the workspace (per-result repository provenance)",
+        "operationId": "post_workspaces_workspaceId_search",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Value of the anvaya_csrf cookie"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  },
+                  "repository_ids": {
+                    "minItems": 1,
+                    "maxItems": 25,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "top_k": {
+                    "default": 20,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  },
+                  "per_repository": {
+                    "default": 5,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "include_knowledge": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "mode": {
+                    "default": "hybrid",
+                    "type": "string",
+                    "enum": [
+                      "hybrid",
+                      "lexical"
+                    ]
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        },
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "code",
+                                  "knowledge"
+                                ]
+                              },
+                              "repository_id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "repository_full_name": {
+                                "type": "string"
+                              },
+                              "commit_sha": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "path": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "start_line": {
+                                "type": "number"
+                              },
+                              "end_line": {
+                                "type": "number"
+                              },
+                              "content_hash": {
+                                "type": "string"
+                              },
+                              "symbol": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "language": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "knowledge_document_id": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "title": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "snippet": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "repository_id",
+                              "repository_full_name",
+                              "commit_sha",
+                              "path",
+                              "start_line",
+                              "end_line",
+                              "content_hash",
+                              "symbol",
+                              "language",
+                              "knowledge_document_id",
+                              "title",
+                              "snippet",
+                              "score"
+                            ]
+                          }
+                        },
+                        "repositories": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "full_name": {
+                                "type": "string"
+                              },
+                              "commit_sha": {
+                                "type": "string"
+                              },
+                              "results": {
+                                "type": "number"
+                              },
+                              "semantic": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "full_name",
+                              "commit_sha",
+                              "results",
+                              "semantic"
+                            ]
+                          }
+                        },
+                        "skipped_repositories": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "full_name": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "full_name",
+                              "reason"
+                            ]
+                          }
+                        },
+                        "retrieval": {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "hybrid",
+                                "lexical"
+                              ]
+                            },
+                            "repositories_searched": {
+                              "type": "number"
+                            },
+                            "duration_ms": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "repositories_searched",
+                            "duration_ms"
+                          ]
+                        },
+                        "limitations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "query",
+                        "results",
+                        "repositories",
+                        "skipped_repositories",
+                        "retrieval",
+                        "limitations"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceId}/questions": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "summary": "Grounded Q&A over evidence from all indexed repositories of the workspace",
+        "operationId": "post_workspaces_workspaceId_questions",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Value of the anvaya_csrf cookie"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 2000
+                  },
+                  "repository_ids": {
+                    "minItems": 1,
+                    "maxItems": 25,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "local",
+                      "cloud",
+                      "mock"
+                    ]
+                  },
+                  "top_k": {
+                    "default": 8,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  },
+                  "include_knowledge": {
+                    "default": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "question"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "answer": {
+                          "type": "string"
+                        },
+                        "insufficient_evidence": {
+                          "type": "boolean"
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "code",
+                                  "knowledge"
+                                ]
+                              },
+                              "repository_id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "repository_full_name": {
+                                "type": "string"
+                              },
+                              "commit_sha": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "path": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "start_line": {
+                                "type": "number"
+                              },
+                              "end_line": {
+                                "type": "number"
+                              },
+                              "content_hash": {
+                                "type": "string"
+                              },
+                              "symbol": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "language": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "knowledge_document_id": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "title": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "snippet": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "evidence_id": {
+                                "type": "string"
+                              },
+                              "supports": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "repository_id",
+                              "repository_full_name",
+                              "commit_sha",
+                              "path",
+                              "start_line",
+                              "end_line",
+                              "content_hash",
+                              "symbol",
+                              "language",
+                              "knowledge_document_id",
+                              "title",
+                              "snippet",
+                              "score",
+                              "evidence_id",
+                              "supports"
+                            ]
+                          }
+                        },
+                        "limitations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "repositories": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "full_name": {
+                                "type": "string"
+                              },
+                              "commit_sha": {
+                                "type": "string"
+                              },
+                              "results": {
+                                "type": "number"
+                              },
+                              "semantic": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "full_name",
+                              "commit_sha",
+                              "results",
+                              "semantic"
+                            ]
+                          }
+                        },
+                        "skipped_repositories": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "full_name": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "full_name",
+                              "reason"
+                            ]
+                          }
+                        },
+                        "provider": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "cloud",
+                            "mock"
+                          ]
+                        },
+                        "prompt_version": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "data_disclosure": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "data_categories": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "data_categories"
+                          ]
+                        },
+                        "usage": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "input_tokens": {
+                              "type": "number"
+                            },
+                            "output_tokens": {
+                              "type": "number"
+                            },
+                            "duration_ms": {
+                              "type": "number"
+                            },
+                            "schema_repair_attempted": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "input_tokens",
+                            "output_tokens",
+                            "duration_ms",
+                            "schema_repair_attempted"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "answer",
+                        "insufficient_evidence",
+                        "citations",
+                        "limitations",
+                        "repositories",
+                        "skipped_repositories",
+                        "provider",
+                        "model",
+                        "mode",
+                        "prompt_version",
+                        "data_disclosure",
+                        "usage"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceId}/templates": {
+      "get": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Built-in and workspace workflow templates",
+        "operationId": "get_workspaces_workspaceId_templates",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "false",
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "builtin",
+                              "workspace"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "workflow": {
+                            "type": "string",
+                            "enum": [
+                              "change",
+                              "migration_plan"
+                            ]
+                          },
+                          "plan_only": {
+                            "type": "boolean"
+                          },
+                          "task_defaults": {
+                            "type": "object",
+                            "properties": {
+                              "title_prefix": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "description_template": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "labels": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "title_prefix",
+                              "description_template",
+                              "labels"
+                            ]
+                          },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "max_steps": {
+                                "type": "number"
+                              },
+                              "max_input_tokens": {
+                                "type": "number"
+                              },
+                              "max_output_tokens": {
+                                "type": "number"
+                              },
+                              "max_duration_seconds": {
+                                "type": "number"
+                              },
+                              "max_changed_files": {
+                                "type": "number"
+                              },
+                              "max_repair_attempts": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "allowed_profiles": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "planning_guidance": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "version": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "archived"
+                            ]
+                          },
+                          "created_at": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "updated_at": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "id",
+                          "source",
+                          "name",
+                          "description",
+                          "workflow",
+                          "plan_only",
+                          "task_defaults",
+                          "budget",
+                          "allowed_profiles",
+                          "planning_guidance",
+                          "version",
+                          "status",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Create a workspace template (admin+, audited)",
+        "operationId": "post_workspaces_workspaceId_templates",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Value of the anvaya_csrf cookie"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "workflow": {
+                    "type": "string",
+                    "enum": [
+                      "change",
+                      "migration_plan"
+                    ]
+                  },
+                  "task_defaults": {
+                    "default": {
+                      "title_prefix": null,
+                      "description_template": null,
+                      "labels": []
+                    },
+                    "type": "object",
+                    "properties": {
+                      "title_prefix": {
+                        "default": null,
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "description_template": {
+                        "default": null,
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "labels": {
+                        "default": [],
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 50
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "budget": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "max_steps": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 32
+                      },
+                      "max_input_tokens": {
+                        "type": "integer",
+                        "minimum": 512,
+                        "maximum": 200000
+                      },
+                      "max_output_tokens": {
+                        "type": "integer",
+                        "minimum": 128,
+                        "maximum": 32000
+                      },
+                      "max_duration_seconds": {
+                        "type": "integer",
+                        "minimum": 30,
+                        "maximum": 7200
+                      },
+                      "max_changed_files": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100
+                      },
+                      "max_repair_attempts": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 5
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "allowed_profiles": {
+                    "default": null,
+                    "nullable": true,
+                    "maxItems": 6,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "python-compile",
+                        "python-unittest",
+                        "node-syntax",
+                        "node-test",
+                        "npm-test",
+                        "python-pytest"
+                      ]
+                    }
+                  },
+                  "planning_guidance": {
+                    "default": [],
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    }
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "workflow"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "builtin",
+                            "workspace"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "workflow": {
+                          "type": "string",
+                          "enum": [
+                            "change",
+                            "migration_plan"
+                          ]
+                        },
+                        "plan_only": {
+                          "type": "boolean"
+                        },
+                        "task_defaults": {
+                          "type": "object",
+                          "properties": {
+                            "title_prefix": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "description_template": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "labels": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "title_prefix",
+                            "description_template",
+                            "labels"
+                          ]
+                        },
+                        "budget": {
+                          "type": "object",
+                          "properties": {
+                            "max_steps": {
+                              "type": "number"
+                            },
+                            "max_input_tokens": {
+                              "type": "number"
+                            },
+                            "max_output_tokens": {
+                              "type": "number"
+                            },
+                            "max_duration_seconds": {
+                              "type": "number"
+                            },
+                            "max_changed_files": {
+                              "type": "number"
+                            },
+                            "max_repair_attempts": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "allowed_profiles": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "planning_guidance": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "version": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "archived"
+                          ]
+                        },
+                        "created_at": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "updated_at": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "id",
+                        "source",
+                        "name",
+                        "description",
+                        "workflow",
+                        "plan_only",
+                        "task_defaults",
+                        "budget",
+                        "allowed_profiles",
+                        "planning_guidance",
+                        "version",
+                        "status",
+                        "created_at",
+                        "updated_at"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceId}/templates/{templateId}": {
+      "patch": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Update or archive a workspace template (admin+, audited)",
+        "operationId": "patch_workspaces_workspaceId_templates_templateId",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Value of the anvaya_csrf cookie"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "workflow": {
+                    "type": "string",
+                    "enum": [
+                      "change",
+                      "migration_plan"
+                    ]
+                  },
+                  "task_defaults": {
+                    "type": "object",
+                    "properties": {
+                      "title_prefix": {
+                        "default": null,
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "description_template": {
+                        "default": null,
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "labels": {
+                        "default": [],
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 50
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "max_steps": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 32
+                      },
+                      "max_input_tokens": {
+                        "type": "integer",
+                        "minimum": 512,
+                        "maximum": 200000
+                      },
+                      "max_output_tokens": {
+                        "type": "integer",
+                        "minimum": 128,
+                        "maximum": 32000
+                      },
+                      "max_duration_seconds": {
+                        "type": "integer",
+                        "minimum": 30,
+                        "maximum": 7200
+                      },
+                      "max_changed_files": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100
+                      },
+                      "max_repair_attempts": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 5
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "allowed_profiles": {
+                    "nullable": true,
+                    "maxItems": 6,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "python-compile",
+                        "python-unittest",
+                        "node-syntax",
+                        "node-test",
+                        "npm-test",
+                        "python-pytest"
+                      ]
+                    }
+                  },
+                  "planning_guidance": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "archived"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "builtin",
+                            "workspace"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "workflow": {
+                          "type": "string",
+                          "enum": [
+                            "change",
+                            "migration_plan"
+                          ]
+                        },
+                        "plan_only": {
+                          "type": "boolean"
+                        },
+                        "task_defaults": {
+                          "type": "object",
+                          "properties": {
+                            "title_prefix": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "description_template": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "labels": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "title_prefix",
+                            "description_template",
+                            "labels"
+                          ]
+                        },
+                        "budget": {
+                          "type": "object",
+                          "properties": {
+                            "max_steps": {
+                              "type": "number"
+                            },
+                            "max_input_tokens": {
+                              "type": "number"
+                            },
+                            "max_output_tokens": {
+                              "type": "number"
+                            },
+                            "max_duration_seconds": {
+                              "type": "number"
+                            },
+                            "max_changed_files": {
+                              "type": "number"
+                            },
+                            "max_repair_attempts": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "allowed_profiles": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "planning_guidance": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "version": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "archived"
+                          ]
+                        },
+                        "created_at": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "updated_at": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "id",
+                        "source",
+                        "name",
+                        "description",
+                        "workflow",
+                        "plan_only",
+                        "task_defaults",
+                        "budget",
+                        "allowed_profiles",
+                        "planning_guidance",
+                        "version",
+                        "status",
+                        "created_at",
+                        "updated_at"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Archive a workspace template (admin+, audited)",
+        "operationId": "delete_workspaces_workspaceId_templates_templateId",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Value of the anvaya_csrf cookie"
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/repositories/{repositoryId}/questions": {
       "post": {
         "tags": [
@@ -10146,7 +14082,11 @@
                             },
                             "provider": {
                               "nullable": true,
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "anthropic",
+                                "openai_compatible"
+                              ]
                             },
                             "model": {
                               "nullable": true,
@@ -10344,7 +14284,10 @@
                       "provider": {
                         "nullable": true,
                         "type": "string",
-                        "maxLength": 50
+                        "enum": [
+                          "anthropic",
+                          "openai_compatible"
+                        ]
                       },
                       "model": {
                         "nullable": true,
@@ -10434,7 +14377,12 @@
                               "type": "boolean"
                             },
                             "provider": {
-                              "type": "string"
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "anthropic",
+                                "openai_compatible"
+                              ]
                             },
                             "model": {
                               "type": "string"
@@ -11958,6 +15906,10 @@
                       "minLength": 1,
                       "maxLength": 50
                     }
+                  },
+                  "template_key": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$"
                   }
                 },
                 "required": [
@@ -12048,6 +16000,119 @@
                           "type": "string",
                           "format": "date-time",
                           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "template_key": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "template": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "workflow": {
+                              "type": "string",
+                              "enum": [
+                                "change",
+                                "migration_plan"
+                              ]
+                            },
+                            "task_defaults": {
+                              "type": "object",
+                              "properties": {
+                                "title_prefix": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "description_template": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "labels": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "title_prefix",
+                                "description_template",
+                                "labels"
+                              ]
+                            },
+                            "budget": {
+                              "type": "object",
+                              "properties": {
+                                "max_steps": {
+                                  "type": "number"
+                                },
+                                "max_input_tokens": {
+                                  "type": "number"
+                                },
+                                "max_output_tokens": {
+                                  "type": "number"
+                                },
+                                "max_duration_seconds": {
+                                  "type": "number"
+                                },
+                                "max_changed_files": {
+                                  "type": "number"
+                                },
+                                "max_repair_attempts": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "allowed_profiles": {
+                              "nullable": true,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "planning_guidance": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "builtin",
+                                "workspace"
+                              ]
+                            },
+                            "template_id": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "name",
+                            "description",
+                            "workflow",
+                            "task_defaults",
+                            "budget",
+                            "allowed_profiles",
+                            "planning_guidance",
+                            "source",
+                            "template_id",
+                            "version"
+                          ]
                         }
                       },
                       "required": [
@@ -12062,7 +16127,9 @@
                         "status",
                         "labels",
                         "created_at",
-                        "updated_at"
+                        "updated_at",
+                        "template_key",
+                        "template"
                       ]
                     },
                     "meta": {
@@ -12366,6 +16433,119 @@
                               "current_stage",
                               "created_at"
                             ]
+                          },
+                          "template_key": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "template": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "workflow": {
+                                "type": "string",
+                                "enum": [
+                                  "change",
+                                  "migration_plan"
+                                ]
+                              },
+                              "task_defaults": {
+                                "type": "object",
+                                "properties": {
+                                  "title_prefix": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "description_template": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "labels": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "title_prefix",
+                                  "description_template",
+                                  "labels"
+                                ]
+                              },
+                              "budget": {
+                                "type": "object",
+                                "properties": {
+                                  "max_steps": {
+                                    "type": "number"
+                                  },
+                                  "max_input_tokens": {
+                                    "type": "number"
+                                  },
+                                  "max_output_tokens": {
+                                    "type": "number"
+                                  },
+                                  "max_duration_seconds": {
+                                    "type": "number"
+                                  },
+                                  "max_changed_files": {
+                                    "type": "number"
+                                  },
+                                  "max_repair_attempts": {
+                                    "type": "number"
+                                  }
+                                }
+                              },
+                              "allowed_profiles": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "planning_guidance": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "builtin",
+                                  "workspace"
+                                ]
+                              },
+                              "template_id": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "name",
+                              "description",
+                              "workflow",
+                              "task_defaults",
+                              "budget",
+                              "allowed_profiles",
+                              "planning_guidance",
+                              "source",
+                              "template_id",
+                              "version"
+                            ]
                           }
                         },
                         "required": [
@@ -12382,7 +16562,9 @@
                           "created_at",
                           "updated_at",
                           "repository_full_name",
-                          "latest_run"
+                          "latest_run",
+                          "template_key",
+                          "template"
                         ]
                       }
                     },
@@ -12628,6 +16810,119 @@
                             "current_stage",
                             "created_at"
                           ]
+                        },
+                        "template_key": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "template": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "workflow": {
+                              "type": "string",
+                              "enum": [
+                                "change",
+                                "migration_plan"
+                              ]
+                            },
+                            "task_defaults": {
+                              "type": "object",
+                              "properties": {
+                                "title_prefix": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "description_template": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "labels": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "title_prefix",
+                                "description_template",
+                                "labels"
+                              ]
+                            },
+                            "budget": {
+                              "type": "object",
+                              "properties": {
+                                "max_steps": {
+                                  "type": "number"
+                                },
+                                "max_input_tokens": {
+                                  "type": "number"
+                                },
+                                "max_output_tokens": {
+                                  "type": "number"
+                                },
+                                "max_duration_seconds": {
+                                  "type": "number"
+                                },
+                                "max_changed_files": {
+                                  "type": "number"
+                                },
+                                "max_repair_attempts": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "allowed_profiles": {
+                              "nullable": true,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "planning_guidance": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "builtin",
+                                "workspace"
+                              ]
+                            },
+                            "template_id": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "name",
+                            "description",
+                            "workflow",
+                            "task_defaults",
+                            "budget",
+                            "allowed_profiles",
+                            "planning_guidance",
+                            "source",
+                            "template_id",
+                            "version"
+                          ]
                         }
                       },
                       "required": [
@@ -12644,7 +16939,9 @@
                         "created_at",
                         "updated_at",
                         "repository_full_name",
-                        "latest_run"
+                        "latest_run",
+                        "template_key",
+                        "template"
                       ]
                     },
                     "meta": {
@@ -12880,6 +17177,119 @@
                           "type": "string",
                           "format": "date-time",
                           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "template_key": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "template": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "workflow": {
+                              "type": "string",
+                              "enum": [
+                                "change",
+                                "migration_plan"
+                              ]
+                            },
+                            "task_defaults": {
+                              "type": "object",
+                              "properties": {
+                                "title_prefix": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "description_template": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "labels": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "title_prefix",
+                                "description_template",
+                                "labels"
+                              ]
+                            },
+                            "budget": {
+                              "type": "object",
+                              "properties": {
+                                "max_steps": {
+                                  "type": "number"
+                                },
+                                "max_input_tokens": {
+                                  "type": "number"
+                                },
+                                "max_output_tokens": {
+                                  "type": "number"
+                                },
+                                "max_duration_seconds": {
+                                  "type": "number"
+                                },
+                                "max_changed_files": {
+                                  "type": "number"
+                                },
+                                "max_repair_attempts": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "allowed_profiles": {
+                              "nullable": true,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "planning_guidance": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "builtin",
+                                "workspace"
+                              ]
+                            },
+                            "template_id": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "name",
+                            "description",
+                            "workflow",
+                            "task_defaults",
+                            "budget",
+                            "allowed_profiles",
+                            "planning_guidance",
+                            "source",
+                            "template_id",
+                            "version"
+                          ]
                         }
                       },
                       "required": [
@@ -12894,7 +17304,9 @@
                         "status",
                         "labels",
                         "created_at",
-                        "updated_at"
+                        "updated_at",
+                        "template_key",
+                        "template"
                       ]
                     },
                     "meta": {
@@ -14491,6 +18903,45 @@
                             "base_branch",
                             "created_at"
                           ]
+                        },
+                        "template": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "workflow": {
+                              "type": "string",
+                              "enum": [
+                                "change",
+                                "migration_plan"
+                              ]
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "builtin",
+                                "workspace"
+                              ]
+                            },
+                            "version": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "name",
+                            "workflow",
+                            "source",
+                            "version"
+                          ]
+                        },
+                        "plan_only": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -14523,7 +18974,9 @@
                         "plan_version",
                         "data_disclosure",
                         "approvals",
-                        "pull_request"
+                        "pull_request",
+                        "template",
+                        "plan_only"
                       ]
                     },
                     "meta": {
@@ -16234,6 +20687,79 @@
                               "items": {
                                 "type": "string"
                               }
+                            },
+                            "migration": {
+                              "type": "object",
+                              "properties": {
+                                "affected_areas": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "area": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      },
+                                      "files": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "evidence_ids": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "area",
+                                      "description",
+                                      "files",
+                                      "evidence_ids"
+                                    ]
+                                  }
+                                },
+                                "prerequisites": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "step_rollback": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "step_id": {
+                                        "type": "string"
+                                      },
+                                      "rollback": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "step_id",
+                                      "rollback"
+                                    ]
+                                  }
+                                },
+                                "rollback_strategy": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "affected_areas",
+                                "prerequisites",
+                                "step_rollback",
+                                "rollback_strategy"
+                              ]
                             }
                           },
                           "required": [
@@ -16383,6 +20909,47 @@
                             "subject_hash",
                             "created_at"
                           ]
+                        },
+                        "migration_evidence": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "start_line": {
+                                "type": "number"
+                              },
+                              "end_line": {
+                                "type": "number"
+                              },
+                              "commit_sha": {
+                                "type": "string"
+                              },
+                              "content_hash": {
+                                "type": "string"
+                              },
+                              "symbol": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "path",
+                              "start_line",
+                              "end_line",
+                              "commit_sha",
+                              "symbol"
+                            ]
+                          }
+                        },
+                        "plan_only": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -16395,7 +20962,9 @@
                         "editable",
                         "plan",
                         "investigation",
-                        "approval"
+                        "approval",
+                        "migration_evidence",
+                        "plan_only"
                       ]
                     },
                     "meta": {
@@ -17495,6 +22064,11 @@
                                 "type": "string",
                                 "format": "date-time",
                                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              "test_selection": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {}
                               }
                             },
                             "required": [
@@ -17510,7 +22084,8 @@
                               "output_truncated",
                               "stdout_excerpt",
                               "stderr_excerpt",
-                              "created_at"
+                              "created_at",
+                              "test_selection"
                             ]
                           }
                         }
@@ -18960,6 +23535,101 @@
               "minLength": 1,
               "maxLength": 500
             }
+          },
+          "migration": {
+            "type": "object",
+            "properties": {
+              "affected_areas": {
+                "default": [],
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "area": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "files": {
+                      "default": [],
+                      "maxItems": 16,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "evidence_ids": {
+                      "default": [],
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  "required": [
+                    "area",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "prerequisites": {
+                "default": [],
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "step_rollback": {
+                "default": [],
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "step_id": {
+                      "type": "string",
+                      "pattern": "^step-\\d{1,3}$"
+                    },
+                    "rollback": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "step_id",
+                    "rollback"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "rollback_strategy": {
+                "default": [],
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": [

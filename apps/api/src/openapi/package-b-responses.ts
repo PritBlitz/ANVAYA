@@ -159,9 +159,8 @@ const migrationSection = z.object({
 });
 const evidenceRef = z.object({ id: z.string(), path: z.string(), start_line: z.number(), end_line: z.number(), commit_sha: z.string(), content_hash: z.string().optional(), symbol: z.string().nullable() });
 
-type Obj = z.ZodObject;
-const extendObject = (s: ZodType | undefined, shape: Record<string, ZodType>): ZodType | undefined => (s instanceof z.ZodObject ? (s as Obj).extend(shape) : s);
-const extendItems = (s: ZodType | undefined, shape: Record<string, ZodType>): ZodType | undefined => (s instanceof z.ZodArray && s.element instanceof z.ZodObject ? z.array((s.element as Obj).extend(shape)) : s);
+const extendObject = (s: ZodType | undefined, shape: Record<string, ZodType>): ZodType | undefined => (s instanceof z.ZodObject ? (s).extend(shape) : s);
+const extendItems = (s: ZodType | undefined, shape: Record<string, ZodType>): ZodType | undefined => (s instanceof z.ZodArray && s.element instanceof z.ZodObject ? z.array((s.element).extend(shape)) : s);
 
 /** Adds package-B fields to the sample-derived schemas of existing routes. */
 export function extendExistingResponses(responses: Record<string, ZodType>): Record<string, ZodType> {
@@ -172,21 +171,21 @@ export function extendExistingResponses(responses: Record<string, ZodType>): Rec
   out['get /runs/{runId}'] = extendObject(out['get /runs/{runId}'], { template: runTemplate.nullable(), plan_only: z.boolean() })!;
   const plan = out['get /runs/{runId}/plan'];
   if (plan instanceof z.ZodObject) {
-    const shape = (plan as Obj).shape as Record<string, ZodType>;
-    const inner = shape.plan instanceof z.ZodObject ? (shape.plan as Obj).extend({ migration: migrationSection.optional() }) : shape.plan!;
-    out['get /runs/{runId}/plan'] = (plan as Obj).extend({ plan: inner, migration_evidence: z.array(evidenceRef), plan_only: z.boolean() });
+    const shape = (plan).shape as Record<string, ZodType>;
+    const inner = shape.plan instanceof z.ZodObject ? (shape.plan).extend({ migration: migrationSection.optional() }) : shape.plan!;
+    out['get /runs/{runId}/plan'] = (plan).extend({ plan: inner, migration_evidence: z.array(evidenceRef), plan_only: z.boolean() });
   }
   const ver = out['get /runs/{runId}/verification'];
   if (ver instanceof z.ZodObject) {
-    const shape = (ver as Obj).shape as Record<string, ZodType>;
-    out['get /runs/{runId}/verification'] = (ver as Obj).extend({ results: extendItems(shape.results, { test_selection: z.record(z.string(), z.unknown()).nullable() })! });
+    const shape = (ver).shape as Record<string, ZodType>;
+    out['get /runs/{runId}/verification'] = (ver).extend({ results: extendItems(shape.results, { test_selection: z.record(z.string(), z.unknown()).nullable() })! });
   }
   const providerEnum = z.enum(HOSTED_PROVIDERS).nullable();
   for (const k of ['get /workspaces/{workspaceId}/ai-policy', 'patch /workspaces/{workspaceId}/ai-policy']) {
     const s = out[k];
     if (s instanceof z.ZodObject) {
-      const cloud = ((s as Obj).shape as Record<string, ZodType>).cloud;
-      if (cloud instanceof z.ZodObject) out[k] = (s as Obj).extend({ cloud: (cloud as Obj).extend({ provider: providerEnum }) });
+      const cloud = ((s).shape as Record<string, ZodType>).cloud;
+      if (cloud instanceof z.ZodObject) out[k] = (s).extend({ cloud: (cloud).extend({ provider: providerEnum }) });
     }
   }
   return out;
