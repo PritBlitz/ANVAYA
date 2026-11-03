@@ -63,13 +63,31 @@ export interface RetrievalResult {
 }
 
 /** Splits identifiers the same way the index does (camelCase, snake_case, paths). */
+/**
+ * English function words and question words. Terms are prefix-matched (`term:*`), so keeping them
+ * lets "to" match every `token`/`toString` and "is" every `isValid`, drowning the words that carry
+ * meaning; the retrieval benchmark (docs/evaluations/retrieval.md) measured this on natural-language
+ * questions. Identifiers are unaffected: they are split into parts before this filter.
+ */
+const STOPWORDS = new Set(
+  (
+    'a an and are as at be been being but by can could did do does doing for from had has have how if in into is it its ' +
+    'may might must my no not of on or our should so such than that the their them then there these they this those to ' +
+    'too us was we were what when where which while who whom why will with would you your about after before during each ' +
+    'get gets got any all also both either neither just only own same some very via vs'
+  ).split(' '),
+);
+
 export function lexicalTerms(query: string): string[] {
   const spaced = query.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_./\\-]/g, ' ');
   const terms = spaced
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length >= 2 && t.length <= 64);
-  return [...new Set(terms)].slice(0, 32);
+  const unique = [...new Set(terms)];
+  const meaningful = unique.filter((t) => !STOPWORDS.has(t));
+  // A query made only of function words (e.g. "how is it") keeps them rather than matching nothing.
+  return (meaningful.length > 0 ? meaningful : unique).slice(0, 32);
 }
 
 /**
