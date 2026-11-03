@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module.js';
 import { AppConfig } from '../config/config.js';
 import { ExecutionPipeline } from '../execution/execution-pipeline.js';
+import { GvisorSandboxDriver } from '../execution/gvisor-sandbox.js';
 import { DockerSandboxDriver, SandboxDriver } from '../execution/sandbox.js';
 import { WorkspaceManager } from '../execution/workspace.js';
 import { IndexingModule } from '../indexing/indexing.module.js';
@@ -22,13 +23,17 @@ import { TasksService } from './tasks.service.js';
     StageToolkit,
     OrchestratorService,
     WorkspaceManager,
-    { provide: SandboxDriver, useClass: DockerSandboxDriver },
+    {
+      provide: SandboxDriver,
+      inject: [AppConfig],
+      useFactory: (config: AppConfig) => (config.env.EXECUTION_DRIVER === 'gvisor' ? new GvisorSandboxDriver(config) : new DockerSandboxDriver(config)),
+    },
     ExecutionPipeline,
     UnavailableExecutionStages,
     {
       provide: ExecutionStages,
       inject: [AppConfig, ExecutionPipeline, UnavailableExecutionStages],
-      useFactory: (config: AppConfig, pipeline: ExecutionPipeline, unavailable: UnavailableExecutionStages) => (config.env.EXECUTION_DRIVER === 'docker' ? pipeline : unavailable),
+      useFactory: (config: AppConfig, pipeline: ExecutionPipeline, unavailable: UnavailableExecutionStages) => (config.env.EXECUTION_DRIVER === 'disabled' ? unavailable : pipeline),
     },
   ],
   exports: [RunEventsService, RunTransitionsService, RunsService, TasksService, StageToolkit, OrchestratorService, SandboxDriver, WorkspaceManager],

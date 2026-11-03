@@ -54,8 +54,9 @@ export const envSchema = z
     LOCAL_FIXTURE_ROOT: z.string().optional(),
 
     // Execution plane. 'disabled' makes approved runs fail explicitly (EXECUTION_NOT_AVAILABLE).
-    // 'docker' is a hardened-container driver for development; production requires a microVM runtime.
-    EXECUTION_DRIVER: z.enum(['disabled', 'docker']).default('disabled'),
+    // 'docker' is a hardened-container driver for development; 'gvisor' runs checks under gVisor
+    // (runsc), the approved production boundary (SECURITY §7).
+    EXECUTION_DRIVER: z.enum(['disabled', 'docker', 'gvisor']).default('disabled'),
     WORKSPACES_DIR: z.string().default('./workspaces'),
     SANDBOX_DOCKER_BIN: z.string().default('docker'),
     SANDBOX_MEMORY_MB: z.coerce.number().int().min(128).max(16384).default(1024),
@@ -70,6 +71,34 @@ export const envSchema = z
     /** Optional HTTP(S) proxy for the fetch step (egress allowlist). */
     SANDBOX_FETCH_PROXY: z.url().optional(),
     SANDBOX_FETCH_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
+    /** gVisor driver: the runsc binary, extra leading argv (e.g. a wsl wrapper in development), and its directories. */
+    SANDBOX_RUNSC_BIN: z.string().default('runsc'),
+    SANDBOX_RUNSC_PREFIX_ARGS: z
+      .string()
+      .default('[]')
+      .transform((v, ctx) => {
+        try {
+          const parsed: unknown = JSON.parse(v);
+          if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) return parsed;
+        } catch {
+          /* reported below */
+        }
+        ctx.addIssue({ code: 'custom', message: 'must be a JSON array of strings' });
+        return z.NEVER;
+      }),
+    /** One provisioned root filesystem per image (scripts/sandbox/prepare-rootfs.sh). */
+    SANDBOX_ROOTFS_DIR: z.string().default('./sandbox/rootfs'),
+    /** Per-run OCI bundles and runsc state. */
+    SANDBOX_STATE_DIR: z.string().default('./sandbox/run'),
+    SANDBOX_GVISOR_PLATFORM: z.enum(['systrap', 'ptrace', 'kvm']).default('systrap'),
+    SANDBOX_RUNSC_ROOTLESS: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    /** 'wsl' maps Windows paths (Z:\x) to /mnt/z/x for a development worker that runs runsc inside WSL. */
+    SANDBOX_PATH_STYLE: z.enum(['native', 'wsl']).default('native'),
+    /** The fetch step's network under gVisor. Refused unless 'host' (pair it with SANDBOX_FETCH_PROXY). */
+    SANDBOX_GVISOR_FETCH_NETWORK: z.enum(['disabled', 'host']).default('disabled'),
 
     /** Enables GET /api/v1/internal/metrics (bearer token). Unset = disabled. */
     METRICS_TOKEN: z.string().min(16).optional(),
@@ -89,6 +118,12 @@ export const envSchema = z
       }
       if (env.REPOSITORY_SOURCE !== 'github') {
         ctx.addIssue({ code: 'custom', path: ['REPOSITORY_SOURCE'], message: 'local_fixture is not allowed in production' });
+      }
+      if (env.EXECUTION_DRIVER === 'gvisor' && env.SANDBOX_PATH_STYLE !== 'native') {
+        ctx.addIssue({ code: 'custom', path: ['SANDBOX_PATH_STYLE'], message: 'the WSL path mapping is for development workers only' });
+      }
+      if (env.EXECUTION_DRIVER === 'gvisor' && env.SANDBOX_GVISOR_FETCH_NETWORK === 'host' && !env.SANDBOX_FETCH_PROXY) {
+        ctx.addIssue({ code: 'custom', path: ['SANDBOX_FETCH_PROXY'], message: 'a networked fetch step under gVisor requires an egress-allowlisting proxy in production' });
       }
       if (env.EXECUTION_DRIVER === 'docker' && process.env.ANVAYA_ALLOW_CONTAINER_SANDBOX_IN_PRODUCTION !== 'true') {
         ctx.addIssue({ code: 'custom', path: ['EXECUTION_DRIVER'], message: 'container sandbox is not an approved production boundary (SECURITY §7)' });

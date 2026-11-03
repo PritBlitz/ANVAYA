@@ -160,62 +160,92 @@ export class DockerSandboxDriver extends SandboxDriver {
   }
 
   private exec(name: string, label: string, args: string[], opts: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult> {
-    const limit = this.config.env.SANDBOX_OUTPUT_LIMIT_BYTES;
-    const started = Date.now();
-    const profile = { id: label };
-    return new Promise<SandboxResult>((resolve) => {
-      // argv array, no shell: nothing here is interpolated into a command line.
-      const child = spawn(this.config.env.SANDBOX_DOCKER_BIN, args, { shell: false, windowsHide: true, env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' } });
-      const out: Buffer[] = [];
-      const err: Buffer[] = [];
-      let outBytes = 0;
-      let errBytes = 0;
-      let truncated = false;
-      let timedOut = false;
-      let settled = false;
-      const collect = (chunks: Buffer[], size: number, c: Buffer): number => {
-        const room = limit - size;
-        if (room <= 0) {
-          truncated = true;
-          return size;
-        }
-        if (c.length > room) truncated = true;
-        chunks.push(c.subarray(0, room));
-        return size + Math.min(c.length, room);
-      };
-      child.stdout.on('data', (c: Buffer) => (outBytes = collect(out, outBytes, c)));
-      child.stderr.on('data', (c: Buffer) => (errBytes = collect(err, errBytes, c)));
-      const kill = () => {
-        spawn(this.config.env.SANDBOX_DOCKER_BIN, ['kill', name], { shell: false, windowsHide: true }).on('error', () => undefined);
-      };
-      const timer = setTimeout(() => {
-        timedOut = true;
-        kill();
-      }, opts.timeoutSeconds * 1000);
-      const onAbort = () => kill();
-      opts.signal?.addEventListener('abort', onAbort, { once: true });
-      const finish = (exitCode: number | null, error: string | null) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        opts.signal?.removeEventListener('abort', onAbort);
-        const result: SandboxResult = {
-          exitCode,
-          timedOut,
-          durationMs: Date.now() - started,
-          stdout: redactText(Buffer.concat(out).toString('utf8')),
-          stderr: redactText(Buffer.concat(err).toString('utf8')),
-          truncated,
-          error,
-        };
-        log.info({ profile: profile.id, exit_code: exitCode, timed_out: timedOut, duration_ms: result.durationMs, truncated }, 'sandbox finished');
-        metrics.sandboxRuns.inc({ profile: profile.id, status: error ? 'error' : timedOut ? 'timed_out' : exitCode === 0 ? 'passed' : 'failed' });
-        metrics.sandboxDuration.observe({ profile: profile.id }, result.durationMs / 1000);
-        resolve(result);
-      };
-      child.on('error', (e) => finish(null, `sandbox driver failed to start: ${e.message}`));
+    const bin = this.config.env.SANDBOX_DOCKER_BIN;
+    return runBounded({
+      label,
+      bin,
+      args,
+      outputLimit: this.config.env.SANDBOX_OUTPUT_LIMIT_BYTES,
+      timeoutSeconds: opts.timeoutSeconds,
+      signal: opts.signal,
+      kill: () => spawn(bin, ['kill', name], { shell: false, windowsHide: true }).on('error', () => undefined),
       // docker exits 125-127 for its own failures (daemon, image, command not found).
-      child.on('close', (code) => finish(code, code !== null && code >= 125 && code <= 127 && !timedOut ? `container runtime error (exit ${code})` : null));
+      runtimeError: (code) => (code >= 125 && code <= 127 ? `container runtime error (exit ${code})` : null),
     });
   }
+}
+
+export interface BoundedRun {
+  /** Profile id or step label, for logs and metrics. */
+  label: string;
+  bin: string;
+  args: readonly string[];
+  outputLimit: number;
+  timeoutSeconds: number;
+  signal?: AbortSignal;
+  /** Stops the sandbox (timeout or cancellation). Must not throw. */
+  kill: () => void;
+  /** Maps a runtime's own exit codes to an infrastructure error; null = the profile's own exit. */
+  runtimeError: (code: number) => string | null;
+  /** Runs once the process has exited, before resolving (e.g. delete runtime state). */
+  cleanup?: () => Promise<void>;
+}
+
+/**
+ * Runs a sandbox runtime process and collects bounded, redacted output. Shared by every driver
+ * so output caps, timeout, cancellation, redaction and metrics behave identically.
+ */
+export function runBounded(r: BoundedRun): Promise<SandboxResult> {
+  const started = Date.now();
+  return new Promise<SandboxResult>((resolve) => {
+    // argv array, no shell: nothing here is interpolated into a command line.
+    const child = spawn(r.bin, r.args, { shell: false, windowsHide: true, env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' } });
+    const out: Buffer[] = [];
+    const err: Buffer[] = [];
+    let outBytes = 0;
+    let errBytes = 0;
+    let truncated = false;
+    let timedOut = false;
+    let settled = false;
+    const collect = (chunks: Buffer[], size: number, c: Buffer): number => {
+      const room = r.outputLimit - size;
+      if (room <= 0) {
+        truncated = true;
+        return size;
+      }
+      if (c.length > room) truncated = true;
+      chunks.push(c.subarray(0, room));
+      return size + Math.min(c.length, room);
+    };
+    child.stdout.on('data', (c: Buffer) => (outBytes = collect(out, outBytes, c)));
+    child.stderr.on('data', (c: Buffer) => (errBytes = collect(err, errBytes, c)));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      r.kill();
+    }, r.timeoutSeconds * 1000);
+    const onAbort = () => r.kill();
+    r.signal?.addEventListener('abort', onAbort, { once: true });
+    const finish = async (exitCode: number | null, error: string | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      r.signal?.removeEventListener('abort', onAbort);
+      await r.cleanup?.().catch((e: unknown) => log.warn({ profile: r.label, err: e instanceof Error ? e.message : String(e) }, 'sandbox cleanup failed'));
+      const result: SandboxResult = {
+        exitCode,
+        timedOut,
+        durationMs: Date.now() - started,
+        stdout: redactText(Buffer.concat(out).toString('utf8')),
+        stderr: redactText(Buffer.concat(err).toString('utf8')),
+        truncated,
+        error,
+      };
+      log.info({ profile: r.label, exit_code: exitCode, timed_out: timedOut, duration_ms: result.durationMs, truncated }, 'sandbox finished');
+      metrics.sandboxRuns.inc({ profile: r.label, status: error ? 'error' : timedOut ? 'timed_out' : exitCode === 0 ? 'passed' : 'failed' });
+      metrics.sandboxDuration.observe({ profile: r.label }, result.durationMs / 1000);
+      resolve(result);
+    };
+    child.on('error', (e) => void finish(null, `sandbox driver failed to start: ${e.message}`));
+    child.on('close', (code) => void finish(code, code !== null && !timedOut ? r.runtimeError(code) : null));
+  });
 }
