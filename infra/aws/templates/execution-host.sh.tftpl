@@ -1,0 +1,102 @@
+#!/bin/bash
+# Boot script for an Anvaya gVisor execution host (rendered by Terraform; see execution.tf).
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -q
+apt-get install -y -q ca-certificates curl gnupg unzip nfs-common docker.io jq
+
+# --- gVisor from its signed apt repository ---
+curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" > /etc/apt/sources.list.d/gvisor.list
+# --- Node.js 22 from NodeSource's signed repository ---
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg
+echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+apt-get update -q
+apt-get install -y -q runsc nodejs amazon-efs-utils || apt-get install -y -q runsc nodejs
+
+# --- AWS CLI v2 (secrets, ECR login) ---
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscli.zip
+unzip -q /tmp/awscli.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscli.zip
+
+# --- Unprivileged worker user: may run only runsc as root, nothing else ---
+id anvaya >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/anvaya --shell /usr/sbin/nologin anvaya
+echo 'anvaya ALL=(root) NOPASSWD: /usr/bin/runsc' > /etc/sudoers.d/anvaya-runsc
+chmod 0440 /etc/sudoers.d/anvaya-runsc
+
+# --- Shared artifact storage (EFS over TLS, IAM-authorised access point) ---
+mkdir -p /mnt/storage
+mount -t efs -o tls,iam,accesspoint=${efs_access} ${efs_id}:/ /mnt/storage || \
+  mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600 ${efs_id}.efs.${region}.amazonaws.com:/ /mnt/storage
+
+# --- Worker application, copied out of the API image (pure JS/WASM) ---
+aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${ecr_registry}
+docker pull ${api_image}
+cid=$(docker create ${api_image})
+rm -rf /opt/anvaya && mkdir -p /opt/anvaya
+docker cp "$cid:/app" /opt/anvaya/app
+docker rm -f "$cid"
+chown -R root:root /opt/anvaya && chmod -R a+rX,go-w /opt/anvaya
+
+# --- Sandbox root filesystems (digest-pinned images; the worker never pulls images) ---
+install -d -m 0755 /var/lib/anvaya/rootfs /var/lib/anvaya/sandbox /var/lib/anvaya/workspaces
+sh /opt/anvaya/app/scripts/sandbox/prepare-rootfs.sh /var/lib/anvaya/rootfs ${sandbox_images} || {
+  # The API image does not ship scripts/; fall back to the same steps inline.
+  for image in ${sandbox_images}; do
+    name=$(printf '%s' "$image" | sed 's/[^A-Za-z0-9._-]/_/g')
+    docker pull -q "$image" >/dev/null
+    c=$(docker create "$image" /bin/true)
+    mkdir -p "/var/lib/anvaya/rootfs/$name"
+    docker export "$c" | tar -x -C "/var/lib/anvaya/rootfs/$name" --no-same-owner --exclude='dev/*'
+    docker rm -f "$c" >/dev/null
+    chmod -R a+rX,go-w "/var/lib/anvaya/rootfs/$name"
+  done
+}
+chown anvaya:anvaya /var/lib/anvaya/sandbox /var/lib/anvaya/workspaces
+
+# --- Configuration: plain settings, then secrets resolved from Secrets Manager at boot ---
+install -d -m 0750 -o root -g anvaya /etc/anvaya
+cat > /etc/anvaya/worker.env <<'ENV'
+%{ for k, v in env ~}
+${k}=${v}
+%{ endfor ~}
+WORKSPACES_DIR=/var/lib/anvaya/workspaces
+SANDBOX_RUNSC_BIN=sudo
+SANDBOX_RUNSC_PREFIX_ARGS=["-n","/usr/bin/runsc"]
+SANDBOX_ROOTFS_DIR=/var/lib/anvaya/rootfs
+SANDBOX_STATE_DIR=/var/lib/anvaya/sandbox
+ENV
+%{ for k, ref in secrets ~}
+printf '%s=%s\n' '${k}' "$(aws secretsmanager get-secret-value --region ${region} --secret-id '${replace(ref, "/:password::$/", "")}' --query SecretString --output text | %{ if length(regexall(":password::$", ref)) > 0 ~}jq -r .password%{ else ~}cat%{ endif ~})" >> /etc/anvaya/worker.env
+%{ endfor ~}
+chown root:anvaya /etc/anvaya/worker.env && chmod 0640 /etc/anvaya/worker.env
+
+cat > /etc/systemd/system/anvaya-worker.service <<'UNIT'
+[Unit]
+Description=Anvaya worker (orchestration + gVisor verification)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=anvaya
+Group=anvaya
+WorkingDirectory=/opt/anvaya/app
+EnvironmentFile=/etc/anvaya/worker.env
+ExecStart=/usr/bin/node dist/main.worker.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/anvaya /mnt/storage
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+# NoNewPrivileges must stay off for the single sudo -> runsc transition; everything else is locked down.
+
+systemctl daemon-reload
+systemctl enable --now anvaya-worker
