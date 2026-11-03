@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { VerificationProfile } from '../src/execution/profiles.js';
+import { AppConfig } from '../src/config/config.js';
+import { profileById, type VerificationProfile } from '../src/execution/profiles.js';
 import { SandboxDriver, type SandboxResult } from '../src/execution/sandbox.js';
 import { WorkspaceManager } from '../src/execution/workspace.js';
 import { OrchestratorService } from '../src/runs/orchestrator.service.js';
@@ -366,6 +367,67 @@ describe('execution, verification, review and pull-request handoff', () => {
       expect((await status(run)).status).toBe('awaiting_pr_approval');
       await as(member, 'post', `/runs/${run}/pull-request`, { idempotencyKey: `pr-${randomUUID()}` }).send({ title: 'Fix' }).expect(201);
       expect((await status(run)).status).toBe('completed');
+    });
+  });
+
+  describe('dependency profiles (B-4)', () => {
+    const pytest = profileById('python-pytest')!;
+    const spec = pytest.dependencies!;
+    const originalPrepare = spec.prepare;
+    let env: { SANDBOX_DEPENDENCY_FETCH: string };
+
+    beforeAll(async () => {
+      env = app.get(AppConfig).env;
+      env.SANDBOX_DEPENDENCY_FETCH = 'enabled';
+      await as(owner, 'patch', `/repositories/${repo}`).send({ settings: { verification_profiles: ['python-pytest'] } }).expect(200);
+    });
+    afterAll(async () => {
+      env.SANDBOX_DEPENDENCY_FETCH = 'disabled';
+      spec.prepare = originalPrepare;
+      await as(owner, 'patch', `/repositories/${repo}`).send({ settings: { verification_profiles: [] } }).expect(200);
+    });
+
+    it('fetches once, then runs the profile offline with the dependencies mounted read-only', async () => {
+      spec.prepare = async () => ({ ok: true, stage: [] });
+      const driver = app.get(SandboxDriver);
+      const fetches: string[] = [];
+      driver.fetch = async (_s, _staged, _w, depsDir) => {
+        fetches.push(depsDir);
+        return result(0, { stdout: 'installed' });
+      };
+      let mounted: { dir: string; mount: string } | undefined;
+      sandboxImpl = async (p, _d, o) => {
+        mounted = o.dependencies ? { dir: o.dependencies.dir, mount: o.dependencies.spec.runMount } : undefined;
+        return result(0, { stdout: '1 passed' });
+      };
+      const run = await toPrApproval();
+      expect((await status(run)).status).toBe('awaiting_pr_approval');
+      expect(fetches).toHaveLength(1);
+      expect(fetches[0]).toMatch(/deps.pip$/);
+      expect(mounted).toEqual({ dir: fetches[0], mount: '/deps' });
+      const v = (await as(viewer, 'get', `/runs/${run}/verification`).expect(200)).body.data;
+      expect(v.results.map((r: { profile_id: string; status: string }) => `${r.profile_id}:${r.status}`)).toEqual(['python-pytest:passed']);
+      await as(member, 'post', `/runs/${run}/pr-approval`).send({ decision: 'rejected', comment: 'test only' }).expect(200);
+    });
+
+    it('reports a refused manifest as skipped with the reason and never fetches', async () => {
+      spec.prepare = async () => ({ ok: false, reason: 'requirements.txt: direct URL or VCS requirements are not allowed' });
+      const driver = app.get(SandboxDriver);
+      let fetched = false;
+      driver.fetch = async () => {
+        fetched = true;
+        return result(0);
+      };
+      sandboxImpl = async () => {
+        throw new Error('profile must not run without its dependencies');
+      };
+      const run = await toPrApproval();
+      expect(fetched).toBe(false);
+      expect((await status(run)).status).toBe('awaiting_pr_approval');
+      const v = (await as(viewer, 'get', `/runs/${run}/verification`).expect(200)).body.data;
+      expect(v.results[0]).toMatchObject({ profile_id: 'python-pytest', status: 'skipped' });
+      expect(v.summary.passed).toBe(0);
+      await as(member, 'post', `/runs/${run}/pr-approval`).send({ decision: 'rejected', comment: 'test only' }).expect(200);
     });
   });
 

@@ -5,6 +5,7 @@ import { logger } from '../common/logger.js';
 import { metrics } from '../common/metrics.js';
 import { redactText } from '../common/redact.js';
 import { AppConfig } from '../config/config.js';
+import type { DependencySpec } from './dependencies.js';
 import type { VerificationProfile } from './profiles.js';
 
 const log = logger('sandbox');
@@ -20,8 +21,28 @@ export interface SandboxResult {
   error: string | null;
 }
 
+export interface RunOptions {
+  timeoutSeconds: number;
+  signal?: AbortSignal;
+  /** Installed dependencies for a dependency profile, mounted read-only (B-4). */
+  dependencies?: { spec: DependencySpec; dir: string };
+}
+
 export abstract class SandboxDriver {
-  abstract run(profile: VerificationProfile, workspaceDir: string, opts: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult>;
+  abstract run(profile: VerificationProfile, workspaceDir: string, opts: RunOptions): Promise<SandboxResult>;
+  /** Networked dependency download that never executes repository code (B-4). */
+  abstract fetch(spec: DependencySpec, staged: readonly string[], workspaceDir: string, depsDir: string, opts: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult>;
+}
+
+interface ContainerSpec {
+  label: string;
+  image: string;
+  argv: readonly string[];
+  network: string;
+  mounts: string[];
+  workdir: string;
+  env: readonly string[];
+  tmpfsMb: number;
 }
 
 /**
@@ -40,7 +61,45 @@ export class DockerSandboxDriver extends SandboxDriver {
     super();
   }
 
-  buildArgs(name: string, profile: VerificationProfile, workspaceDir: string): string[] {
+  buildArgs(name: string, profile: VerificationProfile, workspaceDir: string, deps?: RunOptions['dependencies']): string[] {
+    return this.containerArgs(name, {
+      label: profile.id,
+      image: profile.image,
+      argv: profile.argv,
+      network: 'none',
+      mounts: [`type=bind,src=${workspaceDir},dst=/workspace`, ...(deps ? [`type=bind,src=${deps.dir},dst=${deps.spec.runMount},readonly`] : [])],
+      workdir: '/workspace',
+      env: deps?.spec.runEnv ?? [],
+      tmpfsMb: 64,
+    });
+  }
+
+  /**
+   * The fetch container: same hardening, but with egress, the workspace read-only and only
+   * the dependency directory writable. Registry, script and proxy settings come from the
+   * environment (which outranks repository .npmrc / pip.conf); install scripts and sdists
+   * are disabled so no repository or package code runs.
+   */
+  buildFetchArgs(name: string, spec: DependencySpec, staged: readonly string[], workspaceDir: string, depsDir: string): string[] {
+    const e = this.config.env;
+    const proxy = e.SANDBOX_FETCH_PROXY ? [`HTTPS_PROXY=${e.SANDBOX_FETCH_PROXY}`, `HTTP_PROXY=${e.SANDBOX_FETCH_PROXY}`, `https_proxy=${e.SANDBOX_FETCH_PROXY}`, `http_proxy=${e.SANDBOX_FETCH_PROXY}`] : [];
+    const ecosystemEnv =
+      spec.ecosystem === 'npm'
+        ? ['npm_config_registry=https://registry.npmjs.org/', 'npm_config_ignore_scripts=true', 'npm_config_cache=/tmp/npm-cache', 'npm_config_audit=false', 'npm_config_fund=false', 'npm_config_userconfig=/tmp/no-user-npmrc', 'npm_config_globalconfig=/tmp/no-global-npmrc']
+        : ['PIP_CONFIG_FILE=/dev/null', 'PIP_NO_CACHE_DIR=1', 'PIP_ONLY_BINARY=:all:'];
+    return this.containerArgs(name, {
+      label: `fetch-${spec.ecosystem}`,
+      image: spec.image,
+      argv: spec.fetchArgv(staged),
+      network: e.SANDBOX_FETCH_NETWORK,
+      mounts: [`type=bind,src=${workspaceDir},dst=/workspace,readonly`, `type=bind,src=${depsDir},dst=${spec.fetchMount}`],
+      workdir: spec.fetchWorkdir,
+      env: [...ecosystemEnv, ...proxy],
+      tmpfsMb: 512,
+    });
+  }
+
+  private containerArgs(name: string, c: ContainerSpec): string[] {
     const e = this.config.env;
     return [
       'run',
@@ -48,10 +107,10 @@ export class DockerSandboxDriver extends SandboxDriver {
       '--name',
       name,
       '--network',
-      'none',
+      c.network,
       '--read-only',
       '--tmpfs',
-      '/tmp:rw,noexec,nosuid,nodev,size=64m',
+      `/tmp:rw,noexec,nosuid,nodev,size=${c.tmpfsMb}m`,
       '--cap-drop',
       'ALL',
       '--security-opt',
@@ -70,10 +129,9 @@ export class DockerSandboxDriver extends SandboxDriver {
       'fsize=104857600:104857600',
       '--user',
       '65534:65534',
-      '--mount',
-      `type=bind,src=${workspaceDir},dst=/workspace`,
+      ...c.mounts.flatMap((m) => ['--mount', m]),
       '--workdir',
-      '/workspace',
+      c.workdir,
       // Fixed, minimal environment. Nothing from the host is passed through.
       '--env',
       'HOME=/tmp',
@@ -83,18 +141,28 @@ export class DockerSandboxDriver extends SandboxDriver {
       'PYTHONDONTWRITEBYTECODE=1',
       '--env',
       'NODE_OPTIONS=--max-old-space-size=512',
+      ...c.env.flatMap((v) => ['--env', v]),
       '--label',
       'anvaya.sandbox=1',
-      profile.image,
-      ...profile.argv,
+      c.image,
+      ...c.argv,
     ];
   }
 
-  async run(profile: VerificationProfile, workspaceDir: string, opts: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult> {
-    const limit = this.config.env.SANDBOX_OUTPUT_LIMIT_BYTES;
+  async run(profile: VerificationProfile, workspaceDir: string, opts: RunOptions): Promise<SandboxResult> {
     const name = `anvaya-sbx-${randomBytes(8).toString('hex')}`;
-    const args = this.buildArgs(name, profile, workspaceDir);
+    return this.exec(name, profile.id, this.buildArgs(name, profile, workspaceDir, opts.dependencies), opts);
+  }
+
+  async fetch(spec: DependencySpec, staged: readonly string[], workspaceDir: string, depsDir: string, opts: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult> {
+    const name = `anvaya-fetch-${randomBytes(8).toString('hex')}`;
+    return this.exec(name, `fetch-${spec.ecosystem}`, this.buildFetchArgs(name, spec, staged, workspaceDir, depsDir), opts);
+  }
+
+  private exec(name: string, label: string, args: string[], opts: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult> {
+    const limit = this.config.env.SANDBOX_OUTPUT_LIMIT_BYTES;
     const started = Date.now();
+    const profile = { id: label };
     return new Promise<SandboxResult>((resolve) => {
       // argv array, no shell: nothing here is interpolated into a command line.
       const child = spawn(this.config.env.SANDBOX_DOCKER_BIN, args, { shell: false, windowsHide: true, env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' } });

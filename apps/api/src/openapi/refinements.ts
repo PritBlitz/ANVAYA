@@ -138,6 +138,11 @@ const RULES: Rule[] = [
   [/disposition/, 'status', FINDING_STATUS],
   [/steps/, '[].status', STEP_STATUS],
   [/verification$/, 'results[].status', VERIFICATION_STATUS],
+  // Skipped results (e.g. dependencies refused) have not run, so these are null.
+  [/verification$/, 'results[].exit_code', z.number().nullable()],
+  [/verification$/, 'results[].duration_ms', z.number().nullable()],
+  [/verification$/, 'results[].stdout_excerpt', z.string().nullable()],
+  [/verification$/, 'results[].stderr_excerpt', z.string().nullable()],
   [/diff$/, 'attempts[].status', PATCH_STATUS],
   [/ai-policy/, 'default_mode', RUN_MODE],
   [/health-check/, 'mode', RUN_MODE],
