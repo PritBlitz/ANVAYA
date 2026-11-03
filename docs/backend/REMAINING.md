@@ -48,6 +48,7 @@ frontend needed. B = backend side, F = frontend side.
 | B-6 | OpenTelemetry tracing | Prometheus metrics and structured logs exist; no traces | ☑ OpenTelemetry for API and worker |
 | B-7 | Code intelligence endpoints (GAP-15) | Symbol explorer and dependency map: symbols are parsed and stored, but there are no endpoints | ☑ symbol explorer and dependency map |
 | B-8 | Q&A history endpoint | The frontend keeps history per browser session only | ☑ per-user history |
+| B-10 | Reconnect a repository in another workspace | `repositories.external_repository_id` is globally `UNIQUE` (DATABASE.md), and disconnecting keeps the row. So once a repo has been connected in one workspace it can never be connected in another, e.g. after moving the GitHub App installation (`REPOSITORY_ALREADY_CONNECTED`). Proposed: unique only while `status = 'connected'` (partial index) plus unique per `(organization_id, external_repository_id)`, history stays with the old workspace, webhook and connect lookups filter on connected rows. Needs a DATABASE.md change first | ☐ decided 2026-11-03: follow-up, not now |
 | B-9 | GitLab / Bitbucket | Out of scope for V1 | — |
 
 ## 4. Frontend items (owned by the frontend session; listed for visibility)
