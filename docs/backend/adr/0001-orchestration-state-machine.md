@@ -22,3 +22,13 @@ The AI service remains a stateless structured-generation backend.
 + Simple to test deterministically (mock provider, in-process orchestrator).
 − Agent "graphs" are code rather than a framework graph; adding stages means adding handlers.
 − Revisit if multi-agent branching/parallelism becomes a product need.
+
+## Addendum (2026-11-03): plan-only runs
+
+Work package B (releases/V1.md) adds a plan-only workflow (the built-in "migration plan" template,
+or a workspace template with `workflow: migration_plan`). Its deliverable is the approved plan, so
+the transition table gains one edge: `awaiting_plan_approval → completed_without_pr`. Only
+`decidePlan` takes it, and only when the run's checkpoint records a plan-only template; every other
+run still moves to `preparing_workspace`. The execution pipeline also refuses plan-only runs
+(`PLAN_ONLY_WORKFLOW`) as a second guard. No other state, gate or approval changes: a plan-only run
+never gets a workspace, a patch, a sandbox or a pull request.

@@ -30,6 +30,13 @@ new migration instead. Tests reset `anvaya_test` and migrate from empty on every
 | Composite FKs `engineering_tasks(repository_id, organization_id)` and `workflow_runs(task_id, organization_id)` | DATABASE §7: cross-tenant relationships are impossible at the DB level |
 | `audit_events` append-only trigger | SECURITY §11: rows cannot be updated/deleted (FK nulling on parent deletion excepted) |
 | `updated_at` triggers | Consistent timestamps |
+| `workflow_templates` (migration 0010) | Workspace-defined workflow templates (admin-managed, audited, versioned, archived not deleted). Built-in templates live in code. `UNIQUE (organization_id, key)` |
+| `engineering_tasks.template_key`, `.template` (0010) | Immutable snapshot of the template a task was created from, so later template edits never change an existing task's policy. A CHECK keeps both set or both null |
+| `verification_runs.test_selection` (0010) | Heuristic test selection that narrowed a profile run (`null` = full profile), recorded next to the deterministic result |
+| Indexes `idx_relationships_target` (partial) and `idx_relationships_snapshot_type` (0010) | Call graph callers and per-snapshot impact analysis |
+
+Migration 0010 is numbered past 0006–0009 so it cannot collide with migrations other work packages
+add in parallel; the migrator orders by file name and does not require contiguous numbers.
 
 ## Semantics kept from the canonical schema (worth knowing)
 

@@ -29,6 +29,18 @@ UI component ─► typed hook (lib/api/queries.ts, TanStack Query)
 - **401:** any 401 redirects to `/login?next=<current path>` (the `next` value is validated against open redirects).
 - **Idempotency keys** are bound to a user intent (one dialog / one form instance) and reused if the user retries the same intent after a network failure; a corrected resubmission after a 4xx gets a new key. PR creation keeps one key per composer so a retry can never open two PRs.
 
+### Work package B endpoints
+
+Templates (`/workspaces/:id/templates`), call graph (`…/symbols/:id/call-graph`), impact
+(`POST /repositories/:id/impact`, `GET /runs/:id/impact`) and workspace knowledge
+(`POST /workspaces/:id/search|questions`) use the wire format as the UI model
+(`types-intelligence.ts`); `contract.ts` checks each against the generated OpenAPI types. Existing
+models gained optional fields: task `template_key`/`template`, run `template`/`plan_only`, plan
+`migration` + `migration_evidence`/`plan_only`, verification result `test_selection`, and
+`ai-policy.cloud.provider` is now `"anthropic" | "openai_compatible" | null`. The fixture adapter
+implements all of them (`fixtures/intelligence.ts` ports the API's impact and call-graph
+algorithms over the fixture repository).
+
 ## 2. Server-Sent Events
 
 `GET /api/v1/runs/:runId/events` via `EventSource` (`withCredentials`). The client listens for every event name in API_SPEC §8, de-duplicates by event `id`, and batches cache invalidation (≈120 ms). **Events are treated as change signals, not as state:** after each batch the UI refetches the affected resources (`run`, `steps`, `plan`, `diff`, `verification`, `review`, `artifacts`). While the stream is not `open`, run detail falls back to polling every 4 s and the header shows "Reconnecting".

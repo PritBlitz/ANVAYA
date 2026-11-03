@@ -31,10 +31,30 @@ Response: `{ task, provider, model, mode, prompt_version, output, evidence_inclu
 |---|---|---|
 | `mock` | Deterministic, schema-valid outputs; no network | Implemented (CI, dry runs) |
 | `local` | Ollama (`/api/chat` with JSON-schema `format`, temperature 0; `/api/embed`) | Implemented; tested via HTTP mock transport, **not yet against a live model** |
-| `cloud` | — | **Not implemented**: requests fail `503 PROVIDER_NOT_CONFIGURED` |
+| `cloud` | `anthropic`: hosted Claude (Messages API, structured output) | Opt-in (`HOSTED_PROVIDER` includes `anthropic` + `ANTHROPIC_API_KEY`); tested against a fake HTTP transport, no live credentials |
+| `cloud` | `openai_compatible`: any OpenAI-compatible `POST /chat/completions` server (OpenAI, vLLM, llama.cpp, LiteLLM) | Opt-in (`HOSTED_PROVIDER` includes `openai_compatible` + `OPENAI_COMPAT_BASE_URL` + `OPENAI_COMPAT_MODEL`; key optional for self-hosted). Strict `json_schema` response format by default (`OPENAI_COMPAT_RESPONSE_FORMAT=json_object|none` for servers without it). Tested against a fake server, no live credentials |
 
-Routing resolves exactly the requested mode; there is **no fallback** to another mode or
-provider (FR-AI-004). Concurrency to Ollama is bounded (`OLLAMA_MAX_CONCURRENCY`, default 1).
+`HOSTED_PROVIDER` is `none` (default) or a comma-separated list of adapters. Routing resolves
+exactly the requested mode and, for cloud, the provider the workspace policy names; an unnamed
+cloud request is refused when more than one adapter is configured. There is **no fallback** to
+another mode, provider or model (FR-AI-004), and hosted adapters do no hidden retries: rate limits
+return `429 PROVIDER_RATE_LIMITED` with `retry_after_seconds` from the upstream `Retry-After`;
+auth failures `503 PROVIDER_NOT_CONFIGURED`; rejected requests `502 PROVIDER_BAD_REQUEST`; refusals
+or content filters `422 PROVIDER_REFUSED`. Keys come from server environment only and are never
+logged or returned. In production `OPENAI_COMPAT_BASE_URL` must be https unless
+`OPENAI_COMPAT_ALLOW_HTTP=true` (private network). Concurrency to Ollama is bounded
+(`OLLAMA_MAX_CONCURRENCY`, default 1).
+
+## Tasks and prompt versions (work package B)
+
+- `planning.v2`: the planning instructions now tell the model to follow `template.guidance` from
+  the trusted context where it does not conflict with the system rules.
+- `migration_plan.v1`: plan-only migration plan. Output schema `MigrationPlan` = plan fields plus
+  per-step `rollback`, `affected_areas` (with `evidence_ids`, which must be ids of evidence the
+  model was shown, like citations), `prerequisites` and `rollback_strategy`.
+- Fixed: `untrusted_inputs` (task descriptions, issue bodies) were accepted by `/generate` but not
+  passed to the prompt builder, so the model never saw them. They now reach the prompt fenced as
+  `<untrusted_input>` blocks (regression test in `tests/test_package_b.py`).
 
 ## Prompt and output safety
 

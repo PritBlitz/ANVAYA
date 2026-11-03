@@ -206,8 +206,69 @@ After plan approval the run moves `preparing_workspace → implementing → veri
 - Additional run failure codes: `PATCH_REJECTED`, `PLAN_REVISION_REQUIRED`, `VERIFICATION_FAILED`, `SECURITY_CHECK_FAILED`, `SANDBOX_ERROR`, `PULL_REQUEST_FAILED`.
 - Repository setting `verification_profiles: string[]` (admin) selects from the server allowlist: `python-compile`, `python-unittest`, `node-syntax`, `node-test`. Empty = auto-detect. Arbitrary commands are never accepted.
 
+### Work package B: templates, call graph, impact, workspace knowledge
+
+**Workflow templates.** `GET /workspaces/:id/templates?include_archived=` (viewer+) returns the five
+built-ins (`bug_fix`, `add_tests`, `refactor`, `dependency_upgrade`, `migration_plan`; `id: null`,
+`source: "builtin"`) followed by workspace templates. `POST` (admin+, idempotent) creates one
+(`409 TEMPLATE_KEY_TAKEN`; built-in keys are reserved, 422); `PATCH …/:templateId` (admin+) updates
+and bumps `version`; `DELETE …/:templateId` (admin+) archives (204). All three are audited
+(`template.created|updated|archived`, with before/after). A template has `workflow`
+(`change` | `migration_plan`), `task_defaults` (`title_prefix`, `description_template`, `labels`),
+`budget` (ceilings that can only lower workspace limits), `allowed_profiles` (server profile ids or
+`null` = all) and `planning_guidance` (≤ 8 rules, ≤ 300 chars, sent to the planner as trusted
+workspace policy under the system rules, never as repository content).
+`POST /repositories/:id/tasks` accepts `template_key`; unknown → `422 TEMPLATE_NOT_FOUND`, archived
+→ `422 TEMPLATE_ARCHIVED`. Tasks return `template_key` and the immutable `template` snapshot.
+Runs started from such a task: budget = min(workspace ceilings, request, template ceilings);
+verification profiles outside `allowed_profiles` are reported in `unavailable` with the reason;
+`GET /runs/:id` returns `template` and `plan_only`.
+
+**Migration plans (plan-only).** A `migration_plan` run plans with the AI task `migration_plan`;
+the plan gains an optional `migration` section (`affected_areas[{area, description, files,
+evidence_ids}]`, `prerequisites`, `step_rollback[{step_id, rollback}]`, `rollback_strategy`).
+Plans without it hash exactly as before. `GET /runs/:id/plan` adds `migration_evidence` (locations
+for the cited ids, from the run's own retrieval records) and `plan_only`. Approving a plan-only
+plan moves the run to `completed_without_pr`; nothing is executed. The changed-file budget does not
+apply to plan-only plans (they change no files); the schema's own limits do.
+
+**Call graph.** `GET /repositories/:id/symbols/:symbolId/call-graph?direction=callers|callees|both&depth=1..3&limit=1..100&cursor=&snapshot=`
+(viewer+). Nodes `{symbol, depth, direction}` are offset-paged (`next_cursor`, `total_nodes`, at
+most 500 per graph); `edges` carry the call-site `path` and `line`; `unresolved_callees` lists
+ambiguous or external names. Only name-resolved `calls`/`instantiates` edges are followed.
+
+**Impact and test selection (heuristic).** `POST /repositories/:id/impact { changed_files:
+(path | {path, ranges?})[] ≤ 200, snapshot?, max_tests? }` (viewer+) and `GET /runs/:id/impact`
+(viewer+; analyses the latest applied patch with its old-side hunk ranges, or the plan's
+`files_to_modify` before a patch exists; `source: patch|plan|none`). Both return
+`heuristic: true`, a `disclaimer`, `impacted_files` (reverse imports ≤ 4 hops and callers ≤ 2 hops,
+each with an `evidence` chain of `{kind: imports|calls|changed|naming, from, to, line}`),
+`impacted_symbols`, `selected_tests[{path, score, reasons[{kind, description, evidence}]}]` and
+`limitations`. `score` is a ranking signal in [0, 1], not a probability or a correctness claim
+(FR-VER-006). Repository setting `test_selection: "off" | "narrow"` (default `off`): with `narrow`,
+`node-test` and `python-pytest` run only the selected test files that exist in the workspace
+(passed as separate argv elements, no shell); the verification result records `test_selection`
+(`files`, `reasons`, `not_run`) and its `command_display` says how many files ran. The exit code
+still decides pass/fail; if nothing is selected the full profile runs.
+
+**Workspace knowledge.** `POST /workspaces/:id/search { query, repository_ids?, top_k?,
+per_repository?, include_knowledge?, mode? }` and `POST /workspaces/:id/questions { question,
+repository_ids?, mode?, top_k?, include_knowledge? }` (viewer+; non-members 404). Only connected,
+indexed repositories of that workspace are searched (at most 25; others are listed in
+`skipped_repositories`); a `repository_ids` entry outside the workspace is a 404. The query is
+embedded once and each repository is searched with the same snapshot-scoped hybrid retrieval as
+single-repository search; results merge by RRF score. Every result and citation carries
+`repository_id`, `repository_full_name` and `commit_sha`. Q&A citations are rebuilt from retrieval
+records; workspace answers are not stored in the per-repository question history. Cloud mode is
+audited as `ai.cloud_inference` with `operation: workspace_qa`.
+
+**Hosted providers.** `ai-policy.cloud.provider` is now `"anthropic" | "openai_compatible" | null`.
+Changing the provider or adding data categories while cloud is enabled requires
+`acknowledge_data_disclosure: true` (`422 DATA_DISCLOSURE_REQUIRED` with the new disclosure
+otherwise); a provider change is audited as `ai_policy.cloud_provider_changed`.
+
 ### OpenAPI
-`apps/api/openapi.json` (OpenAPI 3.0.3, 72 operations) is generated from the runtime Zod request schemas; a test fails if it drifts from the live routes. Regenerate with `npm run build && npm run openapi`.
+`apps/api/openapi.json` (OpenAPI 3.0.3, 87 operations) is generated from the runtime Zod request schemas; a test fails if it drifts from the live routes. Regenerate with `npm run build && npm run openapi`.
 
 ## 9. Health
 `GET /health/live`, `GET /health/ready` (503 when Postgres or Redis is unavailable).
