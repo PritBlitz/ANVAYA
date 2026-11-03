@@ -323,8 +323,7 @@ test("tasks from a pull request and from a failing check show imported context",
   await expect(page.getByRole("region", { name: "Review comments" })).toBeVisible();
   await expectAccessible(page);
 
-  await page.goto("/w/acme/tasks");
-  await page.getByRole("link", { name: "New task" }).click();
+  await page.goto("/w/acme/tasks?new=1");
   const second = page.getByRole("dialog", { name: "New engineering task" });
   await second.getByLabel("Repository").selectOption({ label: "acme/payments-api" });
   await second.getByLabel("Source").selectOption({ label: "Failing CI check" });
@@ -355,8 +354,7 @@ test("admins set run quotas and see usage; starts beyond the limit explain why",
   await expectAccessible(page);
 
   // The seeded workspace already has active runs, so a new one is refused with a reason.
-  await page.goto("/w/acme/tasks");
-  await page.getByRole("link", { name: "New task" }).click();
+  await page.goto("/w/acme/tasks?new=1");
   const dialog = page.getByRole("dialog", { name: "New engineering task" });
   await dialog.getByLabel("Repository").selectOption({ label: "acme/payments-api" });
   await dialog.getByLabel("Title").fill("Quota-limited task");
