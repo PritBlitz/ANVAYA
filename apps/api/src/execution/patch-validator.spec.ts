@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PatchRejected, validatePatch } from './patch-validator.js';
+import { PatchRejected, composePatch, validatePatch } from './patch-validator.js';
 
 const files: Record<string, string> = { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n' };
 const current = (p: string) => files[p] ?? null;
@@ -65,5 +65,59 @@ describe('patch validator', () => {
 
   it('honours a plan-revision request', () => {
     expect(() => validatePatch({ summary: 's', plan_revision_needed: true, changes: [{ path: 'src/a.ts', action: 'modify', content: 'x', explanation: 'e' }] }, opts)).toThrow(/revised/);
+  });
+
+  describe('composePatch (repairs)', () => {
+    const A0 = 'export const a = 1;\n';
+    const A1 = 'export const a = 42;\n';
+    const N1 = 'export const n = 1;\n';
+    // Attempt 1 changed a.ts and created new.ts (broken); the repair fixes only new.ts.
+    const prior = [
+      { path: 'src/a.ts', before: A0, after: A1, explanation: 'bump' },
+      { path: 'src/new.ts', before: null, after: 'BROKEN\n', explanation: 'add' },
+    ];
+    const patched: Record<string, string> = { 'src/a.ts': A1, 'src/new.ts': 'BROKEN\n' };
+    const repairOn = (workspace: Record<string, string>, changes: Array<{ path: string; action: 'modify' | 'create' | 'delete'; content?: string | null }>) =>
+      validatePatch({ summary: 'repair', plan_revision_needed: false, changes: changes.map((c) => ({ explanation: 'fix', ...c })) }, { ...opts, current: (p) => workspace[p] ?? null });
+
+    it('keeps files only the earlier attempt changed and diffs against the base commit', () => {
+      const v = composePatch(prior, repairOn(patched, [{ path: 'src/new.ts', action: 'modify', content: N1 }]), 8);
+      expect(v.changes.map((c) => [c.path, c.action, c.before, c.after])).toEqual([
+        ['src/a.ts', 'modify', A0, A1],
+        ['src/new.ts', 'create', null, N1],
+      ]);
+      expect(v.diff).toContain('--- /dev/null');
+      expect(v.diff).not.toContain('BROKEN');
+      expect(v.additions).toBe(2);
+      expect(v.deletions).toBe(1);
+      expect(v.summary).toBe('repair');
+    });
+
+    it('hashes the cumulative change like a first attempt with the same content would', () => {
+      const v = composePatch(prior, repairOn(patched, [{ path: 'src/new.ts', action: 'modify', content: N1 }]), 8);
+      const direct = validatePatch(
+        {
+          summary: 's',
+          plan_revision_needed: false,
+          changes: [
+            { path: 'src/a.ts', action: 'modify', content: A1, explanation: 'x' },
+            { path: 'src/new.ts', action: 'create', content: N1, explanation: 'x' },
+          ],
+        },
+        opts,
+      );
+      expect(v.hash).toBe(direct.hash);
+    });
+
+    it('drops a file the repair restores to its base content, and rejects a repair that undoes everything', () => {
+      const v = composePatch(prior, repairOn(patched, [{ path: 'src/a.ts', action: 'modify', content: A0 }]), 8);
+      expect(v.changes.map((c) => c.path)).toEqual(['src/new.ts']);
+      const undo = repairOn({ 'src/a.ts': A1 }, [{ path: 'src/a.ts', action: 'modify', content: A0 }]);
+      expect(() => composePatch([prior[0]!], undo, 8)).toThrow(/does not change anything/);
+    });
+
+    it('applies the changed-file budget to the cumulative patch', () => {
+      expect(() => composePatch(prior, repairOn(patched, [{ path: 'src/new.ts', action: 'modify', content: 'x\n' }]), 1)).toThrow(PatchRejected);
+    });
   });
 });

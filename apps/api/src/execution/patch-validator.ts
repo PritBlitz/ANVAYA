@@ -115,7 +115,51 @@ export function validatePatch(
   if (changes.length === 0) throw new PatchRejected('PATCH_EMPTY', 'The patch does not change anything.');
   if (changes.length > opts.maxChangedFiles) throw new PatchRejected('PATCH_TOO_LARGE', `The patch changes ${changes.length} files; the limit is ${opts.maxChangedFiles}.`);
   if (bytes > MAX_PATCH_BYTES) throw new PatchRejected('PATCH_TOO_LARGE', 'The patch exceeds the size limit.');
+  return assemblePatch(proposal.summary, changes);
+}
 
+/** A file change from an earlier attempt, relative to the base commit. */
+export interface PriorChange {
+  path: string;
+  before: string | null;
+  after: string | null;
+  explanation?: string | null;
+}
+
+/**
+ * Composes a repair onto the patch it repairs. A repair is validated against the
+ * workspace with the earlier patch applied, so on its own it is a delta; the stored
+ * patch (what verification ran on, what is approved and what becomes the pull
+ * request) must be cumulative against the base commit. For each path the base
+ * content comes from the earlier patch when it touched the path, and the final
+ * content from the repair when it touched it. Actions are re-derived from base and
+ * final content; paths the repair restored to base drop out.
+ */
+export function composePatch(prior: readonly PriorChange[], repair: ValidatedPatch, maxChangedFiles: number): ValidatedPatch {
+  const byPath = new Map<string, ValidatedChange>();
+  for (const p of prior) {
+    byPath.set(p.path, { path: p.path, action: 'modify', before: p.before, after: p.after, explanation: p.explanation ?? '', additions: 0, deletions: 0 });
+  }
+  for (const r of repair.changes) {
+    const earlier = byPath.get(r.path);
+    byPath.set(r.path, { ...r, before: earlier ? earlier.before : r.before });
+  }
+  const changes: ValidatedChange[] = [];
+  for (const c of byPath.values()) {
+    if (c.before === c.after) continue;
+    const action = c.after === null ? 'delete' : c.before === null ? 'create' : 'modify';
+    const sp = structuredPatch(c.path, c.path, c.before ?? '', c.after ?? '', '', '', { context: 0 });
+    const additions = sp.hunks.reduce((n, h) => n + h.lines.filter((l) => l.startsWith('+')).length, 0);
+    const deletions = sp.hunks.reduce((n, h) => n + h.lines.filter((l) => l.startsWith('-')).length, 0);
+    changes.push({ ...c, action, additions, deletions });
+  }
+  if (changes.length === 0) throw new PatchRejected('PATCH_EMPTY', 'The repaired patch does not change anything.');
+  if (changes.length > maxChangedFiles) throw new PatchRejected('PATCH_TOO_LARGE', `The patch changes ${changes.length} files; the limit is ${maxChangedFiles}.`);
+  if (changes.reduce((n, c) => n + Buffer.byteLength(c.after ?? ''), 0) > MAX_PATCH_BYTES) throw new PatchRejected('PATCH_TOO_LARGE', 'The patch exceeds the size limit.');
+  return assemblePatch(repair.summary, changes);
+}
+
+function assemblePatch(summary: string, changes: ValidatedChange[]): ValidatedPatch {
   changes.sort((a, b) => a.path.localeCompare(b.path));
   const diff = changes
     .map((c) =>
@@ -124,7 +168,7 @@ export function validatePatch(
     .join('');
   const hash = `sha256:${sha256Hex(canonicalJson(changes.map((c) => ({ path: c.path, action: c.action, after: c.after }))))}`;
   return {
-    summary: proposal.summary,
+    summary,
     changes,
     diff,
     hash,
