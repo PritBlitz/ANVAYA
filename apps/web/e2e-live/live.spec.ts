@@ -121,6 +121,14 @@ test("governed run: task → plan approval → checks → PR", async ({ page }) 
     limits: { request_timeout_seconds: 580 },
   });
   expect(policy.status, JSON.stringify(policy.body)).toBe(200);
+  // Investigation and planning alone take ~10 minutes on CPU, so the default 15-minute run
+  // budget can run out mid-patch. Raise the workspace ceiling; unset budgets default to it.
+  if (MODE === "local") {
+    const limits = await api(page, "PATCH", `/workspaces/${ws.id}`, {
+      settings: { run_budget_limits: { max_duration_seconds: 3600 } },
+    });
+    expect(limits.status, JSON.stringify(limits.body)).toBe(200);
+  }
 
   await page.goto(`/w/${WORKSPACE}`);
   await page.getByRole("link", { name: "New task" }).click();
