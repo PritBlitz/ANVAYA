@@ -14,20 +14,29 @@ import { Card, CardBody, CardHeader, Mono, SkeletonRows } from "@/components/ui/
 import { ConfirmDialog } from "@/components/ui/overlays";
 import { ErrorState, InlineAlert } from "@/components/ui/states";
 import { isApiError } from "@/lib/api/errors";
-import { qk, useAiPolicy, useRunBudgetLimits } from "@/lib/api/queries";
+import {
+  qk,
+  useAiPolicy,
+  useQuotaStatus,
+  useRunBudgetLimits,
+  useRunQuotas,
+} from "@/lib/api/queries";
 import { api } from "@/lib/api/runtime";
 import {
   DATA_CATEGORIES,
   type AiPolicy,
   type InferenceMode,
   type ProviderHealth,
+  type QuotaEntry,
+  type QuotaStatus,
   type RunBudgets,
+  type RunQuotas,
   type UpdateAiPolicyRequest,
 } from "@/lib/api/types";
 import { notifyError } from "@/lib/forms";
 import { useWorkspace } from "@/lib/workspace/context";
 import { cn } from "@/lib/utils/cn";
-import { formatDuration } from "@/lib/utils/format";
+import { formatDateTime, formatDuration } from "@/lib/utils/format";
 
 const MODE_LABEL: Record<InferenceMode, { label: string; icon: ReactNode; description: string }> = {
   local: {
@@ -418,10 +427,164 @@ function BudgetsCard({ ceilings, editable }: { ceilings: RunBudgets; editable: b
   );
 }
 
+const QUOTA_FIELDS: {
+  key: keyof RunQuotas;
+  usage: keyof Pick<QuotaStatus, "active_runs" | "daily_runs" | "daily_tokens">;
+  label: string;
+  hint: string;
+  min: number;
+}[] = [
+  {
+    key: "max_active_runs",
+    usage: "active_runs",
+    label: "Concurrent active runs",
+    hint: "Includes runs waiting for approval. 1 – 1,000.",
+    min: 1,
+  },
+  { key: "daily_runs", usage: "daily_runs", label: "Runs per day", hint: "1 – 100,000.", min: 1 },
+  {
+    key: "daily_tokens",
+    usage: "daily_tokens",
+    label: "Model tokens per day",
+    hint: "Input + output, runs and Q&A. At least 1,000.",
+    min: 1000,
+  },
+];
+
+/** Usage against a limit; text carries the numbers so the bar is decorative. */
+export function QuotaMeter({ entry, label }: { entry: QuotaEntry; label: string }) {
+  if (entry.limit === null) {
+    return (
+      <p className="text-xs text-fg-muted tabular">{entry.used.toLocaleString()} used · no limit</p>
+    );
+  }
+  const pct = Math.min(100, Math.round((entry.used / Math.max(1, entry.limit)) * 100));
+  const full = entry.used >= entry.limit;
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        role="meter"
+        aria-label={`${label} used`}
+        aria-valuemin={0}
+        aria-valuemax={entry.limit}
+        aria-valuenow={Math.min(entry.used, entry.limit)}
+        className="h-1.5 overflow-hidden rounded-full bg-bg-subtle"
+      >
+        <div
+          className={cn("h-full rounded-full", full ? "bg-danger" : "bg-(--primary)")}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className={cn("text-xs tabular", full ? "text-danger" : "text-fg-muted")}>
+        {entry.used.toLocaleString()} of {entry.limit.toLocaleString()} used
+        {full ? " · limit reached" : ""}
+      </p>
+    </div>
+  );
+}
+
+function QuotasCard({ quotas, editable }: { quotas: RunQuotas; editable: boolean }) {
+  const { workspaceId } = useWorkspace();
+  const queryClient = useQueryClient();
+  const status = useQuotaStatus();
+  const [values, setValues] = useState<Record<keyof RunQuotas, string>>({
+    max_active_runs: quotas.max_active_runs?.toString() ?? "",
+    daily_runs: quotas.daily_runs?.toString() ?? "",
+    daily_tokens: quotas.daily_tokens?.toString() ?? "",
+  });
+  const invalid = QUOTA_FIELDS.some((f) => {
+    const raw = values[f.key].trim();
+    if (raw === "") return false;
+    const n = Number(raw);
+    return !Number.isInteger(n) || n < f.min;
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      api.workspaces.update(workspaceId, {
+        settings: {
+          run_quotas: Object.fromEntries(
+            QUOTA_FIELDS.map((f) => {
+              const raw = values[f.key].trim();
+              return [f.key, raw === "" ? null : Number(raw)];
+            }),
+          ),
+        },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.workspace(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: qk.quotas(workspaceId) });
+      toast.success("Quotas updated");
+    },
+    onError: (e) => notifyError(e, "Quotas not updated"),
+  });
+  const resets = status.data ? new Date(status.data.resets_at) : null;
+  return (
+    <Card>
+      <CardHeader
+        title="Quotas and concurrency"
+        description="Workspace-wide limits checked when a run starts and before every model call. Leave a field empty for no limit."
+      />
+      <CardBody>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate();
+          }}
+          className="flex flex-col gap-4"
+          aria-label="Quotas and concurrency"
+        >
+          <div className="grid gap-4 sm:grid-cols-3">
+            {QUOTA_FIELDS.map((f) => (
+              <div key={f.key} className="flex flex-col gap-2">
+                <Field label={f.label} hint={f.hint}>
+                  <Input
+                    type="number"
+                    min={f.min}
+                    step={1}
+                    placeholder="No limit"
+                    className="tabular"
+                    disabled={!editable}
+                    value={values[f.key]}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  />
+                </Field>
+                {status.data && <QuotaMeter entry={status.data[f.usage]} label={f.label} />}
+              </div>
+            ))}
+          </div>
+          {status.isError && (
+            <p className="text-xs text-fg-muted" role="status">
+              Current usage is unavailable right now.
+            </p>
+          )}
+          {resets && (
+            <p className="text-xs text-fg-subtle">
+              Daily quotas reset at midnight UTC (next:{" "}
+              <time dateTime={resets.toISOString()}>{formatDateTime(resets.toISOString())}</time>).
+            </p>
+          )}
+          {editable && (
+            <Button
+              type="submit"
+              size="sm"
+              className="self-start"
+              loading={save.isPending}
+              disabled={invalid}
+            >
+              Save quotas
+            </Button>
+          )}
+        </form>
+      </CardBody>
+    </Card>
+  );
+}
+
 export function AiSettings() {
   const { can } = useWorkspace();
   const policy = useAiPolicy();
   const ceilings = useRunBudgetLimits();
+  const quotas = useRunQuotas();
   const editable = can("ai_policy.manage");
 
   if (policy.isPending) return <SkeletonRows rows={8} />;
@@ -456,6 +619,13 @@ export function AiSettings() {
         <BudgetsCard
           key={JSON.stringify(ceilings.data)}
           ceilings={ceilings.data}
+          editable={editable && can("workspace.manage")}
+        />
+      )}
+      {quotas.data && (
+        <QuotasCard
+          key={JSON.stringify(quotas.data)}
+          quotas={quotas.data}
           editable={editable && can("workspace.manage")}
         />
       )}
