@@ -366,6 +366,18 @@ def test_grammar_safe_schema_keeps_property_names() -> None:
     assert schema["properties"]["format"]["maxLength"] == 9  # input untouched
 
 
+def test_patch_schema_requires_file_content() -> None:
+    # A live 7B run returned paths without content because the grammar let it skip the field.
+    from app.providers.ollama import grammar_safe_schema
+    from app.schemas import FileChange, PatchProposal
+
+    schema = grammar_safe_schema(PatchProposal.model_json_schema())
+    change = schema["$defs"]["FileChange"]
+    assert "content" in change["required"]
+    assert {"type": "null"} in change["properties"]["content"]["anyOf"]  # still null for delete
+    assert FileChange(path="a.py", action="delete", content=None, explanation="gone").content is None
+
+
 def test_traceparent_is_parsed_for_log_correlation() -> None:
     from app.main import parse_traceparent
 

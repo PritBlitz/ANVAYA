@@ -198,8 +198,10 @@ class MigrationPlan(Strict):
 class FileChange(Strict):
     path: RelPath
     action: Literal["modify", "create", "delete"]
-    # Full new file content for modify/create (validated and diffed by the control plane).
-    content: str | None = Field(default=None, max_length=200_000)
+    # Full new file content for modify/create (validated and diffed by the control plane); null for
+    # delete. Required (not defaulted) so the JSON schema lists it: with grammar-constrained decoding
+    # (Ollama `format`) an optional field lets a small model skip it and return paths only.
+    content: str | None = Field(max_length=200_000)
     explanation: ShortText
 
 
