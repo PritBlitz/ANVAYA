@@ -62,31 +62,31 @@ locals {
   alarms = {
     api-5xx = {
       namespace = "AWS/ApplicationELB", metric = "HTTPCode_Target_5XX_Count", stat = "Sum", threshold = 10, op = "GreaterThanThreshold"
-      dims = { LoadBalancer = aws_lb.public.arn_suffix, TargetGroup = aws_lb_target_group.api.arn_suffix }
+      dims      = { LoadBalancer = aws_lb.public.arn_suffix, TargetGroup = aws_lb_target_group.api.arn_suffix }
     }
     api-unhealthy = {
       namespace = "AWS/ApplicationELB", metric = "UnHealthyHostCount", stat = "Maximum", threshold = 0, op = "GreaterThanThreshold"
-      dims = { LoadBalancer = aws_lb.public.arn_suffix, TargetGroup = aws_lb_target_group.api.arn_suffix }
+      dims      = { LoadBalancer = aws_lb.public.arn_suffix, TargetGroup = aws_lb_target_group.api.arn_suffix }
     }
     web-unhealthy = {
       namespace = "AWS/ApplicationELB", metric = "UnHealthyHostCount", stat = "Maximum", threshold = 0, op = "GreaterThanThreshold"
-      dims = { LoadBalancer = aws_lb.public.arn_suffix, TargetGroup = aws_lb_target_group.web.arn_suffix }
+      dims      = { LoadBalancer = aws_lb.public.arn_suffix, TargetGroup = aws_lb_target_group.web.arn_suffix }
     }
     db-cpu = {
       namespace = "AWS/RDS", metric = "CPUUtilization", stat = "Average", threshold = 80, op = "GreaterThanThreshold"
-      dims = { DBInstanceIdentifier = aws_db_instance.postgres.identifier }
+      dims      = { DBInstanceIdentifier = aws_db_instance.postgres.identifier }
     }
     db-free-storage = {
       namespace = "AWS/RDS", metric = "FreeStorageSpace", stat = "Minimum", threshold = 5 * 1024 * 1024 * 1024, op = "LessThanThreshold"
-      dims = { DBInstanceIdentifier = aws_db_instance.postgres.identifier }
+      dims      = { DBInstanceIdentifier = aws_db_instance.postgres.identifier }
     }
     redis-memory = {
       namespace = "AWS/ElastiCache", metric = "DatabaseMemoryUsagePercentage", stat = "Maximum", threshold = 80, op = "GreaterThanThreshold"
-      dims = { ReplicationGroupId = aws_elasticache_replication_group.redis.id }
+      dims      = { ReplicationGroupId = aws_elasticache_replication_group.redis.id }
     }
     egress-denied = {
       namespace = "AWS/NetworkFirewall", metric = "DroppedPackets", stat = "Sum", threshold = 100, op = "GreaterThanThreshold"
-      dims = { FirewallName = aws_networkfirewall_firewall.egress.name, AvailabilityZone = local.azs[0], Engine = "Stateful" }
+      dims      = { FirewallName = aws_networkfirewall_firewall.egress.name, AvailabilityZone = local.azs[0], Engine = "Stateful" }
     }
   }
 }
