@@ -72,6 +72,8 @@ Problems found and fixed while building the homepage:
 
 ## Known limitations / follow-ups
 
+- 2026-11-03 (V1 work package A): pull-request and failing-check task sources (create dialog with a failing-check picker, imported-context card on the task page) and admin quota settings with usage meters. Covered by fixture-parity, mapper, form and error-message unit tests and two new E2E journeys. Not yet exercised against a live API with a real GitHub App (needs `pull_requests:read` and `checks:read`).
+
 - Homepage screenshots must be regenerated (`npm run screenshots` with the dev server running) whenever the product UI changes.
 
 1. Live API checks cover sign-in, repository health, lazy code tree, file view, search, Q&A (mock and real local model), SSE through to the plan gate, plan view with resolved evidence, settings, usage, members, and audit. One governed run went all the way to a real pull request on 2026-11-02 (`PritBlitz/testRepo#1`). `npm run test:live` skips its own PR step unless `LIVE_RUN=1`, because it opens a real PR.
@@ -85,4 +87,4 @@ Problems found and fixed while building the homepage:
 
 ## Outstanding backend dependencies
 
-Resolved by the backend: GAP-01, 02, 03, 04, 05, 07, 08, 10, 14, 17, 19, 21 and R1–R6. Open: R7 (response schemas in `openapi.json`, so `wire.ts` can be generated), GAP-15 (symbol and module map), and task sources beyond `manual` and `github_issue`. Details are in `API_INTEGRATION.md` §4.
+Resolved by the backend: GAP-01, 02, 03, 04, 05, 07, 08, 10, 14, 17, 19, 21 and R1–R6. Open: R7 (response schemas in `openapi.json`, so `wire.ts` can be generated), GAP-15 (symbol and module map), (task sources beyond `manual` and `github_issue` are now resolved: pull-request and failing-check tasks shipped 2026-11-03). Details are in `API_INTEGRATION.md` §4.

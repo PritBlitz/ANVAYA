@@ -49,3 +49,12 @@ add HNSW after measuring volume); vector search is an exact scan filtered to one
 ## Retention
 
 Not yet implemented as a scheduled job (M8). Disconnect deletes index data and blobs immediately.
+
+## Task sources and quotas (migration 0006)
+
+* `engineering_tasks` gains `external_id text` (a GitHub check run id exceeds int4, so it is not
+  stored in `external_number`), `source_url text` and `source_context jsonb` (bounded, redacted
+  pull-request / failing-check metadata; untrusted content; capped at 128 KB by a CHECK). The
+  `source_type` CHECK already allowed `pull_request` and `failing_check` (0001).
+* Quotas live in `organizations.settings.run_quotas` (no new table). The daily run count uses the
+  new `idx_runs_org_created` index; the daily token count sums `usage_records` since UTC midnight.
