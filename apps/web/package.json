@@ -16,7 +16,7 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run build",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "test:live": "playwright test -c playwright.live.config.ts",
-    "gen:api": "openapi-typescript ../api/openapi.json -o src/lib/api/generated/openapi.ts"
+    "gen:api": "openapi-typescript ../../packages/contracts/openapi.json -o src/lib/api/generated/openapi.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.1",

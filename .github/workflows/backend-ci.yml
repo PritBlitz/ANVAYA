@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "apps/api/**"
+      - "packages/contracts/**"
       - "services/ai-service/**"
       - "infra/**"
       - "scripts/**"
@@ -62,8 +63,8 @@ jobs:
       # Includes real-Docker sandbox security tests (Docker is available on ubuntu runners).
       - run: npm test
       - run: npm run build
-      - name: OpenAPI is up to date
-        run: node dist/openapi/generate.cli.js && git diff --exit-code openapi.json
+      - name: OpenAPI is up to date (API copy and the shared contracts package)
+        run: node dist/openapi/generate.cli.js && git diff --exit-code openapi.json ../../packages/contracts/openapi.json
       - name: Dependency audit (production)
         run: npm audit --omit=dev --audit-level=high
 
