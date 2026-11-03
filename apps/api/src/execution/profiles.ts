@@ -19,6 +19,12 @@ export interface VerificationProfile {
   detect: (paths: ReadonlySet<string>) => boolean;
   /** Third-party dependencies installed by a separate fetch step first (B-4). Only offered when dependency fetching is enabled. */
   dependencies?: DependencySpec;
+  /**
+   * Heuristic test selection support: which repository paths this runner accepts as test-file
+   * arguments, and the argv to run only those files. Paths are indexed repository paths (never
+   * model output), passed as separate argv elements (no shell).
+   */
+  testSelection?: { pattern: RegExp; argv: (files: readonly string[]) => readonly string[] };
 }
 
 const PYTHON_IMAGE = 'python:3.12-alpine@sha256:e6dae589c1c05976188fd3bd019afd091445fc533ed2ea29001beddc7368a9c8';
@@ -58,6 +64,7 @@ export const PROFILES: readonly VerificationProfile[] = [
     argv: ['node', '--test'],
     commandDisplay: 'node --test',
     detect: (p) => [...p].some((f) => /\.test\.(m|c)?js$/.test(f)),
+    testSelection: { pattern: /\.test\.(m|c)?js$/, argv: (files) => ['node', '--test', ...files] },
   },
   {
     id: 'npm-test',
@@ -73,6 +80,7 @@ export const PROFILES: readonly VerificationProfile[] = [
     description: 'Install wheel-only requirements, then run pytest offline',
     image: PYTHON_IMAGE,
     argv: ['python', '-B', '-m', 'pytest', '-q', '-p', 'no:cacheprovider'],
+    testSelection: { pattern: /(^|\/)(test_[^/]+|[^/]+_test)\.py$/, argv: (files) => ['python', '-B', '-m', 'pytest', '-q', '-p', 'no:cacheprovider', '--', ...files] },
     commandDisplay: 'pip install --only-binary=:all: -r requirements*.txt (fetch) → python -m pytest (offline)',
     detect: (p) => [...p].some((f) => /^requirements(-dev|-test)?\.txt$/.test(f)),
     dependencies: pipSpec(PYTHON_IMAGE),

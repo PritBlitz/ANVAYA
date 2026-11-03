@@ -16,6 +16,11 @@ export const repositorySettingsSchema = z
     auto_index_on_push: z.boolean().optional(),
     /** Server-defined profile ids; empty = auto-detect. Arbitrary commands are never accepted. */
     verification_profiles: z.array(z.enum(PROFILE_IDS as [string, ...string[]])).max(8).optional(),
+    /**
+     * 'narrow' runs only the heuristically selected test files for profiles that support test
+     * selection (node-test, python-pytest). Default 'off': every profile runs in full.
+     */
+    test_selection: z.enum(['off', 'narrow']).optional(),
   })
   .strict();
 export type RepositorySettings = z.infer<typeof repositorySettingsSchema>;
@@ -25,6 +30,7 @@ export const DEFAULT_REPOSITORY_SETTINGS: Required<RepositorySettings> = {
   max_file_bytes: 512 * 1024,
   auto_index_on_push: true,
   verification_profiles: [],
+  test_selection: 'off',
 };
 
 export const createRepositoryBody = z

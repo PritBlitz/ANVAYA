@@ -5,6 +5,7 @@ import { ExecutionPipeline } from '../execution/execution-pipeline.js';
 import { DockerSandboxDriver, SandboxDriver } from '../execution/sandbox.js';
 import { WorkspaceManager } from '../execution/workspace.js';
 import { IndexingModule } from '../indexing/indexing.module.js';
+import { IntelligenceModule } from '../intelligence/intelligence.module.js';
 import { ExecutionStages, OrchestratorService, UnavailableExecutionStages } from './orchestrator.service.js';
 import { RunEventsService } from './run-events.service.js';
 import { RunTransitionsService } from './run-transitions.service.js';
@@ -14,7 +15,7 @@ import { TasksService } from './tasks.service.js';
 import { TemplatesService } from '../templates/templates.service.js';
 
 @Module({
-  imports: [AiModule, IndexingModule],
+  imports: [AiModule, IndexingModule, IntelligenceModule],
   providers: [
     RunEventsService,
     RunTransitionsService,
