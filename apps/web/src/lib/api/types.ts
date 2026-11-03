@@ -437,6 +437,9 @@ export interface EngineeringTask {
   description: string;
   status: TaskStatus;
   labels: string[];
+  /** Workflow template the task was created from (immutable snapshot). */
+  template_key?: string | null;
+  template?: TemplateSnapshot | null;
   latest_run?: RunSummary | null; // GAP-09
   created_at: ISODateTime;
   updated_at: ISODateTime;
@@ -448,8 +451,14 @@ export interface EngineeringTask {
  * supported by the API.
  */
 export type CreateTaskRequest =
-  | { source_type: "manual"; title: string; description: string; labels?: string[] }
-  | { source_type: "github_issue"; external_number: number; labels?: string[] };
+  | {
+      source_type: "manual";
+      title: string;
+      description: string;
+      labels?: string[];
+      template_key?: string;
+    }
+  | { source_type: "github_issue"; external_number: number; labels?: string[]; template_key?: string };
 
 /** Sources the API currently accepts for creation. */
 export const CREATABLE_TASK_SOURCES = ["manual", "github_issue"] as const;
@@ -546,6 +555,10 @@ export interface WorkflowRun extends RunSummary {
   pull_request?: PullRequest | null;
   /** GAP-19: approvals recorded on this run, needed to render the PR gate after reload. */
   approvals?: Approval[];
+  /** Template the run follows, if any. */
+  template?: RunTemplateRef | null;
+  /** Plan-only (migration plan) run: ends at the approved plan, nothing is executed. */
+  plan_only?: boolean;
 }
 
 export interface StartRunRequest {
@@ -648,6 +661,8 @@ export interface EngineeringPlan {
   tests: string[];
   risks: string[];
   out_of_scope: string[];
+  /** Only on plans from the migration-plan workflow. */
+  migration?: MigrationSection;
 }
 
 export type PlanState = "proposed" | "edited" | "approved" | "rejected";
@@ -666,6 +681,9 @@ export interface RunPlan {
   editable: boolean;
   updated_at: ISODateTime;
   approval: Approval | null;
+  /** Locations of the evidence a migration plan's affected areas cite (server-resolved). */
+  migration_evidence: MigrationEvidenceRef[];
+  plan_only: boolean;
 }
 
 export type ApprovalDecision = "approved" | "rejected";
@@ -739,6 +757,8 @@ export interface VerificationResult {
   /** Repair attempt this result belongs to. */
   attempt?: number;
   created_at: ISODateTime | null;
+  /** Heuristic test selection that narrowed this run; null = the full profile ran. */
+  test_selection?: TestSelection | null;
 }
 
 export interface VerificationReport {
@@ -825,7 +845,7 @@ export interface AiPolicy {
   allowed_modes: InferenceMode[];
   cloud: {
     enabled: boolean;
-    provider: string | null;
+    provider: HostedProvider | null;
     model: string | null;
     data_categories: DataCategory[];
   };
@@ -1063,3 +1083,13 @@ export interface FindingDisposition {
   disposition_comment: string | null;
   disposition_at: ISODateTime | null;
 }
+
+export * from "./types-intelligence";
+import type {
+  HostedProvider,
+  MigrationEvidenceRef,
+  MigrationSection,
+  RunTemplateRef,
+  TemplateSnapshot,
+  TestSelection,
+} from "./types-intelligence";

@@ -125,6 +125,19 @@ export type ContractChecks = [
     Fits<Data<"/runs/{runId}/findings/{findingId}/disposition", "post">, W.WFindingDisposition>
   >,
   Expect<Fits<Data<"/runs/{runId}/pull-request", "post">, W.WPullRequest>>,
+  // Work package B: the wire format is the UI model.
+  Expect<Fits<Item<Data<"/workspaces/{workspaceId}/templates", "get">>, T.WorkflowTemplate>>,
+  Expect<Fits<Data<"/workspaces/{workspaceId}/templates", "post">, T.WorkflowTemplate>>,
+  Expect<
+    Fits<Data<"/workspaces/{workspaceId}/templates/{templateId}", "patch">, T.WorkflowTemplate>
+  >,
+  Expect<
+    Fits<Data<"/repositories/{repositoryId}/symbols/{symbolId}/call-graph", "get">, T.CallGraph>
+  >,
+  Expect<Fits<Data<"/repositories/{repositoryId}/impact", "post">, T.ImpactPrediction>>,
+  Expect<Fits<Data<"/runs/{runId}/impact", "get">, T.RunImpact>>,
+  Expect<Fits<Data<"/workspaces/{workspaceId}/search", "post">, T.WorkspaceSearchResponse>>,
+  Expect<Fits<Data<"/workspaces/{workspaceId}/questions", "post">, T.WorkspaceAnswer>>,
 ];
 
 /**

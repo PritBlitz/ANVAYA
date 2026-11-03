@@ -10,6 +10,8 @@
  * Fields marked `R1`…`R5` were added by the backend at the frontend's request (c2f3813).
  * Mappers still treat them as optional so older API builds degrade gracefully.
  */
+import type * as T from "./types";
+
 
 type ISO = string;
 type UUID = string;
@@ -427,6 +429,8 @@ export interface WTask {
   latest_run?: WRunSummary | null;
   /** R2 */
   repository_full_name?: string;
+  template_key?: string | null;
+  template?: T.TemplateSnapshot | null;
 }
 
 export interface WApproval {
@@ -488,6 +492,8 @@ export interface WRun {
   task_title?: string;
   repository_full_name?: string;
   pull_request?: WPullRequest | null;
+  template?: T.RunTemplateRef | null;
+  plan_only?: boolean;
 }
 
 export interface WRunListItem extends WRun {
@@ -546,6 +552,7 @@ export interface WPlanDoc {
   tests: string[];
   risks: string[];
   out_of_scope: string[];
+  migration?: T.MigrationSection;
 }
 
 export interface WInvestigation {
@@ -574,6 +581,8 @@ export interface WPlan {
   plan: WPlanDoc;
   investigation: WInvestigation | null;
   approval: WApproval | null;
+  migration_evidence?: T.MigrationEvidenceRef[];
+  plan_only?: boolean;
 }
 
 export interface WDiff {
@@ -608,6 +617,7 @@ export interface WVerificationResult {
   attempt?: number;
   patch_id?: UUID;
   created_at?: ISO;
+  test_selection?: Record<string, unknown> | null;
 }
 
 export interface WVerification {
