@@ -154,7 +154,11 @@ export class GvisorSandboxDriver extends SandboxDriver {
       linux: {
         // A fresh network namespace with no interfaces is what makes `network: none` real.
         namespaces: [{ type: 'pid' }, { type: 'ipc' }, { type: 'uts' }, { type: 'mount' }, ...(p.network === 'none' ? [{ type: 'network' }] : [])],
-        resources: { memory: { limit: memory, swap: memory }, pids: { limit: e.SANDBOX_PIDS_LIMIT }, cpu: { quota: Math.round(e.SANDBOX_CPUS * period), period } },
+        // The host pids cgroup also holds gVisor's own sentry and stub threads; at the guest's
+        // limit the sentry cannot start Go runtime threads and the whole sandbox dies (exit 2).
+        // The guest is limited by RLIMIT_NPROC above, which gVisor enforces with a clean EAGAIN;
+        // the cgroup stays a hard backstop with headroom for the runtime.
+        resources: { memory: { limit: memory, swap: memory }, pids: { limit: hostPidsLimit(e.SANDBOX_PIDS_LIMIT) }, cpu: { quota: Math.round(e.SANDBOX_CPUS * period), period } },
         maskedPaths: ['/proc/kcore', '/proc/keys', '/proc/timer_list', '/proc/sched_debug', '/sys/firmware'],
         readonlyPaths: ['/proc/bus', '/proc/fs', '/proc/irq', '/proc/sys', '/proc/sysrq-trigger'],
       },
@@ -231,6 +235,11 @@ export class GvisorSandboxDriver extends SandboxDriver {
       },
     });
   }
+}
+
+/** Host cgroup pids limit for a sandbox whose guest may run `guest` processes. */
+export function hostPidsLimit(guest: number): number {
+  return guest * 4 + 256;
 }
 
 function refused(message: string): SandboxResult {

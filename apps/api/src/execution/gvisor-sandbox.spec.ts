@@ -82,7 +82,9 @@ describe('gVisor sandbox spec', () => {
 
   it('isolates the network and process namespaces and applies resource limits', () => {
     expect(spec.linux.namespaces.map((n) => n.type)).toEqual(['pid', 'ipc', 'uts', 'mount', 'network']);
-    expect(spec.linux.resources).toEqual({ memory: { limit: 512 * 1024 * 1024, swap: 512 * 1024 * 1024 }, pids: { limit: 128 }, cpu: { quota: 150_000, period: 100_000 } });
+    // Guest processes: RLIMIT_NPROC at the configured 128. Host cgroup: headroom for gVisor itself.
+    expect(spec.linux.resources).toEqual({ memory: { limit: 512 * 1024 * 1024, swap: 512 * 1024 * 1024 }, pids: { limit: 128 * 4 + 256 }, cpu: { quota: 150_000, period: 100_000 } });
+    expect(spec.process.rlimits).toContainEqual({ type: 'RLIMIT_NPROC', hard: 128, soft: 128 });
     expect(spec.process.rlimits).toEqual(expect.arrayContaining([{ type: 'RLIMIT_NOFILE', hard: 1024, soft: 1024 }, { type: 'RLIMIT_CORE', hard: 0, soft: 0 }]));
   });
 
