@@ -262,7 +262,6 @@ export class ExecutionPipeline extends ExecutionStages {
     const profileIds = (run.checkpoint.profiles as string[] | undefined) ?? [];
     const patchId = typeof run.checkpoint.current_patch_id === 'string' ? run.checkpoint.current_patch_id : null;
     const attempt = Number(run.checkpoint.patch_attempt ?? 1);
-    const budget = this.kit.budget(run);
     const stepId = await this.kit.startStep(run, 'verification_engine', { profiles: profileIds, patch_id: patchId });
     const results: Array<{ profile: string; status: 'passed' | 'failed' | 'timed_out' | 'skipped' | 'error'; exit_code: number | null; stderr: string; stdout: string }> = [];
 
@@ -278,7 +277,7 @@ export class ExecutionPipeline extends ExecutionStages {
     for (const id of profileIds) {
       const profile = profileById(id);
       if (!profile) continue;
-      const remaining = run.started_at ? budget.max_duration_seconds - (Date.now() - run.started_at.getTime()) / 1000 : budget.max_duration_seconds;
+      const remaining = await this.kit.remainingSeconds(run);
       if (remaining < 5) throw new StageFailure('BUDGET_EXHAUSTED', 'No time budget left for verification.');
       const toolId = await this.kit.startTool(run, stepId, 'run_profile', { profile_id: profile.id });
       await this.kit.database.transaction(async (tx) => {

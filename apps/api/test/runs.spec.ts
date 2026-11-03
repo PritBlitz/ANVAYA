@@ -368,6 +368,19 @@ describe('tasks, durable runs and plan approval', () => {
       expect((await as(member, 'get', `/runs/${runId}`)).body.data).toMatchObject({ status: 'timed_out', error_code: 'TIMED_OUT' });
     });
 
+    it('does not spend the duration budget while a plan waits for approval', async () => {
+      const runId = await runToPlan(await newTask());
+      const plan = (await as(member, 'get', `/runs/${runId}/plan`).expect(200)).body.data;
+      // The agent worked for 10s, then the plan sat at the approval gate for an hour.
+      const hourAgo = Date.now() - 3600_000;
+      await db(app).updateTable('workflow_runs').set({ started_at: new Date(hourAgo) }).where('id', '=', runId).execute();
+      await db(app).updateTable('run_state_transitions').set({ created_at: new Date(hourAgo + 10_000) }).where('run_id', '=', runId).where('to_status', '=', 'awaiting_plan_approval').execute();
+      await as(member, 'post', `/runs/${runId}/plan-approval`).send({ decision: 'approved', plan_hash: plan.plan_hash }).expect(200);
+      await orchestrator.advance(runId);
+      // It proceeds past the gate (and fails only because this suite has no execution plane).
+      expect((await as(member, 'get', `/runs/${runId}`)).body.data).toMatchObject({ status: 'failed', error_code: 'EXECUTION_NOT_AVAILABLE' });
+    });
+
     it('records every transition with actor, version and reason', async () => {
       const runId = await runToPlan(await newTask());
       await as(member, 'post', `/runs/${runId}/cancel`).send({}).expect(200);

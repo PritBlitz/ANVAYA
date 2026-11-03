@@ -13,6 +13,9 @@ import { isTerminal } from './state-machine.js';
 
 const log = logger('orchestrator');
 
+/** States where the run waits for a human decision; they don't spend the duration budget. */
+const HUMAN_GATES: ReadonlySet<string> = new Set(['awaiting_plan_approval', 'awaiting_pr_approval']);
+
 /** A stage failed for a known reason; the run fails with this code. */
 export class StageFailure extends Error {
   constructor(
@@ -57,11 +60,39 @@ export class StageToolkit {
     return { ...DEFAULT_RUN_BUDGET, ...(run.budget as Partial<RunBudget>) };
   }
 
+  /**
+   * Seconds the run has spent working, which is what `max_duration_seconds` limits. Time parked
+   * at an approval gate waits on a person, not on the agent, so it is excluded: otherwise a
+   * reviewer who takes longer than the budget to approve a plan times the run out the moment
+   * they approve. An open gate (the run is still waiting) counts up to now.
+   */
+  async activeSeconds(run: WorkflowRun): Promise<number> {
+    if (!run.started_at) return 0;
+    const rows = await this.database.db
+      .selectFrom('run_state_transitions')
+      .select(['to_status', 'created_at'])
+      .where('run_id', '=', run.id)
+      .orderBy('id')
+      .execute();
+    const now = Date.now();
+    let waitedMs = 0;
+    rows.forEach((row, i) => {
+      if (!HUMAN_GATES.has(row.to_status)) return;
+      const end = rows[i + 1]?.created_at.getTime() ?? now;
+      waitedMs += Math.max(0, end - row.created_at.getTime());
+    });
+    return Math.max(0, (now - run.started_at.getTime() - waitedMs) / 1000);
+  }
+
+  async remainingSeconds(run: WorkflowRun): Promise<number> {
+    return this.budget(run).max_duration_seconds - (await this.activeSeconds(run));
+  }
+
   async callModel(run: WorkflowRun, agentType: string, req: Omit<GenerationRequest, 'mode' | 'provider' | 'model' | 'budget'>): Promise<GenerationResponse & { stepId: string }> {
     const budget = this.budget(run);
     const steps = Number(run.usage_summary.agent_steps ?? 0);
     if (steps >= budget.max_steps) throw new StageFailure('BUDGET_EXHAUSTED', `The run reached its step budget (${budget.max_steps}).`);
-    const remainingSeconds = run.started_at ? budget.max_duration_seconds - (Date.now() - run.started_at.getTime()) / 1000 : budget.max_duration_seconds;
+    const remainingSeconds = await this.remainingSeconds(run);
     if (remainingSeconds < 10) throw new StageFailure('BUDGET_EXHAUSTED', 'The run has no time budget left for another model call.');
     const stepId = await this.startStep(run, agentType, { task: req.task, evidence_ids: req.evidence.map((e) => e.id) });
     await this.assertActive(run.id);
@@ -234,7 +265,7 @@ export class StageToolkit {
 
   async enforceDeadline(run: WorkflowRun): Promise<boolean> {
     const budget = this.budget(run);
-    if (!run.started_at || Date.now() - run.started_at.getTime() <= budget.max_duration_seconds * 1000) return false;
+    if (!run.started_at || (await this.activeSeconds(run)) <= budget.max_duration_seconds) return false;
     await this.database.transaction(async (tx) => {
       const current = await tx.selectFrom('workflow_runs').selectAll().where('id', '=', run.id).forUpdate().executeTakeFirstOrThrow();
       if (isTerminal(current.status)) return;
