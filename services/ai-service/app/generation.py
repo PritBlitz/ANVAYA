@@ -42,7 +42,9 @@ class Providers:
             mock=MockProvider(),
             local=OllamaProvider(client, s.ollama_generation_model, s.ollama_context_tokens),
             cloud=(
-                build_anthropic_provider(s.anthropic_api_key.get_secret_value(), s.hosted_model, s.hosted_effort, s.hosted_base_url)
+                build_anthropic_provider(
+                    s.anthropic_api_key.get_secret_value(), s.hosted_model, s.hosted_effort, s.hosted_base_url
+                )
                 if s.hosted_provider == "anthropic" and s.anthropic_api_key
                 else None
             ),

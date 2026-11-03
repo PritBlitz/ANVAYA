@@ -6,6 +6,7 @@ on:
       - "apps/api/**"
       - "services/ai-service/**"
       - "infra/**"
+      - "scripts/**"
       - ".github/workflows/backend-ci.yml"
   push:
     branches: [main]
@@ -13,6 +14,8 @@ on:
       - "apps/api/**"
       - "services/ai-service/**"
       - "infra/**"
+      - "scripts/**"
+      - ".github/workflows/backend-ci.yml"
 
 permissions:
   contents: read
@@ -63,6 +66,61 @@ jobs:
         run: node dist/openapi/generate.cli.js && git diff --exit-code openapi.json
       - name: Dependency audit (production)
         run: npm audit --omit=dev --audit-level=high
+
+  # Real gVisor (ADR-0002): installs runsc from gVisor's signed apt repository, provisions the
+  # pinned python profile image, and runs hostile probes (network, root FS writes, /tmp exec,
+  # host env, fork bomb, wall clock) against the production execution plane.
+  sandbox-gvisor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: anvaya
+          POSTGRES_PASSWORD: anvaya_local_only
+          POSTGRES_DB: anvaya_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U anvaya -d anvaya_test" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://anvaya:anvaya_local_only@127.0.0.1:5433/anvaya_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379/1
+      ANVAYA_TEST_RUNSC: "1"
+      SANDBOX_RUNSC_BIN: sudo
+      SANDBOX_RUNSC_PREFIX_ARGS: '["-n","/usr/bin/runsc"]'
+      SANDBOX_ROOTFS_DIR: /tmp/anvaya-rootfs
+      SANDBOX_STATE_DIR: /tmp/anvaya-sandbox
+      SANDBOX_TEST_WORKSPACES: /tmp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Install gVisor (runsc)
+        working-directory: .
+        run: |
+          curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list > /dev/null
+          sudo apt-get update -q && sudo apt-get install -y -q runsc
+          runsc --version
+      - name: Provision the python profile root filesystem
+        working-directory: .
+        run: |
+          image=$(sed -n "s/^const PYTHON_IMAGE = '\(.*\)';$/\1/p" apps/api/src/execution/profiles.ts)
+          sh scripts/sandbox/prepare-rootfs.sh "$SANDBOX_ROOTFS_DIR" "$image"
+      - run: npm ci --ignore-scripts
+      - run: npx vitest run test/gvisor.live.spec.ts
 
   ai-service:
     runs-on: ubuntu-latest
