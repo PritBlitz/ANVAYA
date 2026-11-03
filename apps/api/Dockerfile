@@ -22,7 +22,9 @@ COPY migrations ./migrations
 COPY openapi.json ./openapi.json
 # Amazon RDS CA bundle, so DATABASE_URL can use sslmode=verify-full (infra/aws). Pinned by checksum:
 # a changed bundle fails the build instead of being trusted silently.
-ADD --checksum=sha256:90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b   https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
+ADD --chmod=644 --checksum=sha256:90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b   https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
+# ADD creates /app/certs root-only; the unprivileged runtime user must be able to read the bundle.
+RUN chmod 0755 /app/certs
 # Unprivileged runtime user; no shell tooling is needed at runtime.
 RUN addgroup -S anvaya && adduser -S -G anvaya -H anvaya && mkdir -p /app/storage /app/workspaces && chown anvaya:anvaya /app/storage /app/workspaces
 USER anvaya
