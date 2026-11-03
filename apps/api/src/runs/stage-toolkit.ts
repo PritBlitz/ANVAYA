@@ -6,13 +6,21 @@ import { UsageService } from '../ai/usage.service.js';
 import { logger } from '../common/logger.js';
 import { redactValue } from '../common/redact.js';
 import { DatabaseService, type Tx } from '../database/database.service.js';
-import { type EngineeringTask, json, type JsonObject, type WorkflowRun } from '../database/types.js';
+import { type EngineeringTask, json, type JsonObject, type TaskSourceType, type WorkflowRun } from '../database/types.js';
 import { RunEventsService } from './run-events.service.js';
 import { DEFAULT_RUN_BUDGET, type RunBudget } from './run.schemas.js';
 import { RunTransitionsService } from './run-transitions.service.js';
 import { isTerminal } from './state-machine.js';
+import { untrustedSourceInputs } from './task-sources.js';
 
 const log = logger('orchestrator');
+
+const DESCRIPTION_LABELS: Record<TaskSourceType, string> = {
+  manual: 'task_description',
+  github_issue: 'github_issue_body',
+  pull_request: 'github_pull_request_body',
+  failing_check: 'github_check_run_output',
+};
 
 /** States where the run waits for a human decision; they don't spend the duration budget. */
 const HUMAN_GATES: ReadonlySet<string> = new Set(['awaiting_plan_approval', 'awaiting_pr_approval']);
@@ -51,11 +59,12 @@ export class StageToolkit {
   // ---------------------------------------------------------------------------
   intent(task: EngineeringTask): Record<string, unknown> {
     // Only application-structured fields here; user/issue text goes to untrusted_inputs.
-    return { objective_title: task.title, source_type: task.source_type, external_number: task.external_number };
+    return { objective_title: task.title, source_type: task.source_type, external_number: task.external_number, external_id: task.external_id };
   }
 
+  /** Task text and imported GitHub context, each as a labelled untrusted input (CLAUDE.md §9). */
   untrusted(task: EngineeringTask): Array<{ label: string; content: string }> {
-    return [{ label: task.source_type === 'github_issue' ? 'github_issue_body' : 'task_description', content: task.description }];
+    return [{ label: DESCRIPTION_LABELS[task.source_type], content: task.description }, ...untrustedSourceInputs(task.source_type, task.source_context)];
   }
 
   budget(run: WorkflowRun): RunBudget {

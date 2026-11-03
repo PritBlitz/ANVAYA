@@ -11,7 +11,7 @@ import { resolveWorkspaceId, WorkspaceHeader } from '../common/workspace-scope.j
 import { type AuthedRequest, type AuthUser, CurrentUser } from '../identity/auth.decorators.js';
 import { AccessService } from '../workspaces/access.service.js';
 import { channel, RunEventsService } from './run-events.service.js';
-import { createTaskBody, editPlanBody, listRunsQuery, listTasksQuery, planApprovalBody, startRunBody, updateTaskBody } from './run.schemas.js';
+import { createTaskBody, editPlanBody, failingChecksQuery, listRunsQuery, listTasksQuery, planApprovalBody, startRunBody, updateTaskBody } from './run.schemas.js';
 import { RunsService } from './runs.service.js';
 import { isTerminal } from './state-machine.js';
 import { TasksService } from './tasks.service.js';
@@ -33,6 +33,13 @@ export class TasksController {
   @RateLimit({ bucket: 'task-create', max: 60, windowSeconds: 3600 })
   create(@CurrentUser() user: AuthUser, @Param('repositoryId', new UuidParamPipe('Repository')) repositoryId: string, @Body(new ZodPipe(createTaskBody)) body: z.infer<typeof createTaskBody>) {
     return this.tasks.create(user.id, repositoryId, body);
+  }
+
+  /** Recent failing check runs on a branch/commit, for creating a `failing_check` task. */
+  @Get('repositories/:repositoryId/failing-checks')
+  @RateLimit({ bucket: 'failing-checks', max: 60, windowSeconds: 3600 })
+  failingChecks(@CurrentUser() user: AuthUser, @Param('repositoryId', new UuidParamPipe('Repository')) repositoryId: string, @Query(new ZodPipe(failingChecksQuery)) q: z.infer<typeof failingChecksQuery>) {
+    return this.tasks.failingChecks(user.id, repositoryId, q.ref);
   }
 
   @Get('tasks')

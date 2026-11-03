@@ -14,6 +14,30 @@ export interface FakeRepo {
   /** sha → gzipped tarball */
   tarballs?: Record<string, Buffer>;
   issues?: Record<number, { title: string; body: string; labels?: string[]; pull_request?: boolean }>;
+  /** Existing pull requests, readable with pull_requests:read. */
+  pullRequests?: Record<number, FakePullRequest>;
+  /** Check runs by id, readable with checks:read. */
+  checkRuns?: Record<number, FakeCheckRun>;
+}
+
+export interface FakePullRequest {
+  title: string;
+  body: string | null;
+  head: string;
+  base: string;
+  state?: 'open' | 'closed';
+  labels?: string[];
+  files: Array<{ filename: string; status: string; additions?: number; deletions?: number }>;
+  comments?: Array<{ path: string; line: number | null; body: string; user: string }>;
+}
+
+export interface FakeCheckRun {
+  name: string;
+  head_sha: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: string | null;
+  output?: { title?: string | null; summary?: string | null; text?: string | null };
+  annotations?: Array<{ path: string; start_line: number; end_line: number; annotation_level: string; message: string; title?: string | null }>;
 }
 
 export interface FakeInstallation {
@@ -170,6 +194,93 @@ export class FakeGithub {
       const issue = repo.issues?.[n];
       if (!issue) return void res.status(404).json({ message: 'Not Found' });
       res.json({ number: n, title: issue.title, body: issue.body, state: 'open', html_url: `https://github.test/${repo.owner}/${repo.name}/issues/${n}`, labels: (issue.labels ?? []).map((name) => ({ name })), ...(issue.pull_request ? { pull_request: {} } : {}) });
+    });
+
+    /** Read routes need a token covering the repository and granting `perm` (read or write). */
+    const readGrant = (req: Request, repo: FakeRepo | undefined, perm: 'pull_requests' | 'checks') => {
+      const grant = this.installationTokens.get(tokenAuth(req) ?? '');
+      if (!repo || !grant || !this.grantCovers(grant, repo.id)) return null;
+      return grant.permissions[perm] === 'read' || grant.permissions[perm] === 'write' ? grant : null;
+    };
+
+    app.get('/repos/:owner/:name/pulls/:num', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'pull_requests')) return void res.status(404).json({ message: 'Not Found' });
+      const n = Number(req.params.num);
+      const pr = repo!.pullRequests?.[n];
+      if (!pr) return void res.status(404).json({ message: 'Not Found' });
+      const sha = (ref: string) => repo!.branches[ref] ?? createHash('sha1').update(ref).digest('hex');
+      res.json({
+        id: 9000 + n,
+        number: n,
+        title: pr.title,
+        body: pr.body,
+        state: pr.state ?? 'open',
+        draft: false,
+        merged: false,
+        html_url: `https://github.test/${repo!.owner}/${repo!.name}/pull/${n}`,
+        head: { ref: pr.head, sha: sha(pr.head) },
+        base: { ref: pr.base, sha: sha(pr.base) },
+        changed_files: pr.files.length,
+        labels: (pr.labels ?? []).map((name) => ({ name })),
+      });
+    });
+    app.get('/repos/:owner/:name/pulls/:num/files', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'pull_requests')) return void res.status(404).json({ message: 'Not Found' });
+      const pr = repo!.pullRequests?.[Number(req.params.num)];
+      if (!pr) return void res.status(404).json({ message: 'Not Found' });
+      const perPage = Math.min(Number(req.query.per_page ?? 30), 100);
+      res.json(pr.files.slice(0, perPage).map((f) => ({ filename: f.filename, status: f.status, additions: f.additions ?? 1, deletions: f.deletions ?? 0, changes: 1 })));
+    });
+    app.get('/repos/:owner/:name/pulls/:num/comments', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'pull_requests')) return void res.status(404).json({ message: 'Not Found' });
+      const pr = repo!.pullRequests?.[Number(req.params.num)];
+      if (!pr) return void res.status(404).json({ message: 'Not Found' });
+      const perPage = Math.min(Number(req.query.per_page ?? 30), 100);
+      res.json((pr.comments ?? []).slice(0, perPage).map((c, i) => ({ id: i + 1, path: c.path, line: c.line, body: c.body, user: { login: c.user } })));
+    });
+
+    const checkJson = (repo: FakeRepo, id: number, c: FakeCheckRun) => ({
+      id,
+      name: c.name,
+      head_sha: c.head_sha,
+      status: c.status,
+      conclusion: c.conclusion,
+      html_url: `https://github.test/${repo.owner}/${repo.name}/runs/${id}`,
+      started_at: '2026-11-01T10:00:00Z',
+      completed_at: c.status === 'completed' ? '2026-11-01T10:05:00Z' : null,
+      output: { title: c.output?.title ?? null, summary: c.output?.summary ?? null, text: c.output?.text ?? null, annotations_count: c.annotations?.length ?? 0 },
+      app: { slug: 'github-actions', name: 'GitHub Actions' },
+      pull_requests: [],
+    });
+    app.get('/repos/:owner/:name/check-runs/:id', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'checks')) return void res.status(404).json({ message: 'Not Found' });
+      const id = Number(req.params.id);
+      const c = repo!.checkRuns?.[id];
+      if (!c) return void res.status(404).json({ message: 'Not Found' });
+      res.json(checkJson(repo!, id, c));
+    });
+    app.get('/repos/:owner/:name/check-runs/:id/annotations', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'checks')) return void res.status(404).json({ message: 'Not Found' });
+      const c = repo!.checkRuns?.[Number(req.params.id)];
+      if (!c) return void res.status(404).json({ message: 'Not Found' });
+      const perPage = Math.min(Number(req.query.per_page ?? 30), 50);
+      res.json((c.annotations ?? []).slice(0, perPage).map((a) => ({ ...a, title: a.title ?? null, raw_details: null, blob_href: '' })));
+    });
+    // `*ref` because branch names may contain slashes (GitHub accepts them unencoded).
+    app.get('/repos/:owner/:name/commits/*ref/check-runs', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'checks')) return void res.status(404).json({ message: 'Not Found' });
+      const refParam = (req.params as unknown as { ref: string[] }).ref.join('/');
+      const sha = repo!.branches[refParam] ?? refParam;
+      const runs = Object.entries(repo!.checkRuns ?? {})
+        .filter(([, c]) => c.head_sha === sha && (req.query.status === undefined || c.status === req.query.status))
+        .map(([id, c]) => checkJson(repo!, Number(id), c));
+      res.json({ total_count: runs.length, check_runs: runs });
     });
 
     const writeGrant = (req: Request, repo: FakeRepo | undefined, perm: 'contents' | 'pull_requests') => {

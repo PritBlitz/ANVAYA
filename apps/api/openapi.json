@@ -11878,7 +11878,7 @@
         "tags": [
           "Tasks"
         ],
-        "summary": "Create task (manual or GitHub issue)",
+        "summary": "Create task (manual, GitHub issue, pull request or failing check run)",
         "operationId": "post_repositories_repositoryId_tasks",
         "parameters": [
           {
@@ -11930,7 +11930,9 @@
                     "type": "string",
                     "enum": [
                       "manual",
-                      "github_issue"
+                      "github_issue",
+                      "pull_request",
+                      "failing_check"
                     ]
                   },
                   "title": {
@@ -11947,7 +11949,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "exclusiveMinimum": true,
+                    "maximum": 2147483647
+                  },
+                  "check_run_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
                     "maximum": 9007199254740991
+                  },
+                  "include_review_comments": {
+                    "type": "boolean"
                   },
                   "labels": {
                     "default": [],
@@ -12016,6 +12027,238 @@
                           "nullable": true,
                           "type": "number"
                         },
+                        "external_id": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source_url": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source_context": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "state": {
+                                  "type": "string"
+                                },
+                                "draft": {
+                                  "type": "boolean"
+                                },
+                                "merged": {
+                                  "type": "boolean"
+                                },
+                                "head_branch": {
+                                  "type": "string"
+                                },
+                                "head_sha": {
+                                  "type": "string"
+                                },
+                                "base_branch": {
+                                  "type": "string"
+                                },
+                                "base_sha": {
+                                  "type": "string"
+                                },
+                                "changed_files": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string"
+                                      },
+                                      "additions": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "deletions": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "status",
+                                      "additions",
+                                      "deletions"
+                                    ]
+                                  }
+                                },
+                                "changed_files_total": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "changed_files_truncated": {
+                                  "type": "boolean"
+                                },
+                                "review_comments": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "author": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "body": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "line",
+                                      "author",
+                                      "body"
+                                    ]
+                                  }
+                                },
+                                "review_comments_truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "draft",
+                                "merged",
+                                "head_branch",
+                                "head_sha",
+                                "base_branch",
+                                "base_sha",
+                                "changed_files",
+                                "changed_files_total",
+                                "changed_files_truncated",
+                                "review_comments",
+                                "review_comments_truncated"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "check_name": {
+                                  "type": "string"
+                                },
+                                "app": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "conclusion": {
+                                  "type": "string"
+                                },
+                                "head_sha": {
+                                  "type": "string"
+                                },
+                                "started_at": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "completed_at": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "pull_request_numbers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "output_title": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "annotations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "start_line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "end_line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "level": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "start_line",
+                                      "end_line",
+                                      "level",
+                                      "title",
+                                      "message"
+                                    ]
+                                  }
+                                },
+                                "annotations_total": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "annotations_truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "check_name",
+                                "app",
+                                "conclusion",
+                                "head_sha",
+                                "started_at",
+                                "completed_at",
+                                "pull_request_numbers",
+                                "output_title",
+                                "annotations",
+                                "annotations_total",
+                                "annotations_truncated"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -12057,12 +12300,200 @@
                         "created_by",
                         "source_type",
                         "external_number",
+                        "external_id",
+                        "source_url",
+                        "source_context",
                         "title",
                         "description",
                         "status",
                         "labels",
                         "created_at",
                         "updated_at"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (insufficient role) or CSRF_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or concealed because the caller is not a member of the owning workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or budget limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/failing-checks": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Recent failing check runs on a branch or commit (member+; for failing_check tasks)",
+        "operationId": "get_repositories_repositoryId_failing_checks",
+        "parameters": [
+          {
+            "name": "repositoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9._/-]+$"
+            }
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "ref": {
+                          "type": "string"
+                        },
+                        "check_runs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "conclusion": {
+                                "type": "string"
+                              },
+                              "head_sha": {
+                                "type": "string"
+                              },
+                              "html_url": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "completed_at": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "app": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "conclusion",
+                              "head_sha",
+                              "html_url",
+                              "completed_at",
+                              "app"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "ref",
+                        "check_runs"
                       ]
                     },
                     "meta": {
@@ -12279,6 +12710,238 @@
                             "nullable": true,
                             "type": "number"
                           },
+                          "external_id": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "source_url": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "source_context": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "state": {
+                                    "type": "string"
+                                  },
+                                  "draft": {
+                                    "type": "boolean"
+                                  },
+                                  "merged": {
+                                    "type": "boolean"
+                                  },
+                                  "head_branch": {
+                                    "type": "string"
+                                  },
+                                  "head_sha": {
+                                    "type": "string"
+                                  },
+                                  "base_branch": {
+                                    "type": "string"
+                                  },
+                                  "base_sha": {
+                                    "type": "string"
+                                  },
+                                  "changed_files": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        },
+                                        "additions": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "deletions": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        }
+                                      },
+                                      "required": [
+                                        "path",
+                                        "status",
+                                        "additions",
+                                        "deletions"
+                                      ]
+                                    }
+                                  },
+                                  "changed_files_total": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "changed_files_truncated": {
+                                    "type": "boolean"
+                                  },
+                                  "review_comments": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "path": {
+                                          "nullable": true,
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "nullable": true,
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "author": {
+                                          "nullable": true,
+                                          "type": "string"
+                                        },
+                                        "body": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "path",
+                                        "line",
+                                        "author",
+                                        "body"
+                                      ]
+                                    }
+                                  },
+                                  "review_comments_truncated": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "state",
+                                  "draft",
+                                  "merged",
+                                  "head_branch",
+                                  "head_sha",
+                                  "base_branch",
+                                  "base_sha",
+                                  "changed_files",
+                                  "changed_files_total",
+                                  "changed_files_truncated",
+                                  "review_comments",
+                                  "review_comments_truncated"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "check_name": {
+                                    "type": "string"
+                                  },
+                                  "app": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "conclusion": {
+                                    "type": "string"
+                                  },
+                                  "head_sha": {
+                                    "type": "string"
+                                  },
+                                  "started_at": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "completed_at": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "pull_request_numbers": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "output_title": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "annotations": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "start_line": {
+                                          "nullable": true,
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "end_line": {
+                                          "nullable": true,
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "level": {
+                                          "nullable": true,
+                                          "type": "string"
+                                        },
+                                        "title": {
+                                          "nullable": true,
+                                          "type": "string"
+                                        },
+                                        "message": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "path",
+                                        "start_line",
+                                        "end_line",
+                                        "level",
+                                        "title",
+                                        "message"
+                                      ]
+                                    }
+                                  },
+                                  "annotations_total": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "annotations_truncated": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "check_name",
+                                  "app",
+                                  "conclusion",
+                                  "head_sha",
+                                  "started_at",
+                                  "completed_at",
+                                  "pull_request_numbers",
+                                  "output_title",
+                                  "annotations",
+                                  "annotations_total",
+                                  "annotations_truncated"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
                           "title": {
                             "type": "string"
                           },
@@ -12375,6 +13038,9 @@
                           "created_by",
                           "source_type",
                           "external_number",
+                          "external_id",
+                          "source_url",
+                          "source_context",
                           "title",
                           "description",
                           "status",
@@ -12541,6 +13207,238 @@
                           "nullable": true,
                           "type": "number"
                         },
+                        "external_id": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source_url": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source_context": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "state": {
+                                  "type": "string"
+                                },
+                                "draft": {
+                                  "type": "boolean"
+                                },
+                                "merged": {
+                                  "type": "boolean"
+                                },
+                                "head_branch": {
+                                  "type": "string"
+                                },
+                                "head_sha": {
+                                  "type": "string"
+                                },
+                                "base_branch": {
+                                  "type": "string"
+                                },
+                                "base_sha": {
+                                  "type": "string"
+                                },
+                                "changed_files": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string"
+                                      },
+                                      "additions": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "deletions": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "status",
+                                      "additions",
+                                      "deletions"
+                                    ]
+                                  }
+                                },
+                                "changed_files_total": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "changed_files_truncated": {
+                                  "type": "boolean"
+                                },
+                                "review_comments": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "author": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "body": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "line",
+                                      "author",
+                                      "body"
+                                    ]
+                                  }
+                                },
+                                "review_comments_truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "draft",
+                                "merged",
+                                "head_branch",
+                                "head_sha",
+                                "base_branch",
+                                "base_sha",
+                                "changed_files",
+                                "changed_files_total",
+                                "changed_files_truncated",
+                                "review_comments",
+                                "review_comments_truncated"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "check_name": {
+                                  "type": "string"
+                                },
+                                "app": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "conclusion": {
+                                  "type": "string"
+                                },
+                                "head_sha": {
+                                  "type": "string"
+                                },
+                                "started_at": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "completed_at": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "pull_request_numbers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "output_title": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "annotations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "start_line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "end_line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "level": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "start_line",
+                                      "end_line",
+                                      "level",
+                                      "title",
+                                      "message"
+                                    ]
+                                  }
+                                },
+                                "annotations_total": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "annotations_truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "check_name",
+                                "app",
+                                "conclusion",
+                                "head_sha",
+                                "started_at",
+                                "completed_at",
+                                "pull_request_numbers",
+                                "output_title",
+                                "annotations",
+                                "annotations_total",
+                                "annotations_truncated"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -12637,6 +13535,9 @@
                         "created_by",
                         "source_type",
                         "external_number",
+                        "external_id",
+                        "source_url",
+                        "source_context",
                         "title",
                         "description",
                         "status",
@@ -12848,6 +13749,238 @@
                           "nullable": true,
                           "type": "number"
                         },
+                        "external_id": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source_url": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source_context": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "state": {
+                                  "type": "string"
+                                },
+                                "draft": {
+                                  "type": "boolean"
+                                },
+                                "merged": {
+                                  "type": "boolean"
+                                },
+                                "head_branch": {
+                                  "type": "string"
+                                },
+                                "head_sha": {
+                                  "type": "string"
+                                },
+                                "base_branch": {
+                                  "type": "string"
+                                },
+                                "base_sha": {
+                                  "type": "string"
+                                },
+                                "changed_files": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string"
+                                      },
+                                      "additions": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "deletions": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "status",
+                                      "additions",
+                                      "deletions"
+                                    ]
+                                  }
+                                },
+                                "changed_files_total": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "changed_files_truncated": {
+                                  "type": "boolean"
+                                },
+                                "review_comments": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "author": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "body": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "line",
+                                      "author",
+                                      "body"
+                                    ]
+                                  }
+                                },
+                                "review_comments_truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "draft",
+                                "merged",
+                                "head_branch",
+                                "head_sha",
+                                "base_branch",
+                                "base_sha",
+                                "changed_files",
+                                "changed_files_total",
+                                "changed_files_truncated",
+                                "review_comments",
+                                "review_comments_truncated"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "check_name": {
+                                  "type": "string"
+                                },
+                                "app": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "conclusion": {
+                                  "type": "string"
+                                },
+                                "head_sha": {
+                                  "type": "string"
+                                },
+                                "started_at": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "completed_at": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "pull_request_numbers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "output_title": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "annotations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "start_line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "end_line": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "level": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "start_line",
+                                      "end_line",
+                                      "level",
+                                      "title",
+                                      "message"
+                                    ]
+                                  }
+                                },
+                                "annotations_total": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "annotations_truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "check_name",
+                                "app",
+                                "conclusion",
+                                "head_sha",
+                                "started_at",
+                                "completed_at",
+                                "pull_request_numbers",
+                                "output_title",
+                                "annotations",
+                                "annotations_total",
+                                "annotations_truncated"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -12889,6 +14022,9 @@
                         "created_by",
                         "source_type",
                         "external_number",
+                        "external_id",
+                        "source_url",
+                        "source_context",
                         "title",
                         "description",
                         "status",

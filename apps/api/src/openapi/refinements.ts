@@ -7,6 +7,7 @@
 import { z, type ZodType } from 'zod';
 import { RUN_ACTIVE_STATUSES, RUN_TERMINAL_STATUSES } from '../database/types.js';
 import { SYMBOL_KINDS } from '../indexing/code-intel.controller.js';
+import { taskSourceContextSchema } from '../runs/run.schemas.js';
 
 const ROLE = z.enum(['owner', 'admin', 'member', 'viewer']);
 const RUN_STATUS = z.enum([...RUN_ACTIVE_STATUSES, ...RUN_TERMINAL_STATUSES]);
@@ -99,6 +100,8 @@ const RULES: Rule[] = [
   [TASK_ROUTES, '[].status', TASK_STATUS],
   [TASK_ROUTES, 'source_type', TASK_SOURCE],
   [TASK_ROUTES, '[].source_type', TASK_SOURCE],
+  [TASK_ROUTES, 'source_context', taskSourceContextSchema],
+  [TASK_ROUTES, '[].source_context', taskSourceContextSchema],
   [TASK_ROUTES, 'latest_run.status', RUN_STATUS],
   [TASK_ROUTES, '[].latest_run.status', RUN_STATUS],
   [REPO_ROUTES, 'status', REPO_STATUS],
