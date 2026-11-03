@@ -113,6 +113,7 @@ describe('gVisor sandbox spec', () => {
   it('maps Windows paths for a WSL development worker only when asked', () => {
     expect(driver().runtimePath('/srv/x')).toBe('/srv/x');
     expect(driver({ SANDBOX_PATH_STYLE: 'wsl' }).runtimePath('Z:\\ANVAYA\\ws\\run-1')).toBe('/mnt/z/ANVAYA/ws/run-1');
+    expect(driver({ SANDBOX_PATH_STYLE: 'wsl' }).runtimePath('C:/Users/x/run-2')).toBe('/mnt/c/Users/x/run-2');
   });
 
   it('passes runsc its state root, network mode and platform', () => {
