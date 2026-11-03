@@ -76,7 +76,7 @@ describe('data retention', () => {
       .execute();
     await d
       .insertInto('idempotency_keys')
-      .values({ user_id: user.id, endpoint: 'POST /x', idempotency_key: `k-${randomUUID()}`, request_hash: 'h', status: 'completed', expires_at: new Date(Date.now() - 1000) })
+      .values({ user_id: user.id, endpoint: 'POST /x', idempotency_key: `k-${randomUUID()}`, request_hash: 'h', status: 'completed', expires_at: new Date(Date.now() - 3600_000) }) // well past any app/database clock skew
       .execute();
     const auditBefore = await d.selectFrom('audit_events').select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow();
     const report = await retention.sweep();
