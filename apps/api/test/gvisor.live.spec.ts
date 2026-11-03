@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -27,6 +27,9 @@ describe.skipIf(!enabled)('gVisor sandbox against real runsc', () => {
     mkdirSync(path.join(dir, 'tests'));
     writeFileSync(path.join(dir, 'tests', '__init__.py'), '');
     writeFileSync(path.join(dir, 'tests', 'test_probe.py'), `import unittest\n\nclass Probe(unittest.TestCase):\n    def test_probe(self):\n${test.replace(/^/gm, '        ')}\n`);
+    // Same permissions as WorkspaceManager: the sandbox user (65534) must be able to use them.
+    for (const d of [dir, path.join(dir, 'tests')]) chmodSync(d, 0o777);
+    for (const f of ['tests/__init__.py', 'tests/test_probe.py']) chmodSync(path.join(dir, f), 0o666);
     return dir;
   }
 
@@ -41,7 +44,8 @@ describe.skipIf(!enabled)('gVisor sandbox against real runsc', () => {
   });
 
   it('runs inside gVisor as uid 65534', async () => {
-    const res = await probe("import os\nkernel = open('/proc/version').read()\nself.assertEqual(os.getuid(), 65534)\nself.assertIn('gVisor', open('/proc/self/status').read() + kernel + str(os.uname()))");
+    // gVisor's sentry implements the Linux ABI itself and reports the emulated release 4.4.0.
+    const res = await probe("import os\nself.assertEqual(os.getuid(), 65534)\nself.assertEqual(os.uname().release, '4.4.0')");
     expect(res.exitCode, res.stderr).toBe(0);
   });
 
