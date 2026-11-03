@@ -67,7 +67,11 @@ function ResultItem({ r }: { r: WorkspaceSearchResult }) {
           </span>
         )}
       </div>
-      <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-surface-sunken p-2 font-mono text-xs whitespace-pre-wrap text-fg">
+      <pre
+        tabIndex={0}
+        aria-label={`Snippet from ${r.repository_full_name}`}
+        className="mt-2 max-h-40 overflow-auto rounded-md bg-surface-sunken p-2 font-mono text-xs whitespace-pre-wrap text-fg"
+      >
         {r.snippet}
       </pre>
     </li>
