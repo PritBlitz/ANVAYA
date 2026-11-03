@@ -88,7 +88,8 @@ describe('workspace quotas and concurrency limits (FR-OBS-004)', () => {
       .select(['actor_user_id', 'metadata_redacted'])
       .where('organization_id', '=', ws)
       .where('action', '=', 'workspace.quotas_updated')
-      .orderBy('id', 'desc')
+      .where('actor_user_id', '=', admin.id)
+      .orderBy('created_at', 'desc')
       .limit(1)
       .execute();
     expect(events[0]).toMatchObject({ actor_user_id: admin.id, metadata_redacted: { from: { max_active_runs: 2, daily_runs: 50, daily_tokens: 100_000 }, to: { max_active_runs: 2, daily_tokens: 100_000 } } });
