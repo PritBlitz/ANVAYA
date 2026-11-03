@@ -142,6 +142,22 @@ jobs:
       - run: pytest -q
       - run: pip-audit --skip-editable
 
+  # AWS reference deployment (releases/V1.md: infrastructure as code, never applied from CI).
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/aws
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
   secrets:
     runs-on: ubuntu-latest
     steps:

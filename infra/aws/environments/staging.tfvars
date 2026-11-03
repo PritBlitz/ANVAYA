@@ -1,0 +1,13 @@
+environment             = "staging"
+region                  = "ap-south-1"
+vpc_cidr                = "10.40.0.0/16"
+public_hostname         = "staging.anvaya.example.com"
+certificate_arn         = "arn:aws:acm:ap-south-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
+image_tag               = "replace-with-git-sha"
+db_instance_class       = "db.t4g.medium"
+redis_node_type         = "cache.t4g.small"
+service_desired_count   = 1
+execution_host_count    = 1
+execution_instance_type = "c7i.large"
+inference_instance_type = "r7i.xlarge"
+log_retention_days      = 14

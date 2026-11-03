@@ -1,0 +1,14 @@
+environment             = "production"
+region                  = "ap-south-1"
+vpc_cidr                = "10.50.0.0/16"
+public_hostname         = "anvaya.example.com"
+certificate_arn         = "arn:aws:acm:ap-south-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
+image_tag               = "replace-with-git-sha"
+db_instance_class       = "db.r7g.large"
+redis_node_type         = "cache.r7g.large"
+service_desired_count   = 2
+execution_host_count    = 2
+execution_instance_type = "c7i.xlarge"
+inference_instance_type = "g5.xlarge"
+log_retention_days      = 90
+alarm_email             = ""
