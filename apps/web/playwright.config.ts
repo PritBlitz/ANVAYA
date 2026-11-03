@@ -25,6 +25,22 @@ export default defineConfig({
       use: { ...devices["Pixel 7"] },
       testMatch: /(responsive|homepage)\.spec\.ts/,
     },
+    // The desktop journeys again in Gecko and WebKit. CI always runs them; locally set
+    // E2E_ALL_BROWSERS=1 (and `npx playwright install firefox webkit`) to include them.
+    ...(process.env.CI || process.env.E2E_ALL_BROWSERS
+      ? [
+          {
+            name: "firefox",
+            use: { ...devices["Desktop Firefox"] },
+            testIgnore: /responsive\.spec\.ts/,
+          },
+          {
+            name: "webkit",
+            use: { ...devices["Desktop Safari"] },
+            testIgnore: /responsive\.spec\.ts/,
+          },
+        ]
+      : []),
   ],
   webServer: {
     // NEXT_PUBLIC_* values are inlined at build time, so E2E builds its own bundle with

@@ -4612,7 +4612,7 @@ export interface operations {
                         exclude_paths?: string[];
                         max_file_bytes?: number;
                         auto_index_on_push?: boolean;
-                        verification_profiles?: ("python-compile" | "python-unittest" | "node-syntax" | "node-test")[];
+                        verification_profiles?: ("python-compile" | "python-unittest" | "node-syntax" | "node-test" | "npm-test" | "python-pytest")[];
                     };
                     /** @enum {string} */
                     status?: "connected" | "disabled";
@@ -9639,11 +9639,11 @@ export interface operations {
                                 image: string;
                                 /** @enum {string} */
                                 status: "passed" | "failed" | "timed_out" | "skipped" | "error";
-                                exit_code: number;
-                                duration_ms: number;
+                                exit_code: number | null;
+                                duration_ms: number | null;
                                 output_truncated: boolean;
-                                stdout_excerpt: string;
-                                stderr_excerpt: string;
+                                stdout_excerpt: string | null;
+                                stderr_excerpt: string | null;
                                 /** Format: date-time */
                                 created_at: string;
                             }[];

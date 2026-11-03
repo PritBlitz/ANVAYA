@@ -1,0 +1,76 @@
+name: web-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "apps/api/openapi.json"
+      - ".github/workflows/web-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "apps/api/openapi.json"
+      - ".github/workflows/web-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Generated API types match the backend OpenAPI document
+        run: npm run gen:api && npx prettier --write src/lib/api/generated && git diff --exit-code src/lib/api/generated
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_MODE: http
+          ANVAYA_API_ORIGIN: http://localhost:3001
+      - name: Dependency audit (production)
+        run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      # Fixture mode: deterministic, no backend, GitHub App or model (CLAUDE.md §12).
+      # Chromium desktop + mobile, plus the desktop journeys in Firefox and WebKit; axe scans included.
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 7
