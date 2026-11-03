@@ -1,0 +1,14 @@
+# Local worktrees of feat/backend and feat/frontend live inside the main checkout.
+/backend/
+/frontend/
+# Editor and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+# Secrets never belong in git (CLAUDE.md §13)
+.env
+.env.*
+!.env.example
+*.pem
