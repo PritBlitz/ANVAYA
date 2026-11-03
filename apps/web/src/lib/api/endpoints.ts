@@ -209,6 +209,27 @@ export function createEndpoints(client: ApiClient) {
             query: { path: path || undefined, snapshot },
           }),
         ),
+      /** Callers/callees of a symbol (bounded depth, offset-paged nodes). */
+      callGraph: (
+        repositoryId: string,
+        symbolId: string,
+        params: {
+          direction?: T.CallGraphDirection;
+          depth?: number;
+          limit?: number;
+          cursor?: string;
+        } = {},
+      ) =>
+        client.get<T.CallGraph>(
+          `/repositories/${enc(repositoryId)}/symbols/${enc(symbolId)}/call-graph`,
+          { query: { ...params } },
+        ),
+      /** Heuristic change-impact prediction and test selection. Never a verification result. */
+      impact: (repositoryId: string, changedFiles: string[], maxTests?: number) =>
+        client.post<T.ImpactPrediction>(`/repositories/${enc(repositoryId)}/impact`, {
+          changed_files: changedFiles,
+          ...(maxTests ? { max_tests: maxTests } : {}),
+        }),
       snapshots: (repositoryId: string) =>
         client.get<T.RepositorySnapshot[]>(`/repositories/${enc(repositoryId)}/snapshots`),
       ask: async (repositoryId: string, body: T.AskQuestionRequest, signal?: AbortSignal) =>
@@ -318,6 +339,8 @@ export function createEndpoints(client: ApiClient) {
         M.toVerification(await client.get<W.WVerification>(`/runs/${enc(runId)}/verification`)),
       review: async (runId: string) =>
         M.toReview(await client.get<W.WReview>(`/runs/${enc(runId)}/review`)),
+      /** Heuristic impact of the run's patch (or plan files before a patch exists). */
+      impact: (runId: string) => client.get<T.RunImpact>(`/runs/${enc(runId)}/impact`),
       /** Returns only the decision; callers merge it into the cached finding. */
       disposeFinding: (runId: string, findingId: string, body: T.FindingDispositionRequest) =>
         client.post<T.FindingDisposition>(
@@ -336,6 +359,36 @@ export function createEndpoints(client: ApiClient) {
             idempotencyKey,
           }),
         ),
+    },
+
+    templates: {
+      list: (workspaceId: string, includeArchived = false) =>
+        client.get<T.WorkflowTemplate[]>(`/workspaces/${enc(workspaceId)}/templates`, {
+          query: { include_archived: includeArchived ? "true" : undefined },
+        }),
+      create: (workspaceId: string, body: T.CreateTemplateRequest, idempotencyKey: string) =>
+        client.post<T.WorkflowTemplate>(`/workspaces/${enc(workspaceId)}/templates`, body, {
+          idempotencyKey,
+        }),
+      update: (workspaceId: string, templateId: string, body: T.UpdateTemplateRequest) =>
+        client.patch<T.WorkflowTemplate>(
+          `/workspaces/${enc(workspaceId)}/templates/${enc(templateId)}`,
+          body,
+        ),
+      archive: (workspaceId: string, templateId: string) =>
+        client.delete(`/workspaces/${enc(workspaceId)}/templates/${enc(templateId)}`),
+    },
+
+    /** Cross-repository knowledge within a workspace (per-result repository provenance). */
+    workspaceKnowledge: {
+      search: (workspaceId: string, body: T.WorkspaceSearchRequest, signal?: AbortSignal) =>
+        client.post<T.WorkspaceSearchResponse>(`/workspaces/${enc(workspaceId)}/search`, body, {
+          signal,
+        }),
+      ask: (workspaceId: string, body: T.WorkspaceAskRequest, signal?: AbortSignal) =>
+        client.post<T.WorkspaceAnswer>(`/workspaces/${enc(workspaceId)}/questions`, body, {
+          signal,
+        }),
     },
 
     ai: {

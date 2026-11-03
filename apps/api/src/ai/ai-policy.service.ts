@@ -9,6 +9,15 @@ import { AiServiceError } from './ai-client.js';
 
 export const DATA_CATEGORIES = ['source_code', 'documentation', 'issue_text', 'diffs', 'test_output'] as const;
 
+/**
+ * Hosted (cloud) providers the AI service has adapters for (FR-AI-001/003). Which ones are actually
+ * configured is server-side AI service configuration; secrets never reach the API or the browser.
+ * - anthropic: the hosted Claude API.
+ * - openai_compatible: an OpenAI-compatible chat-completions endpoint (OpenAI, or a self-hosted
+ *   server such as vLLM or llama.cpp) configured by the operator.
+ */
+export const HOSTED_PROVIDERS = ['anthropic', 'openai_compatible'] as const;
+
 export const aiPolicySchema = z
   .object({
     default_mode: z.enum(['local', 'mock', 'cloud']),
@@ -16,7 +25,7 @@ export const aiPolicySchema = z
     cloud: z
       .object({
         enabled: z.boolean(),
-        provider: z.string().max(50).nullable(),
+        provider: z.enum(HOSTED_PROVIDERS).nullable(),
         model: z.string().max(100).nullable(),
         /** Data categories the workspace has agreed may be sent to the hosted provider (FR-AI-008). */
         data_categories: z.array(z.enum(DATA_CATEGORIES)).max(DATA_CATEGORIES.length),
@@ -116,8 +125,12 @@ export class AiPolicyService {
         throw Errors.unprocessable('INVALID_POLICY', 'Allowing cloud mode requires cloud.enabled and a cloud.provider.');
       }
       const enablingCloud = next.cloud.enabled && !current.cloud.enabled;
-      if (enablingCloud && body.acknowledge_data_disclosure !== true) {
-        throw Errors.unprocessable('DATA_DISCLOSURE_REQUIRED', 'Enabling cloud inference requires acknowledge_data_disclosure: true.', {
+      // A new recipient or new data categories is a new disclosure: the admin must acknowledge it again (FR-AI-008).
+      const providerChanged = next.cloud.enabled && current.cloud.enabled && next.cloud.provider !== current.cloud.provider;
+      const categoriesAdded = next.cloud.enabled && current.cloud.enabled && next.cloud.data_categories.some((c) => !current.cloud.data_categories.includes(c));
+      if ((enablingCloud || providerChanged || categoriesAdded) && body.acknowledge_data_disclosure !== true) {
+        const what = enablingCloud ? 'Enabling cloud inference' : providerChanged ? 'Changing the hosted provider' : 'Adding data categories';
+        throw Errors.unprocessable('DATA_DISCLOSURE_REQUIRED', `${what} requires acknowledge_data_disclosure: true.`, {
           provider: next.cloud.provider,
           data_categories: next.cloud.data_categories,
         });
@@ -132,7 +145,7 @@ export class AiPolicyService {
         {
           organizationId: workspaceId,
           actorUserId: userId,
-          action: enablingCloud ? 'ai_policy.cloud_enabled' : 'ai_policy.updated',
+          action: enablingCloud ? 'ai_policy.cloud_enabled' : providerChanged ? 'ai_policy.cloud_provider_changed' : 'ai_policy.updated',
           resourceType: 'ai_policy',
           resourceId: workspaceId,
           metadata: { before: current, after: next, data_disclosure_acknowledged: body.acknowledge_data_disclosure === true },

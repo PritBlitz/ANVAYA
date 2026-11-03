@@ -8,6 +8,32 @@ import { TRANSITIONS } from './state-machine.js';
 const shortText = z.string().trim().min(1).max(500);
 const relPath = pathPattern.refine((p) => !p.includes('*'), 'must be a file path, not a pattern');
 
+/**
+ * Migration-plan section (releases/V1.md work package B): affected areas with the evidence
+ * that shows them, prerequisites, and rollback per step and overall. Evidence is referenced by
+ * id only; locations are resolved from the run's own retrieval records when the plan is read.
+ */
+export const migrationSectionSchema = z
+  .object({
+    affected_areas: z
+      .array(
+        z
+          .object({
+            area: shortText,
+            description: shortText,
+            files: z.array(relPath).max(16).default([]),
+            evidence_ids: z.array(z.string().min(1).max(64)).max(8).default([]),
+          })
+          .strict(),
+      )
+      .max(12)
+      .default([]),
+    prerequisites: z.array(shortText).max(8).default([]),
+    step_rollback: z.array(z.object({ step_id: z.string().regex(/^step-\d{1,3}$/), rollback: shortText }).strict()).max(12).default([]),
+    rollback_strategy: z.array(shortText).max(8).default([]),
+  })
+  .strict();
+
 /** Engineering plan (AI_WORKFLOW §4.2). Used for model output and for human edits. */
 export const planSchema = z
   .object({
@@ -30,6 +56,8 @@ export const planSchema = z
     tests: z.array(shortText).max(12).default([]),
     risks: z.array(shortText).max(10).default([]),
     out_of_scope: z.array(shortText).max(10).default([]),
+    /** Present only on plans from the migration-plan workflow (plan-only). Absent keeps existing plan hashes unchanged. */
+    migration: migrationSectionSchema.optional(),
   })
   .strict()
   .superRefine((p, ctx) => {
@@ -38,8 +66,29 @@ export const planSchema = z
       if (ids.has(s.id)) ctx.addIssue({ code: 'custom', path: ['steps'], message: `duplicate step id ${s.id}` });
       ids.add(s.id);
     }
+    for (const r of p.migration?.step_rollback ?? []) {
+      if (!ids.has(r.step_id)) ctx.addIssue({ code: 'custom', path: ['migration', 'step_rollback'], message: `rollback refers to unknown step ${r.step_id}` });
+    }
   });
 export type Plan = z.infer<typeof planSchema>;
+
+/** Structured output of the AI service's `migration_plan` task; converted into a Plan with a migration section. */
+export const migrationPlanOutputSchema = z.object({
+  objective: shortText,
+  assumptions: z.array(shortText).max(10).default([]),
+  steps: z
+    .array(z.object({ id: z.string().regex(/^step-\d{1,3}$/), description: shortText, files: z.array(z.string().max(500)).max(16).default([]), verification: z.array(shortText).max(8).default([]), rollback: shortText }))
+    .min(1)
+    .max(12),
+  files_to_modify: z.array(z.string().max(500)).max(32).default([]),
+  tests: z.array(shortText).max(12).default([]),
+  risks: z.array(shortText).max(10).default([]),
+  out_of_scope: z.array(shortText).max(10).default([]),
+  affected_areas: z.array(z.object({ area: shortText, description: shortText, files: z.array(z.string().max(500)).max(16).default([]), evidence_ids: z.array(z.string().max(64)).max(8).default([]) })).max(12).default([]),
+  prerequisites: z.array(shortText).max(8).default([]),
+  rollback_strategy: z.array(shortText).max(8).default([]),
+});
+export type MigrationPlanOutput = z.infer<typeof migrationPlanOutputSchema>;
 
 export function planHash(plan: Plan): string {
   return `sha256:${sha256Hex(canonicalJson(plan))}`;
@@ -90,6 +139,8 @@ export const createTaskBody = z
     /** `pull_request` only: also import the first review comments as untrusted context. */
     include_review_comments: z.boolean().optional(),
     labels: z.array(z.string().trim().min(1).max(50)).max(20).default([]),
+    /** Workflow template (built-in or workspace) whose policy the task's runs follow. */
+    template_key: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/).optional(),
   })
   .strict()
   .superRefine((b, ctx) => {

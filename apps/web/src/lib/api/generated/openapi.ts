@@ -640,6 +640,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repositories/{repositoryId}/symbols/{symbolId}/call-graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Callers/callees of a symbol (bounded depth, offset-paged nodes) */
+        get: operations["get_repositories_repositoryId_symbols_symbolId_call_graph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repositories/{repositoryId}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Heuristic change-impact prediction and test selection for changed files
+         * @description Static analysis over parsed imports and name-resolved calls. Labelled heuristic: it is never a verification result.
+         */
+        post: operations["post_repositories_repositoryId_impact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Heuristic impact and test selection for a run's patch (or plan files) */
+        get: operations["get_runs_runId_impact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{workspaceId}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search all indexed repositories of the workspace (per-result repository provenance) */
+        post: operations["post_workspaces_workspaceId_search"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{workspaceId}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grounded Q&A over evidence from all indexed repositories of the workspace */
+        post: operations["post_workspaces_workspaceId_questions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{workspaceId}/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Built-in and workspace workflow templates */
+        get: operations["get_workspaces_workspaceId_templates"];
+        put?: never;
+        /** Create a workspace template (admin+, audited) */
+        post: operations["post_workspaces_workspaceId_templates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{workspaceId}/templates/{templateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Archive a workspace template (admin+, audited) */
+        delete: operations["delete_workspaces_workspaceId_templates_templateId"];
+        options?: never;
+        head?: never;
+        /** Update or archive a workspace template (admin+, audited) */
+        patch: operations["patch_workspaces_workspaceId_templates_templateId"];
+        trace?: never;
+    };
     "/repositories/{repositoryId}/questions": {
         parameters: {
             query?: never;
@@ -1166,6 +1290,26 @@ export interface components {
             risks: string[];
             /** @default [] */
             out_of_scope: string[];
+            migration?: {
+                /** @default [] */
+                affected_areas: {
+                    area: string;
+                    description: string;
+                    /** @default [] */
+                    files: string[];
+                    /** @default [] */
+                    evidence_ids: string[];
+                }[];
+                /** @default [] */
+                prerequisites: string[];
+                /** @default [] */
+                step_rollback: {
+                    step_id: string;
+                    rollback: string;
+                }[];
+                /** @default [] */
+                rollback_strategy: string[];
+            };
         };
     };
     responses: never;
@@ -4240,7 +4384,7 @@ export interface operations {
                             /** Format: date-time */
                             indexed_at: string | null;
                             settings: {
-                                [key: string]: boolean | number | unknown[];
+                                [key: string]: boolean | number | string | unknown[];
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -4374,7 +4518,7 @@ export interface operations {
                             /** Format: date-time */
                             indexed_at: string | null;
                             settings: {
-                                [key: string]: boolean | number | unknown[];
+                                [key: string]: boolean | number | string | unknown[];
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -4493,7 +4637,7 @@ export interface operations {
                             /** Format: date-time */
                             indexed_at: string | null;
                             settings: {
-                                [key: string]: boolean | number | string[];
+                                [key: string]: boolean | number | string | string[];
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -4677,6 +4821,8 @@ export interface operations {
                         max_file_bytes?: number;
                         auto_index_on_push?: boolean;
                         verification_profiles?: ("python-compile" | "python-unittest" | "node-syntax" | "node-test" | "npm-test" | "python-pytest")[];
+                        /** @enum {string} */
+                        test_selection?: "off" | "narrow";
                     };
                     /** @enum {string} */
                     status?: "connected" | "disabled";
@@ -4714,7 +4860,7 @@ export interface operations {
                             /** Format: date-time */
                             indexed_at: string | null;
                             settings: {
-                                [key: string]: boolean | number | string[];
+                                [key: string]: boolean | number | string | string[];
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -5931,6 +6077,1460 @@ export interface operations {
             };
         };
     };
+    get_repositories_repositoryId_symbols_symbolId_call_graph: {
+        parameters: {
+            query?: {
+                snapshot?: "latest" | string;
+                direction?: "callers" | "callees" | "both";
+                depth?: number;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: {
+                "X-Request-Id"?: string;
+            };
+            path: {
+                repositoryId: string;
+                symbolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: uuid */
+                            snapshot_id: string;
+                            commit_sha: string;
+                            root: {
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                                qualified_name: string | null;
+                                kind: string;
+                                path: string;
+                                start_line: number;
+                                end_line: number;
+                            };
+                            /** @enum {string} */
+                            direction: "callers" | "callees" | "both";
+                            depth: number;
+                            nodes: {
+                                symbol: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    name: string;
+                                    qualified_name: string | null;
+                                    kind: string;
+                                    path: string;
+                                    start_line: number;
+                                    end_line: number;
+                                };
+                                depth: number;
+                                /** @enum {string} */
+                                direction: "caller" | "callee";
+                            }[];
+                            edges: {
+                                /** Format: uuid */
+                                source_id: string;
+                                /** Format: uuid */
+                                target_id: string;
+                                type: string;
+                                line: number | null;
+                                path: string;
+                            }[];
+                            unresolved_callees: {
+                                name: string;
+                                type: string;
+                                line: number | null;
+                            }[];
+                            total_nodes: number;
+                            next_cursor: string | null;
+                            truncated: boolean;
+                            limitations: string[];
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    post_repositories_repositoryId_impact: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the anvaya_csrf cookie */
+                "X-CSRF-Token": string;
+                "X-Request-Id"?: string;
+            };
+            path: {
+                repositoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @default latest */
+                    snapshot?: "latest" | string;
+                    changed_files: (string | {
+                        path: string;
+                        ranges?: (number)[][];
+                    })[];
+                    /** @default 20 */
+                    max_tests?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: uuid */
+                            snapshot_id: string;
+                            commit_sha: string;
+                            /** @enum {string} */
+                            source: "request";
+                            /** @enum {boolean} */
+                            heuristic: true;
+                            disclaimer: string;
+                            changed_files: {
+                                path: string;
+                                indexed: boolean;
+                                symbols: number;
+                            }[];
+                            changed_symbols: {
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                                qualified_name: string | null;
+                                kind: string;
+                                path: string;
+                                start_line: number;
+                                end_line: number;
+                            }[];
+                            impacted_files: {
+                                path: string;
+                                distance: number;
+                                /** @enum {string} */
+                                reason: "imports" | "calls";
+                                evidence: ({
+                                    /** @enum {string} */
+                                    kind: "imports";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "calls";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                    caller: string;
+                                    callee: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "changed";
+                                    path: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "naming";
+                                    from: string;
+                                    to: string;
+                                })[];
+                            }[];
+                            impacted_symbols: {
+                                symbol: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    name: string;
+                                    qualified_name: string | null;
+                                    kind: string;
+                                    path: string;
+                                    start_line: number;
+                                    end_line: number;
+                                };
+                                depth: number;
+                                evidence: ({
+                                    /** @enum {string} */
+                                    kind: "imports";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "calls";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                    caller: string;
+                                    callee: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "changed";
+                                    path: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "naming";
+                                    from: string;
+                                    to: string;
+                                })[];
+                            }[];
+                            selected_tests: {
+                                path: string;
+                                score: number;
+                                reasons: {
+                                    /** @enum {string} */
+                                    kind: "changed" | "imports" | "calls" | "naming";
+                                    description: string;
+                                    evidence: ({
+                                        /** @enum {string} */
+                                        kind: "imports";
+                                        from: string;
+                                        to: string;
+                                        line: number | null;
+                                    } | {
+                                        /** @enum {string} */
+                                        kind: "calls";
+                                        from: string;
+                                        to: string;
+                                        line: number | null;
+                                        caller: string;
+                                        callee: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        kind: "changed";
+                                        path: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        kind: "naming";
+                                        from: string;
+                                        to: string;
+                                    })[];
+                                }[];
+                            }[];
+                            test_files_total: number;
+                            truncated: boolean;
+                            limitations: string[];
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_runs_runId_impact: {
+        parameters: {
+            query?: {
+                max_tests?: number;
+            };
+            header?: {
+                "X-Request-Id"?: string;
+            };
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: uuid */
+                            run_id: string;
+                            /** @enum {string} */
+                            source: "patch" | "plan" | "none";
+                            /** Format: uuid */
+                            patch_id: string | null;
+                            plan_version: number | null;
+                            /** Format: uuid */
+                            snapshot_id: string | null;
+                            commit_sha: string | null;
+                            applied_selections: {
+                                profile_id: string;
+                                attempt: number;
+                                selection: {
+                                    [key: string]: unknown;
+                                };
+                            }[];
+                            /** @enum {boolean} */
+                            heuristic: true;
+                            disclaimer: string;
+                            changed_files: {
+                                path: string;
+                                indexed: boolean;
+                                symbols: number;
+                            }[];
+                            changed_symbols: {
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                                qualified_name: string | null;
+                                kind: string;
+                                path: string;
+                                start_line: number;
+                                end_line: number;
+                            }[];
+                            impacted_files: {
+                                path: string;
+                                distance: number;
+                                /** @enum {string} */
+                                reason: "imports" | "calls";
+                                evidence: ({
+                                    /** @enum {string} */
+                                    kind: "imports";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "calls";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                    caller: string;
+                                    callee: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "changed";
+                                    path: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "naming";
+                                    from: string;
+                                    to: string;
+                                })[];
+                            }[];
+                            impacted_symbols: {
+                                symbol: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    name: string;
+                                    qualified_name: string | null;
+                                    kind: string;
+                                    path: string;
+                                    start_line: number;
+                                    end_line: number;
+                                };
+                                depth: number;
+                                evidence: ({
+                                    /** @enum {string} */
+                                    kind: "imports";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "calls";
+                                    from: string;
+                                    to: string;
+                                    line: number | null;
+                                    caller: string;
+                                    callee: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "changed";
+                                    path: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "naming";
+                                    from: string;
+                                    to: string;
+                                })[];
+                            }[];
+                            selected_tests: {
+                                path: string;
+                                score: number;
+                                reasons: {
+                                    /** @enum {string} */
+                                    kind: "changed" | "imports" | "calls" | "naming";
+                                    description: string;
+                                    evidence: ({
+                                        /** @enum {string} */
+                                        kind: "imports";
+                                        from: string;
+                                        to: string;
+                                        line: number | null;
+                                    } | {
+                                        /** @enum {string} */
+                                        kind: "calls";
+                                        from: string;
+                                        to: string;
+                                        line: number | null;
+                                        caller: string;
+                                        callee: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        kind: "changed";
+                                        path: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        kind: "naming";
+                                        from: string;
+                                        to: string;
+                                    })[];
+                                }[];
+                            }[];
+                            test_files_total: number;
+                            truncated: boolean;
+                            limitations: string[];
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    post_workspaces_workspaceId_search: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the anvaya_csrf cookie */
+                "X-CSRF-Token": string;
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    query: string;
+                    repository_ids?: string[];
+                    /** @default 20 */
+                    top_k?: number;
+                    /** @default 5 */
+                    per_repository?: number;
+                    /** @default true */
+                    include_knowledge?: boolean;
+                    /**
+                     * @default hybrid
+                     * @enum {string}
+                     */
+                    mode?: "hybrid" | "lexical";
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            query: string;
+                            results: {
+                                /** @enum {string} */
+                                source: "code" | "knowledge";
+                                /** Format: uuid */
+                                repository_id: string;
+                                repository_full_name: string;
+                                commit_sha: string | null;
+                                path: string | null;
+                                start_line: number;
+                                end_line: number;
+                                content_hash: string;
+                                symbol: string | null;
+                                language: string | null;
+                                /** Format: uuid */
+                                knowledge_document_id: string | null;
+                                title: string | null;
+                                snippet: string;
+                                score: number;
+                            }[];
+                            repositories: {
+                                /** Format: uuid */
+                                id: string;
+                                full_name: string;
+                                commit_sha: string;
+                                results: number;
+                                semantic: string;
+                            }[];
+                            skipped_repositories: {
+                                /** Format: uuid */
+                                id: string;
+                                full_name: string;
+                                reason: string;
+                            }[];
+                            retrieval: {
+                                /** @enum {string} */
+                                mode: "hybrid" | "lexical";
+                                repositories_searched: number;
+                                duration_ms: number;
+                            };
+                            limitations: string[];
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    post_workspaces_workspaceId_questions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the anvaya_csrf cookie */
+                "X-CSRF-Token": string;
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    question: string;
+                    repository_ids?: string[];
+                    /** @enum {string} */
+                    mode?: "local" | "cloud" | "mock";
+                    /** @default 8 */
+                    top_k?: number;
+                    /** @default true */
+                    include_knowledge?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            answer: string;
+                            insufficient_evidence: boolean;
+                            citations: {
+                                /** @enum {string} */
+                                source: "code" | "knowledge";
+                                /** Format: uuid */
+                                repository_id: string;
+                                repository_full_name: string;
+                                commit_sha: string | null;
+                                path: string | null;
+                                start_line: number;
+                                end_line: number;
+                                content_hash: string;
+                                symbol: string | null;
+                                language: string | null;
+                                /** Format: uuid */
+                                knowledge_document_id: string | null;
+                                title: string | null;
+                                snippet: string;
+                                score: number;
+                                evidence_id: string;
+                                supports: string;
+                            }[];
+                            limitations: string[];
+                            repositories: {
+                                /** Format: uuid */
+                                id: string;
+                                full_name: string;
+                                commit_sha: string;
+                                results: number;
+                                semantic: string;
+                            }[];
+                            skipped_repositories: {
+                                /** Format: uuid */
+                                id: string;
+                                full_name: string;
+                                reason: string;
+                            }[];
+                            provider: string | null;
+                            model: string | null;
+                            /** @enum {string} */
+                            mode: "local" | "cloud" | "mock";
+                            prompt_version: string | null;
+                            data_disclosure: {
+                                provider: string | null;
+                                data_categories: string[];
+                            } | null;
+                            usage: {
+                                input_tokens: number;
+                                output_tokens: number;
+                                duration_ms: number;
+                                schema_repair_attempted: boolean;
+                            } | null;
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_workspaces_workspaceId_templates: {
+        parameters: {
+            query?: {
+                include_archived?: "true" | "false";
+            };
+            header?: {
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            key: string;
+                            /** Format: uuid */
+                            id: string | null;
+                            /** @enum {string} */
+                            source: "builtin" | "workspace";
+                            name: string;
+                            description: string;
+                            /** @enum {string} */
+                            workflow: "change" | "migration_plan";
+                            plan_only: boolean;
+                            task_defaults: {
+                                title_prefix: string | null;
+                                description_template: string | null;
+                                labels: string[];
+                            };
+                            budget: {
+                                max_steps?: number;
+                                max_input_tokens?: number;
+                                max_output_tokens?: number;
+                                max_duration_seconds?: number;
+                                max_changed_files?: number;
+                                max_repair_attempts?: number;
+                            };
+                            allowed_profiles: string[] | null;
+                            planning_guidance: string[];
+                            version: number;
+                            /** @enum {string} */
+                            status: "active" | "archived";
+                            /** Format: date-time */
+                            created_at: string | null;
+                            /** Format: date-time */
+                            updated_at: string | null;
+                        }[];
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    post_workspaces_workspaceId_templates: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key"?: string;
+                /** @description Value of the anvaya_csrf cookie */
+                "X-CSRF-Token": string;
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    key: string;
+                    name: string;
+                    /** @default  */
+                    description?: string;
+                    /** @enum {string} */
+                    workflow: "change" | "migration_plan";
+                    /**
+                     * @default {
+                     *       "title_prefix": null,
+                     *       "description_template": null,
+                     *       "labels": []
+                     *     }
+                     */
+                    task_defaults?: {
+                        /** @default null */
+                        title_prefix?: string | null;
+                        /** @default null */
+                        description_template?: string | null;
+                        /** @default [] */
+                        labels?: string[];
+                    };
+                    /** @default {} */
+                    budget?: {
+                        max_steps?: number;
+                        max_input_tokens?: number;
+                        max_output_tokens?: number;
+                        max_duration_seconds?: number;
+                        max_changed_files?: number;
+                        max_repair_attempts?: number;
+                    };
+                    /** @default null */
+                    allowed_profiles?: ("python-compile" | "python-unittest" | "node-syntax" | "node-test" | "npm-test" | "python-pytest")[] | null;
+                    /** @default [] */
+                    planning_guidance?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            key: string;
+                            /** Format: uuid */
+                            id: string | null;
+                            /** @enum {string} */
+                            source: "builtin" | "workspace";
+                            name: string;
+                            description: string;
+                            /** @enum {string} */
+                            workflow: "change" | "migration_plan";
+                            plan_only: boolean;
+                            task_defaults: {
+                                title_prefix: string | null;
+                                description_template: string | null;
+                                labels: string[];
+                            };
+                            budget: {
+                                max_steps?: number;
+                                max_input_tokens?: number;
+                                max_output_tokens?: number;
+                                max_duration_seconds?: number;
+                                max_changed_files?: number;
+                                max_repair_attempts?: number;
+                            };
+                            allowed_profiles: string[] | null;
+                            planning_guidance: string[];
+                            version: number;
+                            /** @enum {string} */
+                            status: "active" | "archived";
+                            /** Format: date-time */
+                            created_at: string | null;
+                            /** Format: date-time */
+                            updated_at: string | null;
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    delete_workspaces_workspaceId_templates_templateId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the anvaya_csrf cookie */
+                "X-CSRF-Token": string;
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+                templateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patch_workspaces_workspaceId_templates_templateId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the anvaya_csrf cookie */
+                "X-CSRF-Token": string;
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+                templateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    description?: string;
+                    /** @enum {string} */
+                    workflow?: "change" | "migration_plan";
+                    task_defaults?: {
+                        /** @default null */
+                        title_prefix?: string | null;
+                        /** @default null */
+                        description_template?: string | null;
+                        /** @default [] */
+                        labels?: string[];
+                    };
+                    budget?: {
+                        max_steps?: number;
+                        max_input_tokens?: number;
+                        max_output_tokens?: number;
+                        max_duration_seconds?: number;
+                        max_changed_files?: number;
+                        max_repair_attempts?: number;
+                    };
+                    allowed_profiles?: ("python-compile" | "python-unittest" | "node-syntax" | "node-test" | "npm-test" | "python-pytest")[] | null;
+                    planning_guidance?: string[];
+                    /** @enum {string} */
+                    status?: "active" | "archived";
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            key: string;
+                            /** Format: uuid */
+                            id: string | null;
+                            /** @enum {string} */
+                            source: "builtin" | "workspace";
+                            name: string;
+                            description: string;
+                            /** @enum {string} */
+                            workflow: "change" | "migration_plan";
+                            plan_only: boolean;
+                            task_defaults: {
+                                title_prefix: string | null;
+                                description_template: string | null;
+                                labels: string[];
+                            };
+                            budget: {
+                                max_steps?: number;
+                                max_input_tokens?: number;
+                                max_output_tokens?: number;
+                                max_duration_seconds?: number;
+                                max_changed_files?: number;
+                                max_repair_attempts?: number;
+                            };
+                            allowed_profiles: string[] | null;
+                            planning_guidance: string[];
+                            version: number;
+                            /** @enum {string} */
+                            status: "active" | "archived";
+                            /** Format: date-time */
+                            created_at: string | null;
+                            /** Format: date-time */
+                            updated_at: string | null;
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     get_repositories_repositoryId_questions: {
         parameters: {
             query?: {
@@ -6457,7 +8057,8 @@ export interface operations {
                             allowed_modes: string[];
                             cloud: {
                                 enabled: boolean;
-                                provider: string | null;
+                                /** @enum {string|null} */
+                                provider: "anthropic" | "openai_compatible" | null;
                                 model: string | null;
                                 data_categories: string[];
                             };
@@ -6557,7 +8158,8 @@ export interface operations {
                     allowed_modes?: ("local" | "mock" | "cloud")[];
                     cloud?: {
                         enabled?: boolean;
-                        provider?: string | null;
+                        /** @enum {string|null} */
+                        provider?: "anthropic" | "openai_compatible" | null;
                         model?: string | null;
                         data_categories?: ("source_code" | "documentation" | "issue_text" | "diffs" | "test_output")[];
                     };
@@ -6584,7 +8186,8 @@ export interface operations {
                             allowed_modes: string[];
                             cloud: {
                                 enabled: boolean;
-                                provider: string;
+                                /** @enum {string|null} */
+                                provider: "anthropic" | "openai_compatible" | null;
                                 model: string;
                                 data_categories: string[];
                             };
@@ -7482,6 +9085,7 @@ export interface operations {
                     include_review_comments?: boolean;
                     /** @default [] */
                     labels?: string[];
+                    template_key?: string;
                 };
             };
         };
@@ -7559,6 +9163,33 @@ export interface operations {
                             created_at: string;
                             /** Format: date-time */
                             updated_at: string;
+                            template_key: string | null;
+                            template: {
+                                key: string;
+                                name: string;
+                                description: string;
+                                /** @enum {string} */
+                                workflow: "change" | "migration_plan";
+                                task_defaults: {
+                                    title_prefix: string | null;
+                                    description_template: string | null;
+                                    labels: string[];
+                                };
+                                budget: {
+                                    max_steps?: number;
+                                    max_input_tokens?: number;
+                                    max_output_tokens?: number;
+                                    max_duration_seconds?: number;
+                                    max_changed_files?: number;
+                                    max_repair_attempts?: number;
+                                };
+                                allowed_profiles: string[] | null;
+                                planning_guidance: string[];
+                                /** @enum {string} */
+                                source: "builtin" | "workspace";
+                                template_id: string | null;
+                                version: number;
+                            } | null;
                         };
                         meta: components["schemas"]["Meta"];
                     };
@@ -7835,6 +9466,33 @@ export interface operations {
                                 /** Format: date-time */
                                 created_at: string;
                             } | null;
+                            template_key: string | null;
+                            template: {
+                                key: string;
+                                name: string;
+                                description: string;
+                                /** @enum {string} */
+                                workflow: "change" | "migration_plan";
+                                task_defaults: {
+                                    title_prefix: string | null;
+                                    description_template: string | null;
+                                    labels: string[];
+                                };
+                                budget: {
+                                    max_steps?: number;
+                                    max_input_tokens?: number;
+                                    max_output_tokens?: number;
+                                    max_duration_seconds?: number;
+                                    max_changed_files?: number;
+                                    max_repair_attempts?: number;
+                                };
+                                allowed_profiles: string[] | null;
+                                planning_guidance: string[];
+                                /** @enum {string} */
+                                source: "builtin" | "workspace";
+                                template_id: string | null;
+                                version: number;
+                            } | null;
                         }[];
                         meta: components["schemas"]["PageMeta"];
                     };
@@ -8001,6 +9659,33 @@ export interface operations {
                                 current_stage: string | null;
                                 /** Format: date-time */
                                 created_at: string;
+                            } | null;
+                            template_key: string | null;
+                            template: {
+                                key: string;
+                                name: string;
+                                description: string;
+                                /** @enum {string} */
+                                workflow: "change" | "migration_plan";
+                                task_defaults: {
+                                    title_prefix: string | null;
+                                    description_template: string | null;
+                                    labels: string[];
+                                };
+                                budget: {
+                                    max_steps?: number;
+                                    max_input_tokens?: number;
+                                    max_output_tokens?: number;
+                                    max_duration_seconds?: number;
+                                    max_changed_files?: number;
+                                    max_repair_attempts?: number;
+                                };
+                                allowed_profiles: string[] | null;
+                                planning_guidance: string[];
+                                /** @enum {string} */
+                                source: "builtin" | "workspace";
+                                template_id: string | null;
+                                version: number;
                             } | null;
                         };
                         meta: components["schemas"]["Meta"];
@@ -8170,6 +9855,33 @@ export interface operations {
                             created_at: string;
                             /** Format: date-time */
                             updated_at: string;
+                            template_key: string | null;
+                            template: {
+                                key: string;
+                                name: string;
+                                description: string;
+                                /** @enum {string} */
+                                workflow: "change" | "migration_plan";
+                                task_defaults: {
+                                    title_prefix: string | null;
+                                    description_template: string | null;
+                                    labels: string[];
+                                };
+                                budget: {
+                                    max_steps?: number;
+                                    max_input_tokens?: number;
+                                    max_output_tokens?: number;
+                                    max_duration_seconds?: number;
+                                    max_changed_files?: number;
+                                    max_repair_attempts?: number;
+                                };
+                                allowed_profiles: string[] | null;
+                                planning_guidance: string[];
+                                /** @enum {string} */
+                                source: "builtin" | "workspace";
+                                template_id: string | null;
+                                version: number;
+                            } | null;
                         };
                         meta: components["schemas"]["Meta"];
                     };
@@ -8789,6 +10501,16 @@ export interface operations {
                                 /** Format: date-time */
                                 created_at: string;
                             } | null;
+                            template: {
+                                key: string;
+                                name: string;
+                                /** @enum {string} */
+                                workflow: "change" | "migration_plan";
+                                /** @enum {string} */
+                                source: "builtin" | "workspace";
+                                version: number;
+                            } | null;
+                            plan_only: boolean;
                         };
                         meta: components["schemas"]["Meta"];
                     };
@@ -9563,6 +11285,20 @@ export interface operations {
                                 assumptions: string[];
                                 out_of_scope: string[];
                                 files_to_modify: string[];
+                                migration?: {
+                                    affected_areas: {
+                                        area: string;
+                                        description: string;
+                                        files: string[];
+                                        evidence_ids: string[];
+                                    }[];
+                                    prerequisites: string[];
+                                    step_rollback: {
+                                        step_id: string;
+                                        rollback: string;
+                                    }[];
+                                    rollback_strategy: string[];
+                                };
                             };
                             investigation: {
                                 summary: string;
@@ -9595,6 +11331,16 @@ export interface operations {
                                 /** Format: date-time */
                                 created_at: string;
                             } | null;
+                            migration_evidence: {
+                                id: string;
+                                path: string;
+                                start_line: number;
+                                end_line: number;
+                                commit_sha: string;
+                                content_hash?: string;
+                                symbol: string | null;
+                            }[];
+                            plan_only: boolean;
                         };
                         meta: components["schemas"]["Meta"];
                     };
@@ -10107,6 +11853,9 @@ export interface operations {
                                 stderr_excerpt: string | null;
                                 /** Format: date-time */
                                 created_at: string;
+                                test_selection: {
+                                    [key: string]: unknown;
+                                } | null;
                             }[];
                         };
                         meta: components["schemas"]["Meta"];

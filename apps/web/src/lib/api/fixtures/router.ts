@@ -8,7 +8,14 @@
  * UI-model form and encoded at this boundary, so the real mappers run in fixtures mode.
  */
 import type * as T from "../types";
-import { ACTIVE_RUN_STATUSES, CREATABLE_TASK_SOURCES, TERMINAL_RUN_STATUSES } from "../types";
+import {
+  ACTIVE_RUN_STATUSES,
+  CREATABLE_TASK_SOURCES,
+  HOSTED_PROVIDERS as T_HOSTED,
+  TEMPLATE_WORKFLOWS as T_WORKFLOWS,
+  TERMINAL_RUN_STATUSES,
+  VERIFICATION_PROFILE_IDS as T_PROFILES,
+} from "../types";
 import type * as W from "../wire";
 import {
   contentHash,
@@ -23,6 +30,17 @@ import {
 } from "./engine";
 import { dependencyMap, parseSymbols, symbolDetail, toWire } from "./code-intel";
 import { filesForRepository } from "./repo-content";
+import {
+  BUILTIN_KEYS,
+  BUILTIN_TEMPLATES,
+  buildGraph,
+  builtinView,
+  callGraph,
+  IMPACT_DISCLAIMER,
+  IMPACT_LIMITATIONS,
+  predictImpact,
+  snapshotOf,
+} from "./intelligence";
 import {
   DEFAULT_BUDGETS,
   defaultPolicy,
@@ -378,6 +396,8 @@ function wRunDetail(state: FixtureState, run: FixtureRun): W.WRun {
     })),
     task_title: task.title,
     repository_full_name: repo?.full_name,
+    template: run.template ?? null,
+    plan_only: !!run.plan_only,
     pull_request: run.pull_request
       ? { ...run.pull_request, created_at: run.pull_request.created_at ?? undefined }
       : null,
@@ -411,6 +431,8 @@ function wTask(state: FixtureState, task: Scoped<T.EngineeringTask>): W.WTask {
     description: task.description,
     status: task.status,
     labels: task.labels,
+    template_key: task.template_key ?? null,
+    template: task.template ?? null,
     created_at: task.created_at,
     updated_at: task.updated_at,
     latest_run: latest
@@ -439,6 +461,8 @@ function wPlan(run: FixtureRun): W.WPlan {
     editable: run.status === "awaiting_plan_approval",
     plan: p.plan,
     investigation: p.investigation,
+    migration_evidence: p.migration_evidence ?? [],
+    plan_only: !!run.plan_only,
     approval: approval
       ? {
           decision: approval.decision,
@@ -1224,8 +1248,30 @@ route("PATCH", "/workspaces/:workspaceId/ai-policy", (req) => {
   if (body.limits) next.limits = { ...next.limits, ...body.limits };
   if (body.allowed_modes) next.allowed_modes = body.allowed_modes;
   if (body.default_mode) next.default_mode = body.default_mode;
+  if (
+    next.cloud.provider !== null &&
+    !(T_HOSTED as readonly string[]).includes(next.cloud.provider)
+  )
+    throw validation("cloud.provider", `must be one of ${T_HOSTED.join(", ")}`);
+  // A new recipient or new data categories is a new disclosure (FR-AI-008).
+  const providerChanged =
+    next.cloud.enabled && current.cloud.enabled && next.cloud.provider !== current.cloud.provider;
+  const categoriesAdded =
+    next.cloud.enabled &&
+    current.cloud.enabled &&
+    next.cloud.data_categories.some((c) => !current.cloud.data_categories.includes(c));
+  if ((providerChanged || categoriesAdded) && !body.acknowledge_data_disclosure) {
+    throw new FixtureHttpError(
+      422,
+      "DATA_DISCLOSURE_REQUIRED",
+      providerChanged
+        ? "Changing the hosted provider requires acknowledging what data is sent."
+        : "Adding data categories requires acknowledging what data is sent.",
+      { provider: next.cloud.provider, data_categories: next.cloud.data_categories },
+    );
+  }
   if (next.cloud.enabled && !current.cloud.enabled) {
-    if (!next.cloud.provider) next.cloud.provider = "hosted-provider";
+    if (!next.cloud.provider) next.cloud.provider = "anthropic";
     if (!next.cloud.model) next.cloud.model = "hosted-large";
     if (!next.cloud.data_categories.length)
       next.cloud.data_categories = ["source_code", "documentation", "test_output"];
@@ -1252,10 +1298,17 @@ route("PATCH", "/workspaces/:workspaceId/ai-policy", (req) => {
   if (!next.allowed_modes.includes(next.default_mode))
     throw validation("default_mode", "must be one of the allowed modes");
   req.state.policies[wsId] = next;
-  audit(req, wsId, "ai_policy.updated", "ai_policy", wsId, {
-    fields: Object.keys(body),
-    cloud_enabled: next.cloud.enabled,
-  });
+  audit(
+    req,
+    wsId,
+    providerChanged ? "ai_policy.cloud_provider_changed" : "ai_policy.updated",
+    "ai_policy",
+    wsId,
+    {
+      fields: Object.keys(body),
+      cloud_enabled: next.cloud.enabled,
+    },
+  );
   return ok(next);
 });
 
@@ -2151,8 +2204,13 @@ route("POST", "/repositories/:repositoryId/tasks", (req) => {
     "check_run_id",
     "include_review_comments",
     "labels",
+    "template_key",
   ]);
   const repo = findScoped(req, req.state.repositories, req.params.repositoryId!, "member");
+  const template =
+    typeof req.body.template_key === "string"
+      ? resolveTemplate(req, repo.workspace_id, req.body.template_key)
+      : null;
   const source_type = req.body.source_type as T.TaskSourceType;
   if (!(CREATABLE_TASK_SOURCES as readonly string[]).includes(source_type))
     throw validation("source_type", "must be manual, github_issue, pull_request or failing_check");
@@ -2292,6 +2350,8 @@ route("POST", "/repositories/:repositoryId/tasks", (req) => {
     description,
     status: "open",
     labels,
+    template_key: template?.key ?? null,
+    template: template ? snapshotOf(template) : null,
     created_at: at,
     updated_at: at,
   };
@@ -2601,6 +2661,8 @@ route("POST", "/runs/:runId/plan-approval", (req) => {
   });
   if (decision === "rejected")
     finish(req.state, run, "rejected", req.now, "PLAN_REJECTED", comment ?? undefined);
+  // Plan-only (migration plan) runs end at the approved plan: nothing is executed.
+  else if (run.plan_only) finish(req.state, run, "completed_without_pr", req.now);
   else schedule(run, PHASE_TWO, req.now);
   return ok(
     {
@@ -2816,6 +2878,451 @@ route("POST", "/runs/:runId/pull-request", (req) => {
     } satisfies W.WPullRequest,
     201,
   );
+});
+
+// ── work package B: templates, call graph, impact, workspace knowledge ─────────
+
+function workspaceTemplates(req: FixtureRequest, wsId: string, includeArchived = false) {
+  return req.state.templates
+    .filter((t) => t.workspace_id === wsId && (includeArchived || t.status === "active"))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function resolveTemplate(req: FixtureRequest, wsId: string, key: string): T.WorkflowTemplate {
+  const builtin = BUILTIN_TEMPLATES.find((t) => t.key === key);
+  if (builtin) return builtinView(builtin);
+  const t = req.state.templates.find((x) => x.workspace_id === wsId && x.key === key);
+  if (!t)
+    throw new FixtureHttpError(
+      422,
+      "TEMPLATE_NOT_FOUND",
+      `No template '${key}' exists in this workspace.`,
+    );
+  if (t.status !== "active")
+    throw new FixtureHttpError(422, "TEMPLATE_ARCHIVED", `The template '${key}' is archived.`);
+  return t;
+}
+
+const TEMPLATE_FIELDS = [
+  "name",
+  "description",
+  "workflow",
+  "task_defaults",
+  "budget",
+  "allowed_profiles",
+  "planning_guidance",
+];
+
+function templateFields(body: Record<string, unknown>, partial: boolean) {
+  const out: Partial<T.WorkflowTemplate> = {};
+  if (!partial || body.name !== undefined) out.name = str(body, "name", { min: 1, max: 80 });
+  if (body.description !== undefined) out.description = str(body, "description", { max: 500 });
+  if (!partial || body.workflow !== undefined) {
+    if (!(T_WORKFLOWS as readonly unknown[]).includes(body.workflow))
+      throw validation("workflow", "must be change or migration_plan");
+    out.workflow = body.workflow as T.TemplateWorkflow;
+  }
+  if (body.task_defaults !== undefined) {
+    const d = (body.task_defaults ?? {}) as Partial<T.TemplateTaskDefaults>;
+    out.task_defaults = {
+      title_prefix: typeof d.title_prefix === "string" ? d.title_prefix.slice(0, 60) : null,
+      description_template:
+        typeof d.description_template === "string" ? d.description_template.slice(0, 4000) : null,
+      labels: Array.isArray(d.labels)
+        ? d.labels.filter((l) => typeof l === "string").slice(0, 10)
+        : [],
+    };
+  }
+  if (body.budget !== undefined) {
+    const b = (body.budget ?? {}) as Record<string, unknown>;
+    const budget: Partial<T.RunBudgets> = {};
+    for (const [k, v] of Object.entries(b)) {
+      if (!(k in DEFAULT_BUDGETS) || typeof v !== "number" || !Number.isInteger(v) || v < 0)
+        throw validation(`budget.${k}`, "must be a known budget field with a non-negative integer");
+      budget[k as keyof T.RunBudgets] = v;
+    }
+    out.budget = budget;
+  }
+  if (body.allowed_profiles !== undefined) {
+    if (body.allowed_profiles === null) out.allowed_profiles = null;
+    else if (
+      Array.isArray(body.allowed_profiles) &&
+      body.allowed_profiles.every((p) => (T_PROFILES as readonly unknown[]).includes(p))
+    )
+      out.allowed_profiles = body.allowed_profiles as string[];
+    else throw validation("allowed_profiles", "must list server-defined profile ids");
+  }
+  if (body.planning_guidance !== undefined) {
+    const g = body.planning_guidance;
+    if (
+      !Array.isArray(g) ||
+      g.length > 8 ||
+      !g.every((x) => typeof x === "string" && x.trim() && x.length <= 300)
+    )
+      throw validation("planning_guidance", "must be up to 8 items of at most 300 characters");
+    out.planning_guidance = g.map((x: string) => x.trim());
+  }
+  return out;
+}
+
+route("GET", "/workspaces/:workspaceId/templates", (req) => {
+  const wsId = req.params.workspaceId!;
+  membership(req, wsId);
+  const all = req.query.get("include_archived") === "true";
+  return ok([...BUILTIN_TEMPLATES.map(builtinView), ...workspaceTemplates(req, wsId, all)]);
+});
+
+route("POST", "/workspaces/:workspaceId/templates", (req) => {
+  strictBody(req, ["key", ...TEMPLATE_FIELDS]);
+  const wsId = req.params.workspaceId!;
+  requireRole(req, wsId, "admin");
+  const key = str(req.body, "key", { min: 2, max: 40 });
+  if (!/^[a-z][a-z0-9_]{1,39}$/.test(key))
+    throw validation("key", "lowercase letters, digits and underscores, starting with a letter");
+  if (BUILTIN_KEYS.has(key)) throw validation("key", "this key is reserved by a built-in template");
+  if (req.state.templates.some((t) => t.workspace_id === wsId && t.key === key))
+    throw new FixtureHttpError(
+      409,
+      "TEMPLATE_KEY_TAKEN",
+      "A template with this key already exists in the workspace.",
+    );
+  const at = iso(req.now);
+  const fields = templateFields(req.body, false);
+  const workflow = fields.workflow!;
+  const t: Scoped<T.WorkflowTemplate> = {
+    key,
+    id: nextId(req.state, "71000000"),
+    workspace_id: wsId,
+    source: "workspace",
+    name: fields.name!,
+    description: fields.description ?? "",
+    workflow,
+    plan_only: workflow === "migration_plan",
+    task_defaults: fields.task_defaults ?? {
+      title_prefix: null,
+      description_template: null,
+      labels: [],
+    },
+    budget: fields.budget ?? {},
+    allowed_profiles: fields.allowed_profiles ?? null,
+    planning_guidance: fields.planning_guidance ?? [],
+    version: 1,
+    status: "active",
+    created_at: at,
+    updated_at: at,
+  };
+  req.state.templates.push(t);
+  audit(req, wsId, "template.created", "workflow_template", t.id!, { key });
+  return ok(withoutScope(t), 201);
+});
+
+function withoutScope(t: Scoped<T.WorkflowTemplate>): T.WorkflowTemplate {
+  const rest: Partial<Scoped<T.WorkflowTemplate>> = structuredClone(t);
+  delete rest.workspace_id;
+  return rest as T.WorkflowTemplate;
+}
+
+function updateTemplate(req: FixtureRequest, body: Record<string, unknown>) {
+  const wsId = req.params.workspaceId!;
+  requireRole(req, wsId, "admin");
+  const t = req.state.templates.find(
+    (x) => x.id === req.params.templateId && x.workspace_id === wsId,
+  );
+  if (!t) throw new FixtureHttpError(404, "NOT_FOUND", "Template not found.");
+  const wasActive = t.status === "active";
+  Object.assign(t, templateFields(body, true));
+  t.plan_only = t.workflow === "migration_plan";
+  if (body.status === "active" || body.status === "archived") t.status = body.status;
+  t.version += 1;
+  t.updated_at = iso(req.now);
+  audit(
+    req,
+    wsId,
+    wasActive && t.status === "archived" ? "template.archived" : "template.updated",
+    "workflow_template",
+    t.id!,
+    { key: t.key, version: t.version },
+  );
+  return t;
+}
+
+route("PATCH", "/workspaces/:workspaceId/templates/:templateId", (req) => {
+  strictBody(req, [...TEMPLATE_FIELDS, "status"]);
+  if (Object.keys(req.body).length === 0)
+    throw validation("body", "at least one field is required");
+  return ok(withoutScope(updateTemplate(req, req.body)));
+});
+
+route("DELETE", "/workspaces/:workspaceId/templates/:templateId", (req) => {
+  updateTemplate(req, { status: "archived" });
+  return noContent();
+});
+
+route("GET", "/repositories/:repositoryId/symbols/:symbolId/call-graph", (req) => {
+  const repo = repoForRead(req);
+  const sha = snapshotSha(req, repo);
+  const direction = (req.query.get("direction") ?? "both") as T.CallGraphDirection;
+  if (!["callers", "callees", "both"].includes(direction))
+    throw validation("direction", "must be callers, callees or both");
+  const depth = Number(req.query.get("depth") ?? 1);
+  if (!Number.isInteger(depth) || depth < 1 || depth > 3) throw validation("depth", "must be 1–3");
+  const limit = Math.min(Math.max(Number(req.query.get("limit") ?? 50) || 50, 1), 100);
+  const cursor = req.query.get("cursor");
+  const offset = cursor ? Number(atob(cursor)) : 0;
+  if (!Number.isInteger(offset) || offset < 0) throw validation("cursor", "invalid cursor");
+  const files = filesForRepository(repo.full_name);
+  const graph = buildGraph(files, sha);
+  const root = graph.symbols.get(req.params.symbolId!);
+  if (!root) throw new FixtureHttpError(404, "NOT_FOUND", "Symbol not found.");
+  const g = callGraph(graph, root.id, direction, depth);
+  const page = g.nodes.slice(offset, offset + limit);
+  const ids = new Set(page.map((n) => n.symbol.id));
+  return ok({
+    snapshot_id: `snap-${sha.slice(0, 8)}`,
+    commit_sha: sha,
+    root,
+    direction,
+    depth,
+    nodes: page,
+    edges: g.edges.filter((e) => ids.has(e.source_id) || ids.has(e.target_id)),
+    unresolved_callees: [],
+    total_nodes: g.nodes.length,
+    next_cursor: offset + limit < g.nodes.length ? btoa(String(offset + limit)) : null,
+    truncated: g.truncated,
+    limitations: [
+      "Calls are linked only when the callee name is unambiguous in the snapshot; others are listed as unresolved.",
+      "Dynamic dispatch, callbacks, decorators and reflection are not followed.",
+      "At most 500 symbols are returned for one graph.",
+    ],
+  } satisfies T.CallGraph);
+});
+
+function cleanPath(p: unknown): string {
+  if (typeof p !== "string" || !p || p.startsWith("/") || p.split("/").includes(".."))
+    throw validation("changed_files", "must be relative repository paths");
+  return p.replace(/^\.\//, "");
+}
+
+route("POST", "/repositories/:repositoryId/impact", (req) => {
+  strictBody(req, ["snapshot", "changed_files", "max_tests"]);
+  const repo = repoForRead(req);
+  const sha = requireIndexed(repo);
+  const list = req.body.changed_files;
+  if (!Array.isArray(list) || list.length === 0 || list.length > 200)
+    throw validation("changed_files", "must list 1–200 files");
+  const changed = list.map((c: unknown) =>
+    typeof c === "string"
+      ? { path: cleanPath(c) }
+      : {
+          path: cleanPath((c as { path?: unknown }).path),
+          ranges: (c as { ranges?: [number, number][] }).ranges,
+        },
+  );
+  const max = Math.min(Math.max(Number(req.body.max_tests) || 20, 1), 100);
+  const result = predictImpact(buildGraph(filesForRepository(repo.full_name), sha), changed, max);
+  return ok({
+    snapshot_id: `snap-${sha.slice(0, 8)}`,
+    commit_sha: sha,
+    source: "request",
+    disclaimer: IMPACT_DISCLAIMER,
+    ...result,
+  } satisfies T.ImpactPrediction);
+});
+
+route("GET", "/runs/:runId/impact", (req) => {
+  const run = getRun(req);
+  const task = req.state.tasks.find((t) => t.id === run.task_id)!;
+  const repo = req.state.repositories.find((r) => r.id === task.repository_id);
+  const sha = repo?.latest_indexed_commit_sha ?? null;
+  const source: T.RunImpact["source"] = run.diff ? "patch" : run.plan ? "plan" : "none";
+  const changed = run.diff
+    ? run.diff.changed_files.map((f) => ({ path: f.path }))
+    : run.plan
+      ? run.plan.plan.files_to_modify.map((p) => ({ path: p }))
+      : [];
+  const base = {
+    run_id: run.id,
+    source,
+    patch_id: run.diff?.patch_id ?? null,
+    plan_version: run.diff ? null : (run.plan?.version ?? null),
+    snapshot_id: sha ? `snap-${sha.slice(0, 8)}` : null,
+    commit_sha: sha,
+    applied_selections: [],
+    disclaimer: IMPACT_DISCLAIMER,
+  };
+  if (!repo || !sha || changed.length === 0) {
+    return ok({
+      ...base,
+      heuristic: true,
+      changed_files: [],
+      changed_symbols: [],
+      impacted_files: [],
+      impacted_symbols: [],
+      selected_tests: [],
+      test_files_total: 0,
+      truncated: false,
+      limitations: [
+        ...IMPACT_LIMITATIONS,
+        "Nothing to analyse yet: the run has no plan files or patch.",
+      ],
+    } satisfies T.RunImpact);
+  }
+  const max = Math.min(Math.max(Number(req.query.get("max_tests")) || 20, 1), 100);
+  return ok({
+    ...base,
+    ...predictImpact(buildGraph(filesForRepository(repo.full_name), sha), changed, max),
+  } satisfies T.RunImpact);
+});
+
+function workspaceHits(
+  req: FixtureRequest,
+  wsId: string,
+  query: string,
+  ids: unknown,
+  perRepo: number,
+) {
+  const repos = req.state.repositories.filter(
+    (r) => r.workspace_id === wsId && r.status === "connected",
+  );
+  if (ids !== undefined) {
+    if (!Array.isArray(ids) || ids.some((id) => !repos.some((r) => r.id === id)))
+      throw new FixtureHttpError(404, "NOT_FOUND", "Repository not found.");
+  }
+  const chosen = repos.filter((r) => ids === undefined || (ids as string[]).includes(r.id));
+  const results: T.WorkspaceSearchResult[] = [];
+  const summaries: T.WorkspaceRepositorySummary[] = [];
+  const skipped: T.WorkspaceSearchResponse["skipped_repositories"] = [];
+  for (const repo of chosen.sort((a, b) => a.full_name.localeCompare(b.full_name))) {
+    advanceIndex(req.state, repo, req.now);
+    const sha = repo.latest_indexed_commit_sha;
+    if (!sha) {
+      skipped.push({ id: repo.id, full_name: repo.full_name, reason: "not indexed yet" });
+      continue;
+    }
+    const hits = searchFiles(filesForRepository(repo.full_name), query, sha, perRepo);
+    hits.forEach((h) =>
+      results.push({
+        source: "code",
+        repository_id: repo.id,
+        repository_full_name: repo.full_name,
+        commit_sha: h.commit_sha,
+        path: h.file_path,
+        start_line: h.start_line,
+        end_line: h.end_line,
+        content_hash: h.content_hash,
+        symbol: h.symbol_name ?? null,
+        language: h.language ?? null,
+        knowledge_document_id: null,
+        title: null,
+        snippet: h.snippet,
+        score:
+          Math.round(((h.lexical_score ?? 0) * 0.45 + (h.semantic_score ?? 0) * 0.55) * 100) / 100,
+      }),
+    );
+    summaries.push({
+      id: repo.id,
+      full_name: repo.full_name,
+      commit_sha: sha,
+      results: hits.length,
+      semantic: "ok",
+    });
+  }
+  results.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.repository_full_name.localeCompare(b.repository_full_name) ||
+      (a.path ?? "").localeCompare(b.path ?? ""),
+  );
+  return { results, summaries, skipped };
+}
+
+route("POST", "/workspaces/:workspaceId/search", (req) => {
+  strictBody(req, [
+    "query",
+    "repository_ids",
+    "top_k",
+    "per_repository",
+    "include_knowledge",
+    "mode",
+  ]);
+  const wsId = req.params.workspaceId!;
+  membership(req, wsId);
+  const query = str(req.body, "query", { min: 2, max: 500 });
+  const topK = Math.min(Math.max(Number(req.body.top_k) || 20, 1), 50);
+  const per = Math.min(Math.max(Number(req.body.per_repository) || 5, 1), 10);
+  const h = workspaceHits(req, wsId, query, req.body.repository_ids, per);
+  return ok({
+    query,
+    results: h.results.slice(0, topK),
+    repositories: h.summaries,
+    skipped_repositories: h.skipped,
+    retrieval: {
+      mode: req.body.mode === "lexical" ? "lexical" : "hybrid",
+      repositories_searched: h.summaries.length,
+      duration_ms: 42,
+    },
+    limitations: [],
+  } satisfies T.WorkspaceSearchResponse);
+});
+
+route("POST", "/workspaces/:workspaceId/questions", (req) => {
+  strictBody(req, ["question", "repository_ids", "mode", "top_k", "include_knowledge"]);
+  const wsId = req.params.workspaceId!;
+  membership(req, wsId);
+  const question = str(req.body, "question", { min: 3, max: 2000 });
+  const policy = req.state.policies[wsId] ?? defaultPolicy();
+  const mode = (req.body.mode as T.InferenceMode | undefined) ?? policy.default_mode;
+  if (!policy.allowed_modes.includes(mode))
+    throw new FixtureHttpError(
+      403,
+      "FORBIDDEN",
+      `Inference mode '${mode}' is not allowed by this workspace's AI policy.`,
+    );
+  const h = workspaceHits(req, wsId, question, req.body.repository_ids, 3);
+  const top = h.results.slice(0, 3);
+  const base = {
+    repositories: h.summaries,
+    skipped_repositories: h.skipped,
+    mode,
+    data_disclosure:
+      mode === "cloud"
+        ? { provider: policy.cloud.provider, data_categories: policy.cloud.data_categories }
+        : null,
+  };
+  if (top.length === 0) {
+    return ok({
+      ...base,
+      answer:
+        "No indexed evidence in this workspace matched the question, so it cannot be answered with citations.",
+      insufficient_evidence: true,
+      citations: [],
+      limitations: ["No relevant code was retrieved from any indexed repository."],
+      provider: null,
+      model: null,
+      prompt_version: null,
+      usage: null,
+    } satisfies T.WorkspaceAnswer);
+  }
+  return ok({
+    ...base,
+    answer: `[mock] The most relevant code is in ${top.map((t) => `${t.repository_full_name}/${t.path}`).join(", ")}.`,
+    insufficient_evidence: false,
+    citations: top.map((t, i) => ({
+      ...t,
+      evidence_id: `ev-${i + 1}`,
+      supports: `Relevant code in ${t.path}`,
+    })),
+    limitations: ["Generated by the deterministic mock provider; not a model answer."],
+    provider: "mock",
+    model: "mock-deterministic",
+    prompt_version: "repository_qa.v1",
+    usage: {
+      input_tokens: 900,
+      output_tokens: 120,
+      duration_ms: 240,
+      schema_repair_attempted: false,
+    },
+  } satisfies T.WorkspaceAnswer);
 });
 
 export { tick };

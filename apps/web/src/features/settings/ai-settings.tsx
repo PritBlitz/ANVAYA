@@ -24,6 +24,9 @@ import {
 import { api } from "@/lib/api/runtime";
 import {
   DATA_CATEGORIES,
+  HOSTED_PROVIDER_INFO,
+  HOSTED_PROVIDERS,
+  type HostedProvider,
   type AiPolicy,
   type InferenceMode,
   type ProviderHealth,
@@ -72,7 +75,7 @@ interface Disclosure {
   data_categories: string[];
 }
 
-function usePolicyUpdate(onDisclosure?: (d: Disclosure) => void) {
+function usePolicyUpdate(onDisclosure?: (d: Disclosure, body: UpdateAiPolicyRequest) => void) {
   const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
   return useMutation({
@@ -83,15 +86,19 @@ function usePolicyUpdate(onDisclosure?: (d: Disclosure) => void) {
         description: "The change is recorded in the audit log.",
       });
     },
-    onError: (e) => {
-      // Enabling cloud first returns what would be sent; the admin must acknowledge it.
+    onError: (e, body) => {
+      // Enabling cloud, changing the provider or adding data categories first returns what
+      // would be sent; the admin must acknowledge it before the change is applied.
       if (isApiError(e) && e.code === "DATA_DISCLOSURE_REQUIRED" && onDisclosure) {
-        onDisclosure({
-          provider: typeof e.details.provider === "string" ? e.details.provider : null,
-          data_categories: Array.isArray(e.details.data_categories)
-            ? e.details.data_categories.map(String)
-            : [],
-        });
+        onDisclosure(
+          {
+            provider: typeof e.details.provider === "string" ? e.details.provider : null,
+            data_categories: Array.isArray(e.details.data_categories)
+              ? e.details.data_categories.map(String)
+              : [],
+          },
+          body,
+        );
         return;
       }
       notifyError(e, "Policy not updated");
@@ -202,10 +209,26 @@ function ModesCard({ policy, editable }: { policy: AiPolicy; editable: boolean }
   );
 }
 
+/** What the admin is asked to acknowledge, and the change that triggered it (re-sent on confirm). */
+interface PendingDisclosure {
+  disclosure: Disclosure;
+  body: UpdateAiPolicyRequest;
+}
+
+export function providerLabel(p: string | null): string {
+  return p && p in HOSTED_PROVIDER_INFO
+    ? HOSTED_PROVIDER_INFO[p as HostedProvider].label
+    : (p ?? "No provider selected");
+}
+
 function CloudCard({ policy, editable }: { policy: AiPolicy; editable: boolean }) {
-  const [disclosure, setDisclosure] = useState<Disclosure | null>(null);
-  const update = usePolicyUpdate(setDisclosure);
+  const [pending, setPending] = useState<PendingDisclosure | null>(null);
+  const update = usePolicyUpdate((disclosure, body) => setPending({ disclosure, body }));
   const enabled = policy.cloud.enabled;
+  const [provider, setProvider] = useState<HostedProvider>(policy.cloud.provider ?? "anthropic");
+  const [model, setModel] = useState(policy.cloud.model ?? "");
+  const info = HOSTED_PROVIDER_INFO[provider];
+  const changingProvider = enabled && provider !== policy.cloud.provider;
   return (
     <Card className={cn(enabled && "border-warning-border")}>
       <CardHeader
@@ -219,7 +242,19 @@ function CloudCard({ policy, editable }: { policy: AiPolicy; editable: boolean }
           <Switch.Root
             checked={enabled}
             disabled={!editable || update.isPending}
-            onCheckedChange={(on) => update.mutate({ cloud: { enabled: on } })}
+            onCheckedChange={(on) =>
+              update.mutate(
+                on
+                  ? {
+                      cloud: {
+                        enabled: true,
+                        provider,
+                        ...(model.trim() ? { model: model.trim() } : {}),
+                      },
+                    }
+                  : { cloud: { enabled: false } },
+              )
+            }
             aria-label="Allow hosted inference"
             className="relative h-5 w-9 shrink-0 rounded-full bg-border-strong transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 data-[state=checked]:bg-primary"
           >
@@ -228,11 +263,56 @@ function CloudCard({ policy, editable }: { policy: AiPolicy; editable: boolean }
         }
       />
       <CardBody className="flex flex-col gap-4 text-sm">
+        <form
+          className="grid gap-4 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            update.mutate({ cloud: { provider, model: model.trim() || null } });
+          }}
+        >
+          <Field
+            label="Provider"
+            hint={`Requests go to ${info.recipient}. Which providers are available is configured on the server; keys never reach the browser.`}
+          >
+            <Select
+              value={provider}
+              disabled={!editable || update.isPending}
+              onChange={(e) => setProvider(e.target.value as HostedProvider)}
+            >
+              {HOSTED_PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {HOSTED_PROVIDER_INFO[p].label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Model" hint={`Must match the server configuration (${info.modelHint}).`}>
+            <Input
+              value={model}
+              disabled={!editable || update.isPending}
+              onChange={(e) => setModel(e.target.value)}
+              className="font-mono"
+            />
+          </Field>
+          {editable && (
+            <Button
+              type="submit"
+              size="sm"
+              className="self-start"
+              loading={update.isPending}
+              disabled={
+                provider === policy.cloud.provider && model.trim() === (policy.cloud.model ?? "")
+              }
+            >
+              {changingProvider ? "Change provider" : "Save provider"}
+            </Button>
+          )}
+        </form>
         {enabled ? (
           <>
             <MetaList
               items={[
-                { label: "Provider", value: policy.cloud.provider ?? "—" },
+                { label: "Active provider", value: providerLabel(policy.cloud.provider) },
                 {
                   label: "Model",
                   value: <Mono className="text-fg">{policy.cloud.model ?? "—"}</Mono>,
@@ -281,30 +361,35 @@ function CloudCard({ policy, editable }: { policy: AiPolicy; editable: boolean }
         )}
       </CardBody>
       <ConfirmDialog
-        open={!!disclosure}
-        onOpenChange={(o) => !o && setDisclosure(null)}
-        title="Allow hosted inference?"
-        description="Members will be able to send the data below to a hosted model provider. Secrets and excluded files are never sent. This change is audited."
-        confirmLabel="Acknowledge and enable"
+        open={!!pending}
+        onOpenChange={(o) => !o && setPending(null)}
+        title={enabled ? "Acknowledge the new data disclosure?" : "Allow hosted inference?"}
+        description="Members will be able to send the data below to this hosted provider. Secrets and excluded files are never sent. This change is audited."
+        confirmLabel={enabled ? "Acknowledge and save" : "Acknowledge and enable"}
         pending={update.isPending}
         onConfirm={() =>
+          pending &&
           update.mutate(
-            { cloud: { enabled: true }, acknowledge_data_disclosure: true },
-            { onSuccess: () => setDisclosure(null) },
+            { ...pending.body, acknowledge_data_disclosure: true },
+            { onSuccess: () => setPending(null) },
           )
         }
       >
-        {disclosure && (
+        {pending && (
           <div className="rounded-md bg-surface-sunken px-3 py-2 text-sm">
             <p className="text-fg">
               Provider:{" "}
-              <span className="font-medium">
-                {disclosure.provider ?? "configured hosted provider"}
-              </span>
+              <span className="font-medium">{providerLabel(pending.disclosure.provider)}</span>
             </p>
+            {pending.disclosure.provider && pending.disclosure.provider in HOSTED_PROVIDER_INFO && (
+              <p className="mt-1 text-fg-muted">
+                Data is sent to{" "}
+                {HOSTED_PROVIDER_INFO[pending.disclosure.provider as HostedProvider].recipient}.
+              </p>
+            )}
             <p className="mt-1 text-fg-muted">
               Data categories:{" "}
-              {disclosure.data_categories.map(category).join(", ") || "none configured"}
+              {pending.disclosure.data_categories.map(category).join(", ") || "none configured"}
             </p>
           </div>
         )}

@@ -12,11 +12,15 @@ import { Field } from "@/components/ui/field";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/overlays";
 import { createIdempotencyKey } from "@/lib/api/client";
-import { qk, useFailingChecks, useRepositories } from "@/lib/api/queries";
+import { qk, useFailingChecks, useRepositories, useTemplates } from "@/lib/api/queries";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonRows } from "@/components/ui/misc";
 import { describeError } from "@/lib/api/errors";
-import { CREATABLE_TASK_SOURCES, type CreateTaskRequest } from "@/lib/api/types";
+import {
+  CREATABLE_TASK_SOURCES,
+  type CreateTaskRequest,
+  type WorkflowTemplate,
+} from "@/lib/api/types";
 import { api } from "@/lib/api/runtime";
 import { isQueryable } from "@/lib/domain/status";
 import { applyServerErrors, notifyError } from "@/lib/forms";
@@ -31,6 +35,8 @@ export const createTaskSchema = z
   .object({
     repository_id: z.string().min(1, "Choose a repository"),
     source_type: z.enum(CREATABLE_TASK_SOURCES),
+    /** Workflow template key; "" = no template. */
+    template_key: z.string(),
     external_number: z.string().trim().optional(),
     check_run_id: z.string().trim().optional(),
     include_review_comments: z.boolean().optional(),
@@ -84,21 +90,70 @@ export const createTaskSchema = z
 export type CreateTaskValues = z.infer<typeof createTaskSchema>;
 
 /** Request body for the selected source (strict: no fields the server would reject). */
-export function toCreateTaskRequest(v: CreateTaskValues): CreateTaskRequest {
+export function toCreateTaskRequest(
+  v: CreateTaskValues,
+  template?: WorkflowTemplate | null,
+): CreateTaskRequest {
+  const extra = template
+    ? {
+        template_key: template.key,
+        ...(template.task_defaults.labels.length ? { labels: template.task_defaults.labels } : {}),
+      }
+    : {};
   switch (v.source_type) {
     case "github_issue":
-      return { source_type: "github_issue", external_number: Number(v.external_number) };
+      return { source_type: "github_issue", external_number: Number(v.external_number), ...extra };
     case "pull_request":
       return {
         source_type: "pull_request",
         external_number: Number(v.external_number),
         include_review_comments: Boolean(v.include_review_comments),
+        ...extra,
       };
     case "failing_check":
-      return { source_type: "failing_check", check_run_id: Number(v.check_run_id) };
+      return { source_type: "failing_check", check_run_id: Number(v.check_run_id), ...extra };
     default:
-      return { source_type: "manual", title: v.title, description: v.description };
+      return { source_type: "manual", title: v.title, description: v.description, ...extra };
   }
+}
+
+/**
+ * Prefill from a template without overwriting what the user typed: the title prefix replaces
+ * the previous template's prefix (or is prepended), the description scaffold only fills an
+ * empty description (or replaces the previous untouched scaffold).
+ */
+export function applyTemplatePrefill(
+  values: { title: string; description: string },
+  next: WorkflowTemplate | null,
+  previous: WorkflowTemplate | null,
+): { title: string; description: string } {
+  let title = values.title;
+  const oldPrefix = previous?.task_defaults.title_prefix ?? "";
+  if (oldPrefix && title.startsWith(oldPrefix)) title = title.slice(oldPrefix.length);
+  const prefix = next?.task_defaults.title_prefix ?? "";
+  if (prefix && !title.startsWith(prefix)) title = prefix + title;
+  let description = values.description;
+  const oldScaffold = previous?.task_defaults.description_template ?? "";
+  if (!description.trim() || (oldScaffold && description === oldScaffold))
+    description = next?.task_defaults.description_template ?? "";
+  return { title, description };
+}
+
+/** One-line summary of what a template enforces (shown under the picker). */
+export function templateSummary(t: WorkflowTemplate): string {
+  const parts: string[] = [];
+  if (t.plan_only)
+    parts.push("Plan only: the run ends at the approved plan and nothing is executed");
+  if (typeof t.budget.max_changed_files === "number" && !t.plan_only)
+    parts.push(`at most ${t.budget.max_changed_files} changed files`);
+  if (typeof t.budget.max_repair_attempts === "number" && !t.plan_only)
+    parts.push(
+      `${t.budget.max_repair_attempts} repair attempt${t.budget.max_repair_attempts === 1 ? "" : "s"}`,
+    );
+  if (t.allowed_profiles && t.allowed_profiles.length > 0)
+    parts.push(`checks limited to ${t.allowed_profiles.join(", ")}`);
+  if (t.planning_guidance.length) parts.push(`${t.planning_guidance.length} planning rules`);
+  return parts.join(" · ");
 }
 
 const SOURCE_LABELS: Record<CreateTaskValues["source_type"], string> = {
@@ -178,7 +233,9 @@ export function CreateTaskDialog({
   const queryClient = useQueryClient();
   const { base, workspaceId } = useWorkspace();
   const repos = useRepositories();
+  const templates = useTemplates();
   const key = useRef(createIdempotencyKey());
+  const previousTemplate = useRef<WorkflowTemplate | null>(null);
   const queryable = (repos.data ?? []).filter((r) => isQueryable(r.indexing_status));
 
   const form = useForm<CreateTaskValues>({
@@ -186,6 +243,7 @@ export function CreateTaskDialog({
     defaultValues: {
       repository_id: defaultRepositoryId ?? "",
       source_type: "manual",
+      template_key: "",
       external_number: "",
       check_run_id: "",
       include_review_comments: false,
@@ -198,13 +256,17 @@ export function CreateTaskDialog({
   const repositoryId = useWatch({ control: form.control, name: "repository_id" });
   const checkRunId = useWatch({ control: form.control, name: "check_run_id" });
   const startNow = useWatch({ control: form.control, name: "start_now" });
+  const templateKey = useWatch({ control: form.control, name: "template_key" });
+  const activeTemplates = (templates.data ?? []).filter((t) => t.status === "active");
+  const selected = activeTemplates.find((t) => t.key === templateKey) ?? null;
+  const templateField = form.register("template_key");
   const errors = form.formState.errors;
 
   const create = useMutation({
     mutationFn: async (v: CreateTaskValues) => {
       const task = await api.repositories.createTask(
         v.repository_id,
-        toCreateTaskRequest(v),
+        toCreateTaskRequest(v, activeTemplates.find((t) => t.key === v.template_key) ?? null),
         key.current,
       );
       if (!v.start_now) return { task, run: null, startError: null };
@@ -251,6 +313,7 @@ export function CreateTaskDialog({
         "external_number",
         "check_run_id",
         "source_type",
+        "template_key",
       ]);
     },
   });
@@ -310,6 +373,39 @@ export function CreateTaskDialog({
               </Select>
             </Field>
           </div>
+          <Field
+            label="Template"
+            error={errors.template_key?.message}
+            hint={
+              selected
+                ? templateSummary(selected) || selected.description
+                : "Optional. Templates prefill the task and add workspace policy for planning and budgets."
+            }
+          >
+            <Select
+              {...templateField}
+              onChange={(e) => {
+                void templateField.onChange(e);
+                const next = activeTemplates.find((t) => t.key === e.target.value) ?? null;
+                const filled = applyTemplatePrefill(
+                  { title: form.getValues("title"), description: form.getValues("description") },
+                  next,
+                  previousTemplate.current,
+                );
+                form.setValue("title", filled.title);
+                form.setValue("description", filled.description);
+                previousTemplate.current = next;
+              }}
+            >
+              <option value="">No template</option>
+              {activeTemplates.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.name}
+                  {t.source === "workspace" ? " (workspace)" : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
           {source === "github_issue" && (
             <Field
               label="Issue number"

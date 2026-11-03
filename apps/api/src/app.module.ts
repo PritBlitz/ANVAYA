@@ -25,6 +25,9 @@ import { ReviewController } from './review/review.controller.js';
 import { ReviewService } from './review/review.service.js';
 import { RunsController, TasksController } from './runs/runs.controller.js';
 import { KnowledgeController } from './knowledge/knowledge.controller.js';
+import { TemplatesController } from './templates/templates.controller.js';
+import { IntelligenceController } from './intelligence/intelligence.controller.js';
+import { IntelligenceModule } from './intelligence/intelligence.module.js';
 import { StorageModule } from './storage/object-storage.js';
 import { QueueModule } from './queue/queues.js';
 import { RepositoriesController } from './repositories/repositories.controller.js';
@@ -40,7 +43,7 @@ import { InvitationsController, WorkspacesController } from './workspaces/worksp
 import { WorkspacesService } from './workspaces/workspaces.service.js';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, RedisModule, QueueModule, AuditModule, AccessModule, StorageModule, AiClientModule, IndexingModule, AiModule, RunsModule],
+  imports: [ConfigModule, DatabaseModule, RedisModule, QueueModule, AuditModule, AccessModule, StorageModule, AiClientModule, IndexingModule, AiModule, RunsModule, IntelligenceModule],
   controllers: [
     HealthController,
     MetricsController,
@@ -59,6 +62,8 @@ import { WorkspacesService } from './workspaces/workspaces.service.js';
     TasksController,
     RunsController,
     ReviewController,
+    TemplatesController,
+    IntelligenceController,
   ],
   providers: [
     ReviewService,

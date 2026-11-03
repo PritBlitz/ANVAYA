@@ -24,11 +24,18 @@ returning fake success.
 | AI service | `services/ai-service`: mock + Ollama adapters, prompts, schemas, embeddings | ✅ 26 pytest tests. Hosted (cloud) adapter not implemented: cloud requests fail with `PROVIDER_NOT_CONFIGURED`. |
 | Tasks | `POST /repositories/:id/tasks` (manual, GitHub issue, pull request, failing check run), `GET /repositories/:id/failing-checks`, `GET /tasks`, `GET/PATCH /tasks/:id` | ✅ against a fake GitHub that verifies the App JWT and least-privilege installation tokens (`pull_requests:read`, `checks:read`). **Not yet run against real GitHub.** |
 | Quotas | `settings.run_quotas` via `PATCH /workspaces/:id` (admin+, audited), `GET /workspaces/:id/quotas`; enforced at run start/retry (429 `CONCURRENCY_LIMIT_REACHED` / `QUOTA_EXCEEDED` + `Retry-After`) and before every workflow and Q&A model call | ✅ (FR-OBS-004) |
+| AI service | `services/ai-service`: mock, Ollama, hosted Claude and OpenAI-compatible adapters, prompts, schemas, embeddings | ✅ 62 pytest tests. Hosted adapters are opt-in and tested against fake servers only (no live credentials). |
+| Tasks | `POST /repositories/:id/tasks` (manual + GitHub issue), `GET /tasks`, `GET/PATCH /tasks/:id` | ✅ |
 | Runs | `POST /tasks/:id/runs`, `GET /tasks/:id/runs`, `GET /runs` (workspace list), `GET /runs/:id` (with approvals, PR), `POST /runs/:id/cancel`, `POST /runs/:id/retry`, `GET /runs/:id/steps`, `GET /runs/:id/artifacts` | ✅ (retrieval → investigation → planning; worker-driven; verified end-to-end with real worker + real AI service in mock mode) |
 | Plan | `GET/PATCH /runs/:id/plan`, `POST /runs/:id/plan-approval` | ✅ approval bound to plan hash |
 | SSE | `GET /runs/:id/events` | ✅ replay + live |
 | Execution & verification | workspace → patch → sandboxed verification → bounded repair (worker) | ✅ with `EXECUTION_DRIVER=docker` (dev). Default `disabled`: approved runs fail with `EXECUTION_NOT_AVAILABLE`. Sandbox policy tested against **real Docker**; full pipeline verified end-to-end with real containers. |
 | Review & PR | `GET /runs/:id/diff`, `GET /runs/:id/verification`, `GET /runs/:id/review`, `POST /runs/:id/findings/:id/disposition`, `POST /runs/:id/pr-approval`, `POST /runs/:id/pull-request` | ✅ against a fake GitHub (write permissions enforced, idempotent). **Not yet run against real GitHub.** |
+| Templates (WP-B) | `GET/POST /workspaces/:id/templates`, `PATCH/DELETE /workspaces/:id/templates/:templateId`; `template_key` on task creation | ✅ built-ins + admin-managed, audited, snapshot on task, budget ceilings, profile restriction, planning guidance |
+| Migration plans (WP-B) | plan-only runs from the `migration_plan` template | ✅ evidence-backed plan with affected areas, prerequisites and rollback; ends at approval (`completed_without_pr`) |
+| Call graph (WP-B) | `GET /repositories/:id/symbols/:symbolId/call-graph` | ✅ bounded depth, paged |
+| Impact & test selection (WP-B) | `POST /repositories/:id/impact`, `GET /runs/:id/impact`; repository setting `test_selection` | ✅ heuristic, evidence chains; `narrow` mode for `node-test`/`python-pytest`. The narrowed sandbox path is unit-tested at the selection level only; it was **not** exercised against real Docker in this change |
+| Workspace knowledge (WP-B) | `POST /workspaces/:id/search`, `POST /workspaces/:id/questions` | ✅ tenant-scoped, per-result provenance |
 | Operations | `GET /internal/metrics` (token), worker metrics port, retention sweep, OpenAPI (`apps/api/openapi.json`), Dockerfiles, compose `app` profile, CI workflow | ✅ images built and stack started locally; CI workflow YAML validated but **not executed** in GitHub Actions |
 
 ## Not implemented / known limitations
@@ -36,6 +43,7 @@ returning fake success.
 * No webhook-driven "create a task from this failing check" path: `check_run`/`check_suite` events are not consumed; PR and failing-check tasks are created through the API only.
 * PR and failing-check tasks run against the latest indexed default-branch snapshot, not the PR head.
 * Hosted (cloud) inference adapter — cloud mode fails explicitly with `PROVIDER_NOT_CONFIGURED`.
+* Hosted adapters (Claude, OpenAI-compatible) have not been run against live endpoints here (no credentials).
 * Knowledge documents are stored but not yet part of retrieval/Q&A.
 * No live Ollama or live GitHub verification in this environment (no model runtime / App credentials).
 * Production execution plane (microVM / separate account) — the Docker driver is development-only and refused in production.

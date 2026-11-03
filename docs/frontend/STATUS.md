@@ -23,6 +23,7 @@ There is no `releases/V1.md` yet. The frontend targets ROADMAP phases 1–6 (ide
 | M11 | Public homepage               | `/` is public, static, and indexable. How it works is scroll-driven with motion that respects reduced motion. Real screenshots in light and dark. AA contrast verified by axe on desktop and mobile. No horizontal overflow at 390px. CTAs lead to sign-in, and signed-in users reach the app via `/app`. | ✅ Done                                                                               |
 | M12 | Code intelligence             | Symbol search by name/kind/path with paging; symbol source, outgoing and incoming references linked to code; file-level dependency map with scope, importers/imports and import-line links, externals; fixture parity                                                                                     | ✅ Done (fixtures + live API)                                                         |
 | M13 | Q&A memory and polish         | Knowledge-note citations; per-user saved Q&A history with removal; syntax highlighting (FD-8); Content-Security-Policy with zero violations                                                                                                                                                               | ✅ Done (fixtures + live API)                                                         |
+| M14 | Work package B (V1)           | Template picker in the create-task dialog (prefill, constraints summary) and admin template screen; plan-only migration plans (migration section, rollback, plan-only approval note); call graph in the symbol explorer; heuristic impact and test selection on Changes and Verification with evidence paths linked to code; workspace search/Q&A with provenance; hosted provider choice with per-provider disclosure. Fixture parity for every new endpoint                                                                                                                                                                                                   | ✅ Done (fixtures; API contract checked by `contract.ts` against the regenerated OpenAPI types). Not run against the live stack |
 | M10 | Real backend integration      | Run E2E suite against NestJS in `http` mode; reconcile GAP list                                                                                                                                                                                                                                           | 🟡 Live suite green through plan approval; real-model PR run pending workspace access |
 
 ## Verification (commands actually run)
@@ -73,6 +74,10 @@ Problems found and fixed while building the homepage:
 ## Known limitations / follow-ups
 
 - 2026-11-03 (V1 work package A): pull-request and failing-check task sources (create dialog with a failing-check picker, imported-context card on the task page) and admin quota settings with usage meters. Covered by fixture-parity, mapper, form and error-message unit tests and two new E2E journeys. Not yet exercised against a live API with a real GitHub App (needs `pull_requests:read` and `checks:read`).
+- Two pre-existing accessibility issues on the run Changes view were found by axe while adding
+  the impact panel and are **not fixed** in work package B: the AI patch-summary alert's
+  secondary text fails colour contrast, and the diff table's horizontal scroll region is not
+  keyboard-focusable. The package-B E2E scans only the impact panel on that page.
 
 - Homepage screenshots must be regenerated (`npm run screenshots` with the dev server running) whenever the product UI changes.
 

@@ -94,7 +94,7 @@ export interface EvidenceItem {
 }
 
 export interface GenerationRequest {
-  task: 'repository_qa' | 'investigation' | 'planning' | 'patch' | 'repair' | 'review' | 'verification_summary';
+  task: 'repository_qa' | 'investigation' | 'planning' | 'migration_plan' | 'patch' | 'repair' | 'review' | 'verification_summary';
   mode: 'local' | 'cloud' | 'mock';
   provider?: string | null;
   model?: string | null;

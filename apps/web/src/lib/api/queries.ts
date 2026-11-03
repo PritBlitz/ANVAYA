@@ -48,6 +48,11 @@ export const qk = {
   dependencyMap: (ws: string, id: string, path: string, snapshot: string) =>
     ["ws", ws, "repositories", id, "dependency-map", path, snapshot] as const,
   questions: (ws: string, id: string) => ["ws", ws, "repositories", id, "questions"] as const,
+  callGraph: (ws: string, id: string, symbolId: string, params: object) =>
+    ["ws", ws, "repositories", id, "call-graph", symbolId, params] as const,
+  templates: (ws: string, includeArchived = false) =>
+    ["ws", ws, "templates", includeArchived] as const,
+  runImpact: (ws: string, id: string) => ["ws", ws, "run", id, "impact"] as const,
   knowledge: (ws: string, id: string) => ["ws", ws, "repositories", id, "knowledge"] as const,
   knowledgeDoc: (ws: string, docId: string) => ["ws", ws, "knowledge", docId] as const,
   tasks: (ws: string, params?: T.TaskListParams) =>
@@ -288,6 +293,45 @@ export function useSymbol(id: string, symbolId: string | null, snapshot = "lates
     enabled: !!symbolId,
     staleTime: 5 * 60_000,
   });
+}
+
+/** Call graph around a symbol; nodes are paged 25 at a time. */
+export function useCallGraph(
+  id: string,
+  symbolId: string | null,
+  direction: T.CallGraphDirection,
+  depth: number,
+) {
+  const ws = useWorkspaceId();
+  return useInfiniteQuery({
+    queryKey: qk.callGraph(ws, id, symbolId ?? "", { direction, depth }),
+    queryFn: ({ pageParam }) =>
+      api.repositories.callGraph(id, symbolId!, {
+        direction,
+        depth,
+        limit: 25,
+        cursor: pageParam ?? undefined,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+    enabled: !!symbolId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useTemplates(includeArchived = false) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: qk.templates(ws, includeArchived),
+    queryFn: () => api.templates.list(ws, includeArchived),
+    staleTime: 60_000,
+  });
+}
+
+/** Heuristic impact and test selection for a run. Refreshes when the run's plan or patch changes. */
+export function useRunImpact(id: string, enabled = true) {
+  const ws = useWorkspaceId();
+  return useQuery({ queryKey: qk.runImpact(ws, id), queryFn: () => api.runs.impact(id), enabled });
 }
 
 export function useDependencyMap(id: string, path: string, snapshot = "latest") {

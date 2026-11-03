@@ -37,7 +37,7 @@ def hosted_providers(handler: Callable[[httpx2.Request], httpx2.Response]) -> Pr
     return Providers(
         mock=MockProvider(),
         local=OllamaProvider(ollama, "qwen-test", 4096),
-        cloud=AnthropicProvider(client, MODEL, "medium"),
+        hosted={"anthropic": AnthropicProvider(client, MODEL, "medium")},
         embeddings=MockEmbeddingProvider(768),
         ollama_client=ollama,
     )
@@ -150,7 +150,7 @@ def test_opt_in_requires_an_api_key() -> None:
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         settings(HOSTED_PROVIDER="anthropic")
     s = settings(HOSTED_PROVIDER="anthropic", ANTHROPIC_API_KEY="sk-ant-x")
-    assert Providers.from_settings(s).cloud is not None
+    assert set(Providers.from_settings(s).hosted) == {"anthropic"}
     assert "sk-ant-x" not in repr(s)
 
 

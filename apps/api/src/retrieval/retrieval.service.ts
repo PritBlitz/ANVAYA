@@ -24,6 +24,8 @@ export interface RetrievalQuery {
   topK: number;
   filters?: RetrievalFilters;
   mode?: 'hybrid' | 'lexical' | 'semantic';
+  /** Precomputed query embedding (e.g. one embedding shared by a workspace-wide search). */
+  queryEmbedding?: { vector: number[]; model: string; version: string } | null;
 }
 
 export interface RetrievedChunk {
@@ -160,9 +162,13 @@ export class RetrievalService {
 
     if (mode !== 'lexical') {
       try {
-        const emb = await this.ai.embed([q.query], 'query');
+        if (q.queryEmbedding) queryEmbedding = q.queryEmbedding;
+        else {
+          const e = await this.ai.embed([q.query], 'query');
+          queryEmbedding = { vector: e.embeddings[0]!, model: e.model, version: e.model_version };
+        }
+        const emb = { model: queryEmbedding.model, model_version: queryEmbedding.version, embeddings: [queryEmbedding.vector] };
         const modelTag = `${emb.model}@${emb.model_version}`;
-        queryEmbedding = { vector: emb.embeddings[0]!, model: emb.model, version: emb.model_version };
         if (snap.embedding_model && snap.embedding_model !== modelTag) {
           semanticStatus = 'unavailable';
           semanticReason = `query embedding model ${modelTag} does not match the index (${snap.embedding_model}); re-index required`;

@@ -279,6 +279,28 @@ export interface EngineeringTasksTable {
   description: string;
   status: Generated<TaskStatus>;
   labels: Json<string[]>;
+  /** Template the task was created from (immutable snapshot; see templates/templates.ts). */
+  template_key: Generated<string | null>;
+  template: NullableJson<JsonObject>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface WorkflowTemplatesTable {
+  id: Generated<string>;
+  organization_id: string;
+  key: string;
+  name: string;
+  description: Generated<string>;
+  workflow: 'change' | 'migration_plan';
+  task_defaults: Json<JsonObject>;
+  budget: Json<JsonObject>;
+  allowed_profiles: NullableJson<string[]>;
+  planning_guidance: Json<string[]>;
+  version: Generated<number>;
+  status: Generated<'active' | 'archived'>;
+  created_by: string | null;
+  updated_by: string | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -425,6 +447,8 @@ export interface VerificationRunsTable {
   attempt: Generated<number>;
   output_truncated: Generated<boolean>;
   image: string | null;
+  /** Heuristic test selection that narrowed this profile run; null = full profile. */
+  test_selection: NullableJson<JsonObject>;
   created_at: Generated<Date>;
 }
 
@@ -557,6 +581,7 @@ export interface Database {
   knowledge_chunks: KnowledgeChunksTable;
   repository_questions: RepositoryQuestionsTable;
   engineering_tasks: EngineeringTasksTable;
+  workflow_templates: WorkflowTemplatesTable;
   workflow_runs: WorkflowRunsTable;
   run_state_transitions: RunStateTransitionsTable;
   run_events: RunEventsTable;

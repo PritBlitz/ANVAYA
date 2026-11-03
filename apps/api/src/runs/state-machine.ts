@@ -9,7 +9,9 @@ export const TRANSITIONS: Record<RunStatus, readonly RunStatus[]> = {
   retrieving_context: ['investigating', 'failed', 'cancelled', 'timed_out'],
   investigating: ['planning', 'failed', 'cancelled', 'timed_out'],
   planning: ['awaiting_plan_approval', 'failed', 'cancelled', 'timed_out'],
-  awaiting_plan_approval: ['preparing_workspace', 'rejected', 'cancelled', 'timed_out'],
+  // completed_without_pr here is only taken by plan-only (migration plan) runs: the approved plan
+  // is the deliverable and nothing is executed (ADR-0001 addendum, 2026-11-03).
+  awaiting_plan_approval: ['preparing_workspace', 'completed_without_pr', 'rejected', 'cancelled', 'timed_out'],
   preparing_workspace: ['implementing', 'failed', 'cancelled', 'timed_out'],
   implementing: ['verifying', 'failed', 'cancelled', 'timed_out'],
   // verifying/reviewing may loop back to implementing for a bounded repair attempt.

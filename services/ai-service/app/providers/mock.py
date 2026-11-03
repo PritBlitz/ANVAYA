@@ -123,6 +123,41 @@ class MockProvider:
                 "risks": ["[mock] Behaviour change in dependent modules."],
                 "out_of_scope": ["Unrelated refactoring"],
             }
+        if req.task == "migration_plan":
+            files = [str(p) for p in _ctx_list(req.context, "investigation", "candidate_files")][:4] or paths[:3]
+            steps = [
+                {
+                    "id": f"step-{i + 1}",
+                    "description": f"Migrate {f}",
+                    "files": [f],
+                    "verification": ["Run the existing tests for this area"],
+                    "rollback": f"Revert the change to {f}",
+                }
+                for i, f in enumerate(files)
+            ] or [
+                {
+                    "id": "step-1",
+                    "description": "Inventory the affected code; no candidate files were identified.",
+                    "files": [],
+                    "verification": [],
+                    "rollback": "Nothing to roll back.",
+                }
+            ]
+            return {
+                "objective": f"[mock] Migration plan: {title}",
+                "assumptions": ["The indexed snapshot reflects the base branch."],
+                "steps": steps,
+                "files_to_modify": files,
+                "tests": ["existing tests"],
+                "risks": ["[mock] Mixed old and new behaviour during the rollout."],
+                "out_of_scope": ["Executing the migration"],
+                "affected_areas": [
+                    {"area": e.path, "description": f"Code in {e.path}", "files": [e.path], "evidence_ids": [e.id]}
+                    for e in ev[:3]
+                ],
+                "prerequisites": ["[mock] Agree the target state with the owners."],
+                "rollback_strategy": ["Revert each step independently, newest first."],
+            }
         if req.task in ("patch", "repair"):
             files = _ctx_list(req.context, "files")
             changes: list[dict[str, Any]] = []

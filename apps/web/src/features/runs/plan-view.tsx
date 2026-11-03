@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils/cn";
 import { formatRelative, lineRange } from "@/lib/utils/format";
 import {
   formToPlan,
+  keepMigration,
   planFormSchema,
   planToForm,
   undeclaredStepFiles,
@@ -159,8 +160,66 @@ function InvestigationCard({
   );
 }
 
+/** Migration-plan section: affected areas with server-resolved evidence, prerequisites, rollback. */
+function MigrationSectionView({ runPlan, repoId }: { runPlan: RunPlan; repoId: string }) {
+  const m = runPlan.plan.migration;
+  if (!m) return null;
+  const evidence = new Map(runPlan.migration_evidence.map((e) => [e.id, e]));
+  return (
+    <Card data-testid="migration-plan">
+      <CardHeader
+        title="Migration details"
+        description="Affected areas cite retrieved evidence; locations come from the run's own retrieval records."
+      />
+      <CardBody className="flex flex-col gap-5 text-sm">
+        <div>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+            Affected areas · {m.affected_areas.length}
+          </h3>
+          <ul className="flex flex-col gap-2">
+            {m.affected_areas.map((a) => (
+              <li key={a.area} className="rounded-md border border-border p-3">
+                <p className="font-medium text-fg">{a.area}</p>
+                <p className="text-fg-muted">{a.description}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {a.evidence_ids.map((id) => {
+                    const e = evidence.get(id);
+                    return e ? <EvidenceLink key={id} evidence={e} repoId={repoId} /> : null;
+                  })}
+                  {a.evidence_ids.every((id) => !evidence.has(id)) && (
+                    <span className="text-xs text-warning">
+                      No resolved evidence for this area.
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+              Prerequisites
+            </h3>
+            <List items={m.prerequisites} icon={<ListChecks className="text-fg-subtle" />} />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+              Rollback strategy
+            </h3>
+            <List items={m.rollback_strategy} icon={<ShieldAlert className="text-warning" />} />
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 function PlanDocument({ plan }: { plan: EngineeringPlan }) {
   const undeclared = undeclaredStepFiles(plan);
+  const rollback = new Map(
+    (plan.migration?.step_rollback ?? []).map((r) => [r.step_id, r.rollback]),
+  );
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -190,6 +249,11 @@ function PlanDocument({ plan }: { plan: EngineeringPlan }) {
                   <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted">
                     <Check className="mt-0.5 size-3 shrink-0 text-success" />{" "}
                     {s.verification.join(" · ")}
+                  </p>
+                )}
+                {rollback.has(s.id) && (
+                  <p className="mt-1 text-xs text-fg-muted">
+                    <span className="font-semibold">Rollback:</span> {rollback.get(s.id)}
                   </p>
                 )}
               </div>
@@ -256,7 +320,11 @@ function PlanEditor({ runPlan, onDone }: { runPlan: RunPlan; onDone: () => void 
   const errors = form.formState.errors;
   const save = useMutation({
     mutationFn: (v: PlanFormValues) =>
-      api.runs.updatePlan(runPlan.run_id, formToPlan(v), runPlan.plan_hash),
+      api.runs.updatePlan(
+        runPlan.run_id,
+        keepMigration(formToPlan(v), runPlan.plan),
+        runPlan.plan_hash,
+      ),
     onSuccess: (revision) => {
       // The response is the new revision only: keep the investigation, then refetch.
       const key = qk.runPart(workspaceId, runPlan.run_id, "plan");
@@ -592,6 +660,7 @@ export function PlanView() {
             )}
           </CardBody>
         </Card>
+        <MigrationSectionView runPlan={p} repoId={repoId} />
         {p.investigation && <InvestigationCard investigation={p.investigation} repoId={repoId} />}
       </div>
       <aside className="flex flex-col gap-4">
@@ -608,13 +677,22 @@ export function PlanView() {
           decidable ? (
             <Card className="border-warning-border">
               <CardBody className="flex flex-col gap-3">
-                <p className="text-sm text-fg">
-                  Approving lets Anvaya modify only the {p.plan.files_to_modify.length} files in
-                  scope, inside a disposable sandbox.
-                </p>
-                <p className="text-xs text-fg-muted">
-                  No branch, commit, or pull request is created without a second approval.
-                </p>
+                {p.plan_only ? (
+                  <p className="text-sm text-fg" data-testid="plan-only-note">
+                    This is a plan-only run. Approving records this plan as the deliverable and ends
+                    the run: no workspace is created and no code is changed or executed.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-fg">
+                      Approving lets Anvaya modify only the {p.plan.files_to_modify.length} files in
+                      scope, inside a disposable sandbox.
+                    </p>
+                    <p className="text-xs text-fg-muted">
+                      No branch, commit, or pull request is created without a second approval.
+                    </p>
+                  </>
+                )}
                 <div className="flex gap-2">
                   <Button
                     variant="primary"

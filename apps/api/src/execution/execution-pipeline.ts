@@ -12,12 +12,16 @@ import { RepositorySource, type SourceRepository } from '../indexing/sources.js'
 import { effectiveSettings } from '../repositories/repositories.service.js';
 import { ExecutionStages } from '../runs/orchestrator.service.js';
 import { planSchema } from '../runs/run.schemas.js';
+import { filterProfilesByTemplate, isPlanOnly, parseSnapshot } from '../templates/templates.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from '../runs/stage-toolkit.js';
 import { ObjectStorage } from '../storage/object-storage.js';
 import { PatchRejected, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
 import { profileById, selectProfiles, unavailableChecks, type VerificationProfile } from './profiles.js';
 import { SandboxDriver, type SandboxResult } from './sandbox.js';
 import { WorkspaceManager } from './workspace.js';
+import { ImpactService } from '../intelligence/impact.service.js';
+import { isTestFile } from '../intelligence/graph.js';
+import { normalizePath } from '../indexing/classifier.js';
 
 const log = logger('execution');
 const MAX_CONTEXT_FILE_BYTES = 64 * 1024;
@@ -65,8 +69,30 @@ export class ExecutionPipeline extends ExecutionStages {
     private readonly sandbox: SandboxDriver,
     private readonly storage: ObjectStorage,
     private readonly config: AppConfig,
+    private readonly impact: ImpactService,
   ) {
     super();
+  }
+
+  /**
+   * Heuristic test selection for 'narrow' repositories: the impact prediction's selected test
+   * files that exist in the workspace. Returns null when selection is off or selects nothing,
+   * in which case every profile runs in full. The deterministic exit code still decides the result.
+   */
+  private async testSelection(run: WorkflowRun, paths: readonly string[]): Promise<{ files: string[]; reasons: Record<string, string>; testFilesTotal: number } | null> {
+    const repo = await this.kit.database.db.selectFrom('repositories').select('settings').where('id', '=', run.repository_id).executeTakeFirstOrThrow();
+    if (effectiveSettings(repo.settings).test_selection !== 'narrow' || !run.snapshot_id) return null;
+    const changes = await this.impact.runChanges(run);
+    if (changes.changed.length === 0) return null;
+    const result = await this.impact.predict(run.snapshot_id, changes.changed, 50);
+    const inWorkspace = new Set(paths);
+    const selected = result.selected_tests.filter((t) => inWorkspace.has(t.path) && normalizePath(t.path) === t.path && !t.path.startsWith('-'));
+    if (selected.length === 0) return null;
+    return {
+      files: selected.map((t) => t.path),
+      reasons: Object.fromEntries(selected.map((t) => [t.path, t.reasons[0]?.description ?? 'selected'])),
+      testFilesTotal: paths.filter(isTestFile).length,
+    };
   }
 
   async advance(run: WorkflowRun): Promise<'progressed' | 'waiting'> {
@@ -141,6 +167,8 @@ export class ExecutionPipeline extends ExecutionStages {
   // preparing_workspace
   // ---------------------------------------------------------------------------
   private async prepare(run: WorkflowRun): Promise<void> {
+    // Defence in depth: plan-only runs end at plan approval and must never get a workspace.
+    if (isPlanOnly(run)) throw new StageFailure('PLAN_ONLY_WORKFLOW', 'This run is plan-only; nothing is executed.');
     await this.approvedPlan(run);
     const stepId = await this.kit.startStep(run, 'workspace', { commit_sha: run.checkpoint.commit_sha ?? null });
     const toolId = await this.kit.startTool(run, stepId, 'prepare_workspace', { commit_sha: run.checkpoint.commit_sha ?? null });
@@ -149,8 +177,11 @@ export class ExecutionPipeline extends ExecutionStages {
     const paths = await this.ensureWorkspace({ ...run, checkpoint: { ...run.checkpoint, current_patch_id: null } });
     const repo = await this.repository(run);
     const dependencyFetch = this.config.env.SANDBOX_DEPENDENCY_FETCH === 'enabled';
-    const profiles = selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths), { dependencyFetch });
-    const unavailable = unavailableChecks(new Set(paths), { dependencyFetch });
+    // The task's template may restrict which server-defined profiles run; excluded ones are reported, never hidden.
+    const template = parseSnapshot((await this.kit.task(run)).template);
+    const byTemplate = filterProfilesByTemplate(selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths), { dependencyFetch }), template);
+    const profiles = byTemplate.allowed;
+    const unavailable = [...unavailableChecks(new Set(paths), { dependencyFetch }), ...byTemplate.excluded];
     await this.kit.database.transaction(async (tx) => {
       const current = await this.kit.guard(tx, run);
       await this.kit.finishTool(tx, current, toolId, 'succeeded', { files: paths.length, profiles: profiles.map((p) => p.id) }, Date.now() - started, 'prepare_workspace');
@@ -263,6 +294,7 @@ export class ExecutionPipeline extends ExecutionStages {
     const patchId = typeof run.checkpoint.current_patch_id === 'string' ? run.checkpoint.current_patch_id : null;
     const attempt = Number(run.checkpoint.patch_attempt ?? 1);
     const stepId = await this.kit.startStep(run, 'verification_engine', { profiles: profileIds, patch_id: patchId });
+    const selection = profileIds.some((id) => profileById(id)?.testSelection) ? await this.testSelection(run, (run.checkpoint.workspace_paths as string[] | undefined) ?? []) : null;
     const results: Array<{ profile: string; status: 'passed' | 'failed' | 'timed_out' | 'skipped' | 'error'; exit_code: number | null; stderr: string; stdout: string }> = [];
 
     if (profileIds.length === 0) {
@@ -275,8 +307,16 @@ export class ExecutionPipeline extends ExecutionStages {
     }
 
     for (const id of profileIds) {
-      const profile = profileById(id);
-      if (!profile) continue;
+      const base = profileById(id);
+      if (!base) continue;
+      // Narrow a selection-capable profile to the heuristically selected tests it can run.
+      const narrowed = base.testSelection && selection ? selection.files.filter((f) => base.testSelection!.pattern.test(f)) : [];
+      const testSelection = narrowed.length
+        ? { mode: 'narrow', heuristic: true, files: narrowed, reasons: Object.fromEntries(narrowed.map((f) => [f, selection!.reasons[f] ?? 'selected'])), test_files_total: selection!.testFilesTotal, not_run: Math.max(0, selection!.testFilesTotal - narrowed.length) }
+        : null;
+      const profile: VerificationProfile = testSelection
+        ? { ...base, argv: base.testSelection!.argv(narrowed), commandDisplay: `${base.commandDisplay} (heuristic test selection: ${narrowed.length} of ${testSelection.test_files_total} test files)` }
+        : base;
       const remaining = await this.kit.remainingSeconds(run);
       if (remaining < 5) throw new StageFailure('BUDGET_EXHAUSTED', 'No time budget left for verification.');
       const toolId = await this.kit.startTool(run, stepId, 'run_profile', { profile_id: profile.id });
@@ -343,6 +383,7 @@ export class ExecutionPipeline extends ExecutionStages {
             stdout_object_key: `${key}.stdout`,
             stderr_object_key: `${key}.stderr`,
             output_truncated: res.truncated,
+            test_selection: testSelection ? json(testSelection) : null,
           })
           .execute();
         await this.kit.finishTool(tx, current, toolId, status === 'passed' ? 'succeeded' : 'failed', { profile_id: profile.id, status, exit_code: res.exitCode, duration_ms: res.durationMs }, res.durationMs, 'run_profile');

@@ -738,11 +738,35 @@ function enter(state: FixtureState, run: FixtureRun, status: T.RunStatus, at: nu
       emit(run, "agent.started", at, { agent: "planner" });
       addStep(run, state, "planner", at);
       recordUsage(state, run, "planning", at);
-      const plan = structuredClone(scenario.plan);
+      const plan: T.EngineeringPlan = structuredClone(scenario.plan);
+      const investigation = scenario.investigation(sha);
+      const migrationEvidence: T.MigrationEvidenceRef[] = [];
+      if (run.plan_only) {
+        // Plan-only workflow: same plan shape plus the migration section (affected areas, rollback).
+        plan.objective = `Migration plan: ${run.task.title ?? "task"}`.slice(0, 500);
+        const ev = investigation.findings.flatMap((f) => f.evidence).slice(0, 2);
+        ev.forEach((e, i) => migrationEvidence.push({ ...e, id: `ev-${i + 1}`, symbol: null }));
+        plan.migration = {
+          affected_areas: plan.files_to_modify.slice(0, 3).map((f, i) => ({
+            area: f,
+            description: `Code in ${f} changes during the migration.`,
+            files: [f],
+            evidence_ids: migrationEvidence[i] ? [migrationEvidence[i]!.id] : [],
+          })),
+          prerequisites: ["Agree the target state with the code owners."],
+          step_rollback: plan.steps.map((s) => ({
+            step_id: s.id,
+            rollback: `Revert the changes from ${s.id}.`,
+          })),
+          rollback_strategy: ["Each step is independently revertible, newest first."],
+        };
+      }
       run.plan = {
         run_id: run.id,
         plan,
-        investigation: scenario.investigation(sha),
+        investigation,
+        migration_evidence: migrationEvidence,
+        plan_only: !!run.plan_only,
         plan_hash: contentHash(JSON.stringify(plan)),
         version: 1,
         state: "proposed",
@@ -1022,6 +1046,9 @@ export function createRun(
   };
   for (const key of Object.keys(budget) as (keyof T.RunBudgets)[]) {
     budget[key] = Math.min(body.budgets?.[key] ?? max[key], max[key]); // server clamps (API_SPEC §5)
+    // A template can only lower a ceiling.
+    const ceiling = task.template?.budget[key];
+    if (typeof ceiling === "number") budget[key] = Math.min(budget[key], ceiling);
   }
   const run: FixtureRun = {
     id: nextId(state, "80000000"),
@@ -1050,6 +1077,16 @@ export function createRun(
     updated_at: iso,
     base_branch: body.base_branch,
     pull_request: null,
+    template: task.template
+      ? {
+          key: task.template.key,
+          name: task.template.name,
+          workflow: task.template.workflow,
+          source: task.template.source,
+          version: task.template.version,
+        }
+      : null,
+    plan_only: task.template?.workflow === "migration_plan",
     task: {
       id: task.id,
       title: task.title,

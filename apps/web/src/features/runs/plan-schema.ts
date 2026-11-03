@@ -76,6 +76,22 @@ export function formToPlan(v: PlanFormValues): EngineeringPlan {
   };
 }
 
+/**
+ * The plan editor edits the core plan fields; a migration plan's migration section is kept as
+ * proposed, with rollbacks for steps that were removed dropped (the server rejects unknown steps).
+ */
+export function keepMigration(edited: EngineeringPlan, original: EngineeringPlan): EngineeringPlan {
+  if (!original.migration) return edited;
+  const ids = new Set(edited.steps.map((s) => s.id));
+  return {
+    ...edited,
+    migration: {
+      ...original.migration,
+      step_rollback: original.migration.step_rollback.filter((r) => ids.has(r.step_id)),
+    },
+  };
+}
+
 /** Files referenced by steps but not declared in files_to_modify — a scope inconsistency. */
 export function undeclaredStepFiles(plan: EngineeringPlan): string[] {
   const declared = new Set(plan.files_to_modify);

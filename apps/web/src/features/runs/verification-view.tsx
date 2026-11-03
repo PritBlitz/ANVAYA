@@ -20,6 +20,7 @@ import { useRunVerification } from "@/lib/api/queries";
 import type { VerificationReport, VerificationResult } from "@/lib/api/types";
 import { cn } from "@/lib/utils/cn";
 import { formatDuration } from "@/lib/utils/format";
+import { ImpactPanel } from "./impact-panel";
 import { useRunContext } from "./run-context";
 
 export function summarizeVerification(report: VerificationReport) {
@@ -52,6 +53,12 @@ function ResultRow({ result }: { result: VerificationResult }) {
         <VerificationBadge status={result.status} />
         <Mono className="text-fg">{result.command_display}</Mono>
         <span className="text-2xs text-fg-subtle">{result.profile_id}</span>
+        {result.test_selection && (
+          <Badge tone="warning" title="Heuristic test selection narrowed this run">
+            {result.test_selection.files.length} selected test file
+            {result.test_selection.files.length === 1 ? "" : "s"} · heuristic
+          </Badge>
+        )}
         <span className="ml-auto flex items-center gap-3 font-mono text-xs text-fg-muted tabular">
           <span>exit {result.exit_code ?? "—"}</span>
           <span>{formatDuration(result.duration_ms)}</span>
@@ -60,6 +67,13 @@ function ResultRow({ result }: { result: VerificationResult }) {
           )}
         </span>
       </button>
+      {result.test_selection && (
+        <p className="px-4 pb-2 text-xs text-fg-muted" data-testid="test-selection-note">
+          Only {result.test_selection.files.join(", ")} ran ({result.test_selection.not_run} other
+          test file{result.test_selection.not_run === 1 ? "" : "s"} did not). The selection is
+          heuristic; this result covers only the files that ran.
+        </p>
+      )}
       {open && result.output_excerpt && (
         <div className="px-4 pb-3">
           <pre
@@ -117,13 +131,16 @@ export function VerificationView() {
   if (report.isError) {
     if (isApiError(report.error) && report.error.isNotFound) {
       return (
-        <Card>
-          <EmptyState
-            icon={<FlaskConical />}
-            title="No verification yet"
-            description="After the patch is applied in an isolated sandbox, server-defined test, lint, and build profiles run here. Only their exit codes decide pass or fail."
-          />
-        </Card>
+        <div className="flex flex-col gap-4">
+          <Card>
+            <EmptyState
+              icon={<FlaskConical />}
+              title="No verification yet"
+              description="After the patch is applied in an isolated sandbox, server-defined test, lint, and build profiles run here. Only their exit codes decide pass or fail."
+            />
+          </Card>
+          {!run.plan_only && <ImpactPanel />}
+        </div>
       );
     }
     return <ErrorState error={report.error} onRetry={() => report.refetch()} />;
@@ -166,6 +183,7 @@ export function VerificationView() {
       </p>
 
       <Group title="Failed" icon={<CircleX />} items={s.failed} tone="text-danger" />
+      <ImpactPanel compact />
       {report.data.ai_summary && (
         <InlineAlert
           tone="ai"

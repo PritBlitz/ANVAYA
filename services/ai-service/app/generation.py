@@ -17,6 +17,7 @@ from .providers.anthropic_hosted import build_anthropic_provider
 from .providers.base import EmbeddingProvider, GenerationProvider
 from .providers.mock import MockEmbeddingProvider, MockProvider
 from .providers.ollama import OllamaClient, OllamaEmbeddingProvider, OllamaProvider
+from .providers.openai_compatible import build_openai_compatible_provider
 from .schemas import OUTPUT_SCHEMAS, GenerateRequest, GenerateResponse, Usage
 
 log = logging.getLogger("anvaya.ai.generation")
@@ -26,7 +27,8 @@ log = logging.getLogger("anvaya.ai.generation")
 class Providers:
     mock: GenerationProvider
     local: GenerationProvider
-    cloud: GenerationProvider | None
+    # Configured hosted (cloud) adapters by provider name. Empty = cloud mode is not available.
+    hosted: dict[str, GenerationProvider]
     embeddings: EmbeddingProvider
     ollama_client: OllamaClient
 
@@ -38,16 +40,30 @@ class Providers:
             if s.embedding_provider == "mock"
             else OllamaEmbeddingProvider(client, s.ollama_embedding_model)
         )
+        hosted: dict[str, GenerationProvider] = {}
+        if "anthropic" in s.hosted_providers and s.anthropic_api_key:
+            hosted["anthropic"] = build_anthropic_provider(
+                s.anthropic_api_key.get_secret_value(), s.hosted_model, s.hosted_effort, s.hosted_base_url
+            )
+        if "openai_compatible" in s.hosted_providers and s.openai_compat_base_url and s.openai_compat_model:
+            prices = (
+                (s.openai_compat_price_input_per_mtok, s.openai_compat_price_output_per_mtok)
+                if s.openai_compat_price_input_per_mtok is not None
+                and s.openai_compat_price_output_per_mtok is not None
+                else None
+            )
+            hosted["openai_compatible"] = build_openai_compatible_provider(
+                s.openai_compat_base_url,
+                s.openai_compat_api_key.get_secret_value() if s.openai_compat_api_key else None,
+                s.openai_compat_model,
+                response_format=s.openai_compat_response_format,
+                max_tokens_param=s.openai_compat_max_tokens_param,
+                price_per_mtok=prices,
+            )
         return cls(
             mock=MockProvider(),
             local=OllamaProvider(client, s.ollama_generation_model, s.ollama_context_tokens),
-            cloud=(
-                build_anthropic_provider(
-                    s.anthropic_api_key.get_secret_value(), s.hosted_model, s.hosted_effort, s.hosted_base_url
-                )
-                if s.hosted_provider == "anthropic" and s.anthropic_api_key
-                else None
-            ),
+            hosted=hosted,
             embeddings=emb,
             ollama_client=client,
         )
@@ -59,9 +75,13 @@ class Providers:
         elif mode == "local":
             chosen = self.local
         else:
-            chosen = self.cloud
+            # The control plane names the policy-selected provider; it is never guessed when several exist.
+            if provider is not None:
+                chosen = self.hosted.get(provider)
+            else:
+                chosen = next(iter(self.hosted.values())) if len(self.hosted) == 1 else None
         if chosen is None:
-            raise provider_not_configured(mode)
+            raise provider_not_configured(mode if provider is None else f"{mode}/{provider}")
         if provider is not None and provider != chosen.name:
             raise AiError(422, "PROVIDER_MISMATCH", f"Provider '{provider}' is not available for mode '{mode}'.")
         return chosen
@@ -84,11 +104,12 @@ def _cited_ids(output: dict[str, Any]) -> set[str]:
     for c in citations if isinstance(citations, list) else []:
         if isinstance(c, dict) and isinstance(c.get("evidence_id"), str):
             ids.add(c["evidence_id"])
-    findings = output.get("findings")
-    for f in findings if isinstance(findings, list) else []:
-        refs = f.get("evidence_ids") if isinstance(f, dict) else None
-        if isinstance(refs, list):
-            ids.update(i for i in refs if isinstance(i, str))
+    for key in ("findings", "affected_areas"):
+        items = output.get(key)
+        for f in items if isinstance(items, list) else []:
+            refs = f.get("evidence_ids") if isinstance(f, dict) else None
+            if isinstance(refs, list):
+                ids.update(i for i in refs if isinstance(i, str))
     return ids
 
 
@@ -99,7 +120,13 @@ async def generate(req: GenerateRequest, providers: Providers, settings: Setting
         raise AiError(422, "MODEL_NOT_ALLOWED", "The requested model is not configured for this provider.")
 
     prompt = build_prompt(
-        req.task, req.intent, req.evidence, req.context, req.budget.max_input_tokens, settings.max_evidence_items
+        req.task,
+        req.intent,
+        req.evidence,
+        req.context,
+        req.budget.max_input_tokens,
+        settings.max_evidence_items,
+        req.untrusted_inputs,
     )
     schema_type = OUTPUT_SCHEMAS[req.task]
     deadline = started + req.budget.timeout_seconds

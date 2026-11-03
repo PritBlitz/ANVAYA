@@ -23,6 +23,7 @@ import { useWorkspace } from "@/lib/workspace/context";
 import { CodeView } from "@/features/code/code-view";
 import { RequireIndexed } from "@/features/repositories/not-indexed";
 import { useRepoId } from "@/features/repositories/repo-layout";
+import { CallGraphPanel } from "./call-graph-panel";
 import { INCOMING_LABEL, REFERENCE_LABEL, SymbolKindBadge } from "./symbol-kind";
 
 const PREVIEW_MAX_LINES = 60;
@@ -283,6 +284,7 @@ function SymbolDetailPanel({
           groups={incoming}
         />
       </div>
+      <CallGraphPanel key={s.id} repo={repo} symbolId={s.id} onSelect={onSelect} />
     </div>
   );
 }

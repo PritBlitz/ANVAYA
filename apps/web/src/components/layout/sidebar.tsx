@@ -55,6 +55,7 @@ export function useNavItems(): NavItem[] {
     { href: base, label: "Overview", icon: <LayoutDashboard />, exact: true },
     { href: `${base}/repositories`, label: "Repositories", icon: <FolderGit2 /> },
     { href: `${base}/knowledge`, label: "Knowledge", icon: <BookOpen /> },
+    { href: `${base}/search`, label: "Search", icon: <Search /> },
     { href: `${base}/tasks`, label: "Tasks", icon: <ListTodo /> },
     { href: `${base}/runs`, label: "Runs", icon: <Activity /> },
     {

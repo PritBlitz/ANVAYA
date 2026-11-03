@@ -496,6 +496,8 @@ export function toTask(w: W.WTask): T.EngineeringTask {
     description: w.description,
     status: w.status,
     labels: w.labels ?? [],
+    template_key: w.template_key ?? null,
+    template: w.template ?? null,
     // null = never run; undefined = not provided by this endpoint.
     latest_run:
       w.latest_run === undefined
@@ -565,6 +567,8 @@ export function toRun(w: W.WRun): T.WorkflowRun {
     },
     pull_request: w.pull_request ? toPullRequest(w.pull_request) : null,
     approvals: (w.approvals ?? []).map((a) => toApproval(a)),
+    template: w.template ?? null,
+    plan_only: w.plan_only ?? false,
   };
 }
 
@@ -660,6 +664,8 @@ export function toRunPlan(w: W.WPlan): T.RunPlan {
     state: approval ? approval.decision : w.source === "user_edit" ? "edited" : "proposed",
     updated_at: w.created_at,
     approval,
+    migration_evidence: w.migration_evidence ?? [],
+    plan_only: w.plan_only ?? false,
   };
 }
 
@@ -695,6 +701,28 @@ export function toRunDiff(w: W.WDiff): T.RunDiff {
   };
 }
 
+/** Accepts only a well-formed heuristic selection record; anything else means "full profile". */
+export function toTestSelection(v: unknown): T.TestSelection | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (o.mode !== "narrow" || !Array.isArray(o.files)) return null;
+  const files = o.files.filter((f): f is string => typeof f === "string");
+  const reasons: Record<string, string> = {};
+  if (o.reasons && typeof o.reasons === "object") {
+    for (const [k, r] of Object.entries(o.reasons as Record<string, unknown>)) {
+      if (typeof r === "string") reasons[k] = r;
+    }
+  }
+  return {
+    mode: "narrow",
+    heuristic: true,
+    files,
+    reasons,
+    test_files_total: typeof o.test_files_total === "number" ? o.test_files_total : files.length,
+    not_run: typeof o.not_run === "number" ? o.not_run : 0,
+  };
+}
+
 export function toVerification(w: W.WVerification): T.VerificationReport {
   const unavailable = w.unavailable ?? [];
   return {
@@ -712,6 +740,7 @@ export function toVerification(w: W.WVerification): T.VerificationReport {
       output_truncated: !!r.output_truncated,
       attempt: r.attempt,
       created_at: r.created_at ?? null,
+      test_selection: toTestSelection(r.test_selection),
     })),
     unavailable,
     unavailable_count: Math.max(w.summary?.unavailable ?? 0, unavailable.length),

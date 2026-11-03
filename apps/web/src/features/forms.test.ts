@@ -33,6 +33,7 @@ describe("form validation", () => {
       title: "Fix the thing",
       description: "Long enough description.",
       start_now: false,
+      template_key: "",
     };
     expect(createTaskSchema.safeParse({ ...base, source_type: "manual" }).success).toBe(true);
     const r = createTaskSchema.safeParse({
@@ -66,6 +67,7 @@ describe("form validation", () => {
       title: "",
       description: "",
       start_now: false,
+      template_key: "", // the dialog's default: no template
     };
     expect(
       errorsOf(

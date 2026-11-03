@@ -15,6 +15,7 @@ import { runBudgetLimitsSchema } from '../workspaces/workspaces.schemas.js';
 import { RunEventsService } from './run-events.service.js';
 import { DEFAULT_RUN_BUDGET, editPlanBody, type listRunsQuery, planApprovalBody, planHash, planSchema, type RunBudget, startRunBody } from './run.schemas.js';
 import { RunTransitionsService } from './run-transitions.service.js';
+import { applyTemplateBudget, isPlanOnly, parseSnapshot } from '../templates/templates.js';
 import { HUMAN_STATES, isTerminal, WORKER_STATES } from './state-machine.js';
 
 export function runView(r: WorkflowRun) {
@@ -83,6 +84,21 @@ export function withResolvedEvidence(investigation: unknown, evidence: unknown):
   };
 }
 
+/** Evidence references for the ids a migration plan's affected areas cite (unknown ids are dropped). */
+export function migrationEvidence(plan: unknown, evidence: unknown): EvidenceRef[] {
+  const areas = (plan as { migration?: { affected_areas?: Array<{ evidence_ids?: unknown }> } } | null)?.migration?.affected_areas;
+  if (!Array.isArray(areas)) return [];
+  const wanted = new Set(areas.flatMap((a) => (Array.isArray(a.evidence_ids) ? a.evidence_ids.filter((i): i is string => typeof i === 'string') : [])));
+  const out: EvidenceRef[] = [];
+  for (const e of Array.isArray(evidence) ? evidence : []) {
+    const r = e as Partial<EvidenceRef>;
+    if (typeof r.id === 'string' && wanted.has(r.id) && typeof r.path === 'string' && typeof r.start_line === 'number' && typeof r.end_line === 'number' && typeof r.commit_sha === 'string') {
+      out.push({ id: r.id, path: r.path, start_line: r.start_line, end_line: r.end_line, commit_sha: r.commit_sha, content_hash: r.content_hash, symbol: r.symbol ?? null });
+    }
+  }
+  return out;
+}
+
 /** Clamp: a client can never raise its own maximums above workspace policy (API_SPEC §5). */
 export function clampBudget(requested: Partial<RunBudget> | undefined, ceilings: Partial<RunBudget>, aiLimits: { max_input_tokens: number; max_output_tokens: number }): RunBudget {
   const ceiling: RunBudget = {
@@ -128,7 +144,9 @@ export class RunsService {
     const policy = await this.aiPolicy.load(task.organization_id);
     const resolved = this.aiPolicy.resolve(policy, body.mode);
     const limits = runBudgetLimitsSchema.safeParse(org.settings.run_budget_limits);
-    const budget = clampBudget(body.budgets, limits.success ? limits.data : {}, policy.limits);
+    // A template can only lower the ceilings (workspace policy, then template, then the request).
+    const template = parseSnapshot(task.template);
+    const budget = applyTemplateBudget(clampBudget(body.budgets, limits.success ? limits.data : {}, policy.limits), template);
 
     const run = await this.database.transaction(async (tx) => {
       // FR-OBS-004: concurrency limit and daily quotas (locks the workspace row first).
@@ -158,7 +176,11 @@ export class RunsService {
           snapshot_id: snapshot.id,
           base_branch: body.base_branch ?? repo.default_branch,
           created_by: userId,
-          checkpoint: json({ commit_sha: repo.latest_indexed_commit_sha, data_disclosure: resolved.disclosure }),
+          checkpoint: json({
+            commit_sha: repo.latest_indexed_commit_sha,
+            data_disclosure: resolved.disclosure,
+            ...(template ? { template: { key: template.key, name: template.name, workflow: template.workflow, source: template.source, version: template.version } } : {}),
+          }),
         })
         .returningAll()
         .executeTakeFirstOrThrow();
@@ -214,7 +236,7 @@ export class RunsService {
       this.database.db
         .selectFrom('engineering_tasks as t')
         .innerJoin('repositories as repo', 'repo.id', 't.repository_id')
-        .select(['t.title as task_title', 'repo.full_name as repository_full_name'])
+        .select(['t.title as task_title', 'repo.full_name as repository_full_name', 't.template'])
         .where('t.id', '=', run.task_id)
         .executeTakeFirstOrThrow(),
       this.database.db
@@ -232,9 +254,13 @@ export class RunsService {
         .limit(1)
         .executeTakeFirst(),
     ]);
+    const { template: rawTemplate, ...names } = labels;
+    const template = parseSnapshot(rawTemplate);
     return {
       ...runView(run),
-      ...labels,
+      ...names,
+      template: template ? { key: template.key, name: template.name, workflow: template.workflow, source: template.source, version: template.version } : null,
+      plan_only: template?.workflow === 'migration_plan',
       plan_hash: plan?.content_hash ?? null,
       plan_version: plan?.version ?? null,
       data_disclosure: run.checkpoint.data_disclosure ?? null,
@@ -296,6 +322,9 @@ export class RunsService {
       editable: run.status === 'awaiting_plan_approval',
       plan: plan.content,
       investigation: withResolvedEvidence(run.checkpoint.investigation, run.checkpoint.evidence),
+      // Migration plans cite evidence by id; locations come from the run's retrieval records only.
+      migration_evidence: migrationEvidence(plan.content, run.checkpoint.evidence),
+      plan_only: isPlanOnly(run),
       approval: approval ? { ...approval, created_at: approval.created_at.toISOString() } : null,
     };
   }
@@ -310,7 +339,8 @@ export class RunsService {
       const current = await tx.selectFrom('run_plans').selectAll().where('run_id', '=', runId).orderBy('version', 'desc').limit(1).executeTakeFirstOrThrow();
       if (current.content_hash !== body.base_plan_hash) throw Errors.conflict('PLAN_CHANGED', 'The plan changed since you loaded it.', { plan_hash: current.content_hash });
       const budget = run.budget as Partial<RunBudget>;
-      if (parsed.data.files_to_modify.length > (budget.max_changed_files ?? DEFAULT_RUN_BUDGET.max_changed_files)) {
+      // Plan-only runs change no files, so the changed-file budget does not apply to them.
+      if (!isPlanOnly(run) && parsed.data.files_to_modify.length > (budget.max_changed_files ?? DEFAULT_RUN_BUDGET.max_changed_files)) {
         throw Errors.unprocessable('PLAN_EXCEEDS_BUDGET', 'The plan modifies more files than the run budget allows.');
       }
       const hash = planHash(parsed.data);
@@ -344,9 +374,14 @@ export class RunsService {
         .insertInto('approvals')
         .values({ run_id: runId, user_id: userId, approval_type: 'plan', decision: body.decision, comment: body.comment ?? null, subject_hash: plan.content_hash })
         .execute();
+      // Plan-only workflows (migration plan template) end at the approved plan: no workspace, no code execution.
+      const planOnly = isPlanOnly(run);
+      const approvedPatch = { approved_plan_hash: plan.content_hash, approved_plan_version: plan.version };
       const next =
         body.decision === 'approved'
-          ? await this.transitions.transition(tx, run, 'preparing_workspace', { type: 'user', userId }, { reason: 'plan approved', checkpointPatch: { approved_plan_hash: plan.content_hash, approved_plan_version: plan.version } })
+          ? planOnly
+            ? await this.transitions.transition(tx, run, 'completed_without_pr', { type: 'user', userId }, { reason: 'plan approved (plan-only workflow; nothing is executed)', checkpointPatch: approvedPatch })
+            : await this.transitions.transition(tx, run, 'preparing_workspace', { type: 'user', userId }, { reason: 'plan approved', checkpointPatch: approvedPatch })
           : await this.transitions.transition(tx, run, 'rejected', { type: 'user', userId }, { reason: body.comment ?? 'plan rejected' });
       await this.audit.record(
         { organizationId: run.organization_id, actorUserId: userId, action: `plan.${body.decision}`, resourceType: 'run', resourceId: runId, metadata: { plan_hash: plan.content_hash, version: plan.version } },

@@ -115,6 +115,8 @@ export class ReviewService {
         exit_code: r.exit_code,
         duration_ms: r.duration_ms,
         output_truncated: r.output_truncated,
+        // Heuristic test selection that narrowed this run (null = the full profile ran).
+        test_selection: r.test_selection,
         stdout_excerpt: await excerpt(r.stdout_object_key),
         stderr_excerpt: await excerpt(r.stderr_object_key),
         created_at: r.created_at.toISOString(),

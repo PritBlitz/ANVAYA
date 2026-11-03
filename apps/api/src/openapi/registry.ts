@@ -1,6 +1,10 @@
 import { z, type ZodType } from 'zod';
 import { refine } from './refinements.js';
-import { RESPONSES } from './responses.generated.js';
+import { RESPONSES as DERIVED } from './responses.generated.js';
+import { callGraphView, extendExistingResponses, impactView, runImpactView, templateView, workspaceAnswerView, workspaceSearchView } from './package-b-responses.js';
+import { callGraphQuery, impactBody, runImpactQuery } from '../intelligence/intelligence.controller.js';
+import { workspaceAskBody, workspaceSearchBody } from '../intelligence/workspace-knowledge.service.js';
+import { createTemplateBody, listTemplatesQuery, updateTemplateBody } from '../templates/templates.js';
 import { updateAiPolicyBody } from '../ai/ai-policy.service.js';
 import { healthCheckBody, usageQuery } from '../ai/ai.controller.js';
 import { askBody } from '../ai/questions.service.js';
@@ -113,6 +117,28 @@ export const ROUTES: RouteDoc[] = [
   { method: 'get', path: '/repositories/{repositoryId}/symbols', tag: 'Code intelligence', summary: 'Search parsed symbols (keyset pagination by name)', status: 200, query: symbolsQuery, paginated: true },
   { method: 'get', path: '/repositories/{repositoryId}/symbols/{symbolId}', tag: 'Code intelligence', summary: 'Symbol with outgoing and incoming references', status: 200, query: symbolDetailQuery },
   { method: 'get', path: '/repositories/{repositoryId}/dependency-map', tag: 'Code intelligence', summary: 'File-level import graph with external packages', status: 200, query: dependencyMapQuery },
+  { method: 'get', path: '/repositories/{repositoryId}/symbols/{symbolId}/call-graph', tag: 'Code intelligence', summary: 'Callers/callees of a symbol (bounded depth, offset-paged nodes)', status: 200, query: callGraphQuery, response: callGraphView },
+  {
+    method: 'post',
+    path: '/repositories/{repositoryId}/impact',
+    tag: 'Code intelligence',
+    summary: 'Heuristic change-impact prediction and test selection for changed files',
+    description: 'Static analysis over parsed imports and name-resolved calls. Labelled heuristic: it is never a verification result.',
+    status: 200,
+    body: impactBody,
+    response: impactView,
+  },
+  { method: 'get', path: '/runs/{runId}/impact', tag: 'Code intelligence', summary: "Heuristic impact and test selection for a run's patch (or plan files)", status: 200, query: runImpactQuery, response: runImpactView },
+
+  // Workspace knowledge (cross-repository)
+  { method: 'post', path: '/workspaces/{workspaceId}/search', tag: 'Knowledge', summary: 'Search all indexed repositories of the workspace (per-result repository provenance)', status: 200, body: workspaceSearchBody, response: workspaceSearchView },
+  { method: 'post', path: '/workspaces/{workspaceId}/questions', tag: 'AI', summary: 'Grounded Q&A over evidence from all indexed repositories of the workspace', status: 200, body: workspaceAskBody, response: workspaceAnswerView },
+
+  // Workflow templates
+  { method: 'get', path: '/workspaces/{workspaceId}/templates', tag: 'Templates', summary: 'Built-in and workspace workflow templates', status: 200, query: listTemplatesQuery, response: z.array(templateView) },
+  { method: 'post', path: '/workspaces/{workspaceId}/templates', tag: 'Templates', summary: 'Create a workspace template (admin+, audited)', status: 201, body: createTemplateBody, response: templateView, idempotency: 'optional' },
+  { method: 'patch', path: '/workspaces/{workspaceId}/templates/{templateId}', tag: 'Templates', summary: 'Update or archive a workspace template (admin+, audited)', status: 200, body: updateTemplateBody, response: templateView },
+  { method: 'delete', path: '/workspaces/{workspaceId}/templates/{templateId}', tag: 'Templates', summary: 'Archive a workspace template (admin+, audited)', status: 204 },
 
   // AI
   { method: 'post', path: '/repositories/{repositoryId}/questions', tag: 'AI', summary: 'Grounded repository question (code and knowledge-note evidence; saved to history)', status: 200, body: askBody },
@@ -166,6 +192,8 @@ export const ROUTES: RouteDoc[] = [
   { method: 'post', path: '/runs/{runId}/pr-approval', tag: 'Review', summary: 'Approve/reject PR creation (bound to patch_hash)', status: 200, body: prApprovalBody, idempotency: 'optional' },
   { method: 'post', path: '/runs/{runId}/pull-request', tag: 'Review', summary: 'Create the pull request after approval', status: 201, body: pullRequestBody, idempotency: 'required' },
 ];
+
+const RESPONSES = extendExistingResponses(DERIVED);
 
 // I-8: every JSON route gets a response schema. Hand-written schemas win; the rest
 // are derived from real responses (scripts/derive-response-schemas.mjs) and
