@@ -45,6 +45,30 @@ async function api(page: Page, method: string, path: string, body?: unknown) {
   );
 }
 
+/**
+ * Give slow providers room: switch the workspace to MODE with a longer per-request timeout and,
+ * for local CPU models, a one-hour run-duration ceiling. Needs an admin of WORKSPACE.
+ */
+async function preparePolicy(page: Page) {
+  const workspaces = await api(page, "GET", "/workspaces");
+  const ws = (workspaces.body!.data as { id: string; slug: string }[]).find(
+    (w) => w.slug === WORKSPACE,
+  )!;
+  const policy = await api(page, "PATCH", `/workspaces/${ws.id}/ai-policy`, {
+    default_mode: MODE,
+    limits: { request_timeout_seconds: 580 },
+  });
+  expect(policy.status, JSON.stringify(policy.body)).toBe(200);
+  // Investigation and planning alone take ~10 minutes on CPU, so the default 15-minute run
+  // budget can run out mid-patch. Raise the workspace ceiling; unset budgets default to it.
+  if (MODE === "local") {
+    const limits = await api(page, "PATCH", `/workspaces/${ws.id}`, {
+      settings: { run_budget_limits: { max_duration_seconds: 3600 } },
+    });
+    expect(limits.status, JSON.stringify(limits.body)).toBe(200);
+  }
+}
+
 async function openRepo(page: Page) {
   await page.goto(`/w/${WORKSPACE}/repositories`);
   await page.getByRole("link", { name: REPO }).first().click();
@@ -89,6 +113,8 @@ test("repository intelligence against the real index", async ({ page }) => {
 test("grounded Q&A is saved to the asker's history", async ({ page }) => {
   test.setTimeout(STAGE);
   await devLogin(page);
+  // Only when a mode is requested: by default Q&A uses the workspace's own policy.
+  if (process.env.LIVE_MODE) await preparePolicy(page);
   await openRepo(page);
   await page.getByRole("link", { name: "Ask", exact: true }).click();
   const q = `What does this repository test? (${Date.now()})`;
@@ -96,9 +122,13 @@ test("grounded Q&A is saved to the asker's history", async ({ page }) => {
   await page.getByRole("button", { name: "Ask question" }).click();
   // Scope to this session's answers: saved history may already show citation badges.
   const session = page.getByRole("list", { name: "Questions and answers" });
-  await expect(session.getByText(/\d+ citations|No supporting evidence/)).toBeVisible({
-    timeout: STAGE,
-  });
+  // Wait for an answer or an error, then require the answer: a provider error fails at once
+  // with its message instead of waiting out the whole stage.
+  const outcome = session
+    .getByText(/\d+ citations|No supporting evidence/)
+    .or(page.getByRole("alert"));
+  await expect(outcome.first()).toBeVisible({ timeout: STAGE });
+  await expect(session.getByText(/\d+ citations|No supporting evidence/)).toBeVisible();
   await page.reload();
   const earlier = page.getByRole("list", { name: "Earlier questions" });
   await expect(earlier.getByText(q, { exact: true })).toBeVisible();
@@ -112,23 +142,7 @@ test("governed run: task → plan approval → checks → PR", async ({ page }) 
   await devLogin(page);
 
   // Local models on CPU are slow: give provider calls room (the server enforces its max).
-  const workspaces = await api(page, "GET", "/workspaces");
-  const ws = (workspaces.body!.data as { id: string; slug: string }[]).find(
-    (w) => w.slug === WORKSPACE,
-  )!;
-  const policy = await api(page, "PATCH", `/workspaces/${ws.id}/ai-policy`, {
-    default_mode: MODE,
-    limits: { request_timeout_seconds: 580 },
-  });
-  expect(policy.status, JSON.stringify(policy.body)).toBe(200);
-  // Investigation and planning alone take ~10 minutes on CPU, so the default 15-minute run
-  // budget can run out mid-patch. Raise the workspace ceiling; unset budgets default to it.
-  if (MODE === "local") {
-    const limits = await api(page, "PATCH", `/workspaces/${ws.id}`, {
-      settings: { run_budget_limits: { max_duration_seconds: 3600 } },
-    });
-    expect(limits.status, JSON.stringify(limits.body)).toBe(200);
-  }
+  await preparePolicy(page);
 
   await page.goto(`/w/${WORKSPACE}`);
   await page.getByRole("link", { name: "New task" }).click();
