@@ -180,9 +180,10 @@ export class GvisorSandboxDriver extends SandboxDriver {
    */
   runtimePath(p: string): string {
     if (this.config.env.SANDBOX_PATH_STYLE !== 'wsl') return p;
-    const abs = path.resolve(p);
-    const m = /^([A-Za-z]):[\\/](.*)$/.exec(abs);
-    return m ? `/mnt/${m[1]!.toLowerCase()}/${m[2]!.replace(/\\/g, '/')}` : abs.replace(/\\/g, '/');
+    // Match drive paths before resolving: on a POSIX host path.resolve() treats `Z:\x` as relative.
+    const drive = /^([A-Za-z]):[\\/](.*)$/;
+    const m = drive.exec(p) ?? drive.exec(path.resolve(p));
+    return m ? `/mnt/${m[1]!.toLowerCase()}/${m[2]!.replace(/\\/g, '/')}` : path.resolve(p).replace(/\\/g, '/');
   }
 
   async run(profile: VerificationProfile, workspaceDir: string, opts: RunOptions): Promise<SandboxResult> {

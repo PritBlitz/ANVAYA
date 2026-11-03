@@ -100,6 +100,9 @@ jobs:
       SANDBOX_ROOTFS_DIR: /tmp/anvaya-rootfs
       SANDBOX_STATE_DIR: /tmp/anvaya-sandbox
       SANDBOX_TEST_WORKSPACES: /tmp
+      # Small, explicit limits so the fork-bomb probe meets the PID limit before the memory limit.
+      SANDBOX_PIDS_LIMIT: "64"
+      SANDBOX_MEMORY_MB: "512"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

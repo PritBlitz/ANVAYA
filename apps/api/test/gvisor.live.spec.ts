@@ -44,8 +44,8 @@ describe.skipIf(!enabled)('gVisor sandbox against real runsc', () => {
   });
 
   it('runs inside gVisor as uid 65534', async () => {
-    // gVisor's sentry implements the Linux ABI itself and reports the emulated release 4.4.0.
-    const res = await probe("import os\nself.assertEqual(os.getuid(), 65534)\nself.assertEqual(os.uname().release, '4.4.0')");
+    // gVisor's sentry implements the Linux ABI itself and names itself in the release (e.g. 4.19.0-gvisor).
+    const res = await probe("import os\nself.assertEqual(os.getuid(), 65534)\nself.assertIn('gvisor', os.uname().release)");
     expect(res.exitCode, res.stderr).toBe(0);
   });
 
@@ -66,7 +66,28 @@ describe.skipIf(!enabled)('gVisor sandbox against real runsc', () => {
   });
 
   it('enforces the PID limit against a fork bomb', async () => {
-    const res = await probe("import os\npids = []\nwith self.assertRaises(OSError):\n    for _ in range(5000):\n        pid = os.fork()\n        if pid == 0:\n            import time; time.sleep(30); os._exit(0)\n        pids.append(pid)");
+    // Children only pause, so they cost almost no memory: the PID limit, not the memory limit,
+    // must stop the loop. They are reaped afterwards so the sandbox exits promptly.
+    const res = await probe(
+      [
+        'import os, signal',
+        'pids = []',
+        'try:',
+        '    with self.assertRaises(OSError):',
+        '        for _ in range(5000):',
+        '            pid = os.fork()',
+        '            if pid == 0:',
+        '                signal.pause()',
+        '                os._exit(0)',
+        '            pids.append(pid)',
+        'finally:',
+        '    for p in pids:',
+        '        os.kill(p, signal.SIGKILL)',
+        '    for p in pids:',
+        '        os.waitpid(p, 0)',
+        'self.assertLess(len(pids), 5000)',
+      ].join('\n'),
+    );
     expect(res.error).toBeNull();
     expect(res.exitCode, res.stderr).toBe(0);
   });
