@@ -6,7 +6,8 @@ import { RedisService } from '../common/redis.service.js';
 import { json, type WorkflowRun } from '../database/types.js';
 import { normalizePath } from '../indexing/classifier.js';
 import { RetrievalService } from '../retrieval/retrieval.service.js';
-import { type Investigation, investigationSchema, type Plan, planHash, planSchema, type RunBudget } from './run.schemas.js';
+import { parseSnapshot, planningContext } from '../templates/templates.js';
+import { type Investigation, investigationSchema, type MigrationPlanOutput, migrationPlanOutputSchema, type Plan, planHash, planSchema, type RunBudget } from './run.schemas.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from './stage-toolkit.js';
 import { HUMAN_STATES, isTerminal } from './state-machine.js';
 
@@ -148,7 +149,8 @@ export class OrchestratorService {
   private async investigate(run: WorkflowRun): Promise<void> {
     const task = await this.kit.task(run);
     const evidence = await this.kit.loadEvidence(run);
-    const gen = await this.kit.callModel(run, 'investigator', { task: 'investigation', intent: this.kit.intent(task), untrusted_inputs: this.kit.untrusted(task), evidence });
+    const template = planningContext(parseSnapshot(task.template));
+    const gen = await this.kit.callModel(run, 'investigator', { task: 'investigation', intent: this.kit.intent(task), untrusted_inputs: this.kit.untrusted(task), evidence, ...(template ? { context: { template } } : {}) });
     const parsed = investigationSchema.safeParse(gen.output);
     if (!parsed.success) throw new StageFailure('INVALID_MODEL_OUTPUT', 'The investigation output failed validation.');
     const known = new Set(evidence.map((e) => e.id));
@@ -172,17 +174,27 @@ export class OrchestratorService {
     const task = await this.kit.task(run);
     const budget = this.kit.budget(run);
     const evidence = await this.kit.loadEvidence(run);
+    const snapshot = parseSnapshot(task.template);
+    const template = planningContext(snapshot);
+    // Plan-only workflow (migration plan template): a richer plan schema, and nothing runs after approval.
+    const planOnly = snapshot?.workflow === 'migration_plan';
+    const known = new Set(evidence.map((e) => e.id));
     let note: string | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const gen = await this.kit.callModel(run, 'planner', {
-        task: 'planning',
+      const gen = await this.kit.callModel(run, planOnly ? 'migration_planner' : 'planner', {
+        task: planOnly ? 'migration_plan' : 'planning',
         intent: this.kit.intent(task),
         untrusted_inputs: this.kit.untrusted(task),
         evidence,
-        context: { investigation: run.checkpoint.investigation ?? null, max_changed_files: budget.max_changed_files, ...(note ? { revision_required: note } : {}) },
+        context: {
+          investigation: run.checkpoint.investigation ?? null,
+          ...(planOnly ? { plan_only: true } : { max_changed_files: budget.max_changed_files }),
+          ...(template ? { template } : {}),
+          ...(note ? { revision_required: note } : {}),
+        },
       });
-      const parsed = planSchema.safeParse(gen.output);
-      const problem = !parsed.success ? 'The plan did not match the plan schema.' : this.scopeProblem(parsed.data, budget);
+      const parsed = planOnly ? toMigrationPlan(gen.output, known) : planSchema.safeParse(gen.output);
+      const problem = !parsed.success ? 'The plan did not match the plan schema.' : this.scopeProblem(parsed.data, budget, planOnly);
       if (parsed.success && !problem) {
         const plan = parsed.data;
         const hash = planHash(plan);
@@ -206,11 +218,41 @@ export class OrchestratorService {
     throw new StageFailure('INVALID_PLAN', `The planner did not produce a valid plan within scope: ${note ?? 'unknown'}`);
   }
 
-  private scopeProblem(plan: Plan, budget: RunBudget): string | null {
-    if (plan.files_to_modify.length > budget.max_changed_files) return `The plan modifies ${plan.files_to_modify.length} files; the limit is ${budget.max_changed_files}.`;
+  private scopeProblem(plan: Plan, budget: RunBudget, planOnly = false): string | null {
+    // A plan-only run changes no files, so only the schema's own limits apply to it.
+    if (!planOnly && plan.files_to_modify.length > budget.max_changed_files) return `The plan modifies ${plan.files_to_modify.length} files; the limit is ${budget.max_changed_files}.`;
     const declared = new Set(plan.files_to_modify);
     const undeclared = plan.steps.flatMap((s) => s.files).filter((f) => !declared.has(f));
     if (undeclared.length > 0) return `Steps reference files not listed in files_to_modify: ${undeclared.slice(0, 3).join(', ')}.`;
     return null;
   }
+}
+
+/**
+ * Converts the AI service's migration-plan output into the run's Plan (the approval artifact):
+ * per-step rollback moves into `migration.step_rollback`, evidence ids the run never retrieved
+ * are dropped, and paths are normalized (unsafe ones removed). Validated by planSchema afterwards.
+ */
+export function toMigrationPlan(output: unknown, knownEvidence: ReadonlySet<string>): ReturnType<typeof planSchema.safeParse> {
+  const raw = migrationPlanOutputSchema.safeParse(output);
+  if (!raw.success) return planSchema.safeParse(null);
+  const m: MigrationPlanOutput = raw.data;
+  const paths = (list: string[]) => [...new Set(list.map((p) => normalizePath(p)).filter((p): p is string => p !== null))];
+  const files = paths(m.files_to_modify);
+  const declared = new Set(files);
+  return planSchema.safeParse({
+    objective: m.objective,
+    assumptions: m.assumptions,
+    steps: m.steps.map((st) => ({ id: st.id, description: st.description, files: paths(st.files).filter((f) => declared.has(f)), verification: st.verification })),
+    files_to_modify: files,
+    tests: m.tests,
+    risks: m.risks,
+    out_of_scope: m.out_of_scope,
+    migration: {
+      affected_areas: m.affected_areas.map((a) => ({ area: a.area, description: a.description, files: paths(a.files), evidence_ids: a.evidence_ids.filter((id) => knownEvidence.has(id)) })),
+      prerequisites: m.prerequisites,
+      step_rollback: m.steps.map((st) => ({ step_id: st.id, rollback: st.rollback })),
+      rollback_strategy: m.rollback_strategy,
+    },
+  });
 }

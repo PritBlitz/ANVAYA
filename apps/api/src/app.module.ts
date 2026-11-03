@@ -25,6 +25,7 @@ import { ReviewController } from './review/review.controller.js';
 import { ReviewService } from './review/review.service.js';
 import { RunsController, TasksController } from './runs/runs.controller.js';
 import { KnowledgeController } from './knowledge/knowledge.controller.js';
+import { TemplatesController } from './templates/templates.controller.js';
 import { StorageModule } from './storage/object-storage.js';
 import { QueueModule } from './queue/queues.js';
 import { RepositoriesController } from './repositories/repositories.controller.js';
@@ -59,6 +60,7 @@ import { WorkspacesService } from './workspaces/workspaces.service.js';
     TasksController,
     RunsController,
     ReviewController,
+    TemplatesController,
   ],
   providers: [
     ReviewService,

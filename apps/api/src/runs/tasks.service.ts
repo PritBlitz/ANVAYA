@@ -7,6 +7,8 @@ import { DatabaseService } from '../database/database.service.js';
 import { beforeCursor, cursorUs } from '../database/keyset.js';
 import { type EngineeringTask, json } from '../database/types.js';
 import { GithubAppService, toAppError } from '../github/github-app.service.js';
+import { parseSnapshot, toSnapshotJson } from '../templates/templates.js';
+import { TemplatesService } from '../templates/templates.service.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { createTaskBody, listTasksQuery, updateTaskBody } from './run.schemas.js';
 
@@ -22,6 +24,8 @@ export function taskView(t: EngineeringTask) {
     description: t.description,
     status: t.status,
     labels: t.labels,
+    template_key: t.template_key,
+    template: parseSnapshot(t.template),
     created_at: t.created_at.toISOString(),
     updated_at: t.updated_at.toISOString(),
   };
@@ -34,11 +38,14 @@ export class TasksService {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly github: GithubAppService,
+    private readonly templates: TemplatesService,
   ) {}
 
   async create(userId: string, repositoryId: string, body: z.infer<typeof createTaskBody>) {
     const { repository } = await this.access.requireRepository(userId, repositoryId, 'member');
     if (repository.status !== 'connected') throw Errors.invalidState('The repository is not connected.');
+    // Resolved before any external call: an unknown or archived template fails fast (422).
+    const template = body.template_key ? await this.templates.resolveForTask(repository.organization_id, body.template_key) : null;
     let title = body.title;
     let description = body.description;
     let labels = body.labels;
@@ -71,10 +78,22 @@ export class TasksService {
           title: title!,
           description: description!,
           labels: json(labels),
+          template_key: template?.key ?? null,
+          template: template ? json(toSnapshotJson(template)) : null,
         })
         .returningAll()
         .executeTakeFirstOrThrow();
-      await this.audit.record({ organizationId: repository.organization_id, actorUserId: userId, action: 'task.created', resourceType: 'task', resourceId: task.id, metadata: { source_type: body.source_type } }, tx);
+      await this.audit.record(
+        {
+          organizationId: repository.organization_id,
+          actorUserId: userId,
+          action: 'task.created',
+          resourceType: 'task',
+          resourceId: task.id,
+          metadata: { source_type: body.source_type, ...(template ? { template: { key: template.key, source: template.source, version: template.version } } : {}) },
+        },
+        tx,
+      );
       return taskView(task);
     });
   }

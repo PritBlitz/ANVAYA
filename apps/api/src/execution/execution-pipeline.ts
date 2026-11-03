@@ -12,6 +12,7 @@ import { RepositorySource, type SourceRepository } from '../indexing/sources.js'
 import { effectiveSettings } from '../repositories/repositories.service.js';
 import { ExecutionStages } from '../runs/orchestrator.service.js';
 import { planSchema } from '../runs/run.schemas.js';
+import { filterProfilesByTemplate, isPlanOnly, parseSnapshot } from '../templates/templates.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from '../runs/stage-toolkit.js';
 import { ObjectStorage } from '../storage/object-storage.js';
 import { PatchRejected, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
@@ -141,6 +142,8 @@ export class ExecutionPipeline extends ExecutionStages {
   // preparing_workspace
   // ---------------------------------------------------------------------------
   private async prepare(run: WorkflowRun): Promise<void> {
+    // Defence in depth: plan-only runs end at plan approval and must never get a workspace.
+    if (isPlanOnly(run)) throw new StageFailure('PLAN_ONLY_WORKFLOW', 'This run is plan-only; nothing is executed.');
     await this.approvedPlan(run);
     const stepId = await this.kit.startStep(run, 'workspace', { commit_sha: run.checkpoint.commit_sha ?? null });
     const toolId = await this.kit.startTool(run, stepId, 'prepare_workspace', { commit_sha: run.checkpoint.commit_sha ?? null });
@@ -149,8 +152,11 @@ export class ExecutionPipeline extends ExecutionStages {
     const paths = await this.ensureWorkspace({ ...run, checkpoint: { ...run.checkpoint, current_patch_id: null } });
     const repo = await this.repository(run);
     const dependencyFetch = this.config.env.SANDBOX_DEPENDENCY_FETCH === 'enabled';
-    const profiles = selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths), { dependencyFetch });
-    const unavailable = unavailableChecks(new Set(paths), { dependencyFetch });
+    // The task's template may restrict which server-defined profiles run; excluded ones are reported, never hidden.
+    const template = parseSnapshot((await this.kit.task(run)).template);
+    const byTemplate = filterProfilesByTemplate(selectProfiles(effectiveSettings(repo.settings).verification_profiles, new Set(paths), { dependencyFetch }), template);
+    const profiles = byTemplate.allowed;
+    const unavailable = [...unavailableChecks(new Set(paths), { dependencyFetch }), ...byTemplate.excluded];
     await this.kit.database.transaction(async (tx) => {
       const current = await this.kit.guard(tx, run);
       await this.kit.finishTool(tx, current, toolId, 'succeeded', { files: paths.length, profiles: profiles.map((p) => p.id) }, Date.now() - started, 'prepare_workspace');

@@ -11,6 +11,7 @@ import { RunTransitionsService } from './run-transitions.service.js';
 import { RunsService } from './runs.service.js';
 import { StageToolkit } from './stage-toolkit.js';
 import { TasksService } from './tasks.service.js';
+import { TemplatesService } from '../templates/templates.service.js';
 
 @Module({
   imports: [AiModule, IndexingModule],
@@ -19,6 +20,7 @@ import { TasksService } from './tasks.service.js';
     RunTransitionsService,
     RunsService,
     TasksService,
+    TemplatesService,
     StageToolkit,
     OrchestratorService,
     WorkspaceManager,
@@ -31,6 +33,6 @@ import { TasksService } from './tasks.service.js';
       useFactory: (config: AppConfig, pipeline: ExecutionPipeline, unavailable: UnavailableExecutionStages) => (config.env.EXECUTION_DRIVER === 'docker' ? pipeline : unavailable),
     },
   ],
-  exports: [RunEventsService, RunTransitionsService, RunsService, TasksService, StageToolkit, OrchestratorService, SandboxDriver, WorkspaceManager],
+  exports: [RunEventsService, RunTransitionsService, RunsService, TasksService, TemplatesService, StageToolkit, OrchestratorService, SandboxDriver, WorkspaceManager],
 })
 export class RunsModule {}
