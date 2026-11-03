@@ -1,4 +1,5 @@
 import { Global, Injectable, Module } from '@nestjs/common';
+import { Agent, fetch, type Response } from 'undici';
 import { z, type ZodType } from 'zod';
 import { logger } from '../common/logger.js';
 import { metrics } from '../common/metrics.js';
@@ -6,6 +7,25 @@ import { requestContext } from '../common/request-context.js';
 import { AppConfig } from '../config/config.js';
 
 const log = logger('ai-client');
+
+/**
+ * Local models on CPU can take longer than 5 minutes per call, and the workspace policy allows
+ * up to AI_REQUEST_TIMEOUT_MS. The default fetch dispatcher gives up after 300s without response
+ * headers (undici's `headersTimeout`), which surfaced as a misleading AI_SERVICE_UNAVAILABLE. The
+ * AI client therefore uses its own pool with those idle timers off: every call carries an
+ * AbortSignal deadline, and that deadline alone decides when a call has timed out.
+ */
+const aiDispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 });
+
+/** Undici timeout codes, in case one fires anyway (e.g. a future dispatcher change). */
+const TIMEOUT_CAUSES = new Set(['UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_CONNECT_TIMEOUT']);
+
+export function isTimeoutError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'TimeoutError') return true;
+  const cause = (err as { cause?: { code?: unknown } }).cause;
+  return typeof cause?.code === 'string' && TIMEOUT_CAUSES.has(cause.code);
+}
 
 /** Error from the AI service, normalized. `retryable` distinguishes transient failures. */
 export class AiServiceError extends Error {
@@ -141,10 +161,12 @@ export class AiClient {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
         redirect: 'error',
+        dispatcher: aiDispatcher,
       });
     } catch (err) {
-      const timeout = (err as Error).name === 'TimeoutError';
-      log.warn({ path, timeout }, 'ai service request failed');
+      const timeout = isTimeoutError(err);
+      const cause = (err as { cause?: { code?: unknown } }).cause?.code;
+      log.warn({ path, timeout, timeout_ms: timeoutMs, cause: typeof cause === 'string' ? cause : undefined }, 'ai service request failed');
       throw new AiServiceError(timeout ? 'AI_TIMEOUT' : 'AI_SERVICE_UNAVAILABLE', timeout ? 'The AI service timed out.' : 'The AI service is unavailable.', timeout ? 504 : 503, true);
     }
     const payload: unknown = await res.json().catch(() => null);

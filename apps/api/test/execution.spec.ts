@@ -6,7 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppConfig } from '../src/config/config.js';
 import { profileById, type VerificationProfile } from '../src/execution/profiles.js';
-import { SandboxDriver, type SandboxResult } from '../src/execution/sandbox.js';
+import { SandboxDriver, type RunOptions, type SandboxResult } from '../src/execution/sandbox.js';
 import { WorkspaceManager } from '../src/execution/workspace.js';
 import { OrchestratorService } from '../src/runs/orchestrator.service.js';
 import { FakeAi, type GenerateHandler } from './fake-ai.js';
@@ -94,7 +94,7 @@ describe('execution, verification, review and pull-request handoff', () => {
   let orchestrator: OrchestratorService;
   let workspaces: WorkspaceManager;
   const sandboxCalls: Array<{ profile: string; content: string }> = [];
-  let sandboxImpl: (profile: VerificationProfile, dir: string, opts: { timeoutSeconds: number; signal?: AbortSignal }) => Promise<SandboxResult>;
+  let sandboxImpl: (profile: VerificationProfile, dir: string, opts: RunOptions) => Promise<SandboxResult>;
 
   const result = (exitCode: number | null, extra: Partial<SandboxResult> = {}): SandboxResult => ({ exitCode, timedOut: false, durationMs: 12, stdout: '', stderr: '', truncated: false, error: null, ...extra });
   /** Deterministic stand-in: fails when the workspace file contains BROKEN. */
@@ -124,7 +124,7 @@ describe('execution, verification, review and pull-request handoff', () => {
     orchestrator = app.get(OrchestratorService);
     workspaces = app.get(WorkspaceManager);
     const driver = app.get(SandboxDriver);
-    driver.run = (p: VerificationProfile, d: string, o: { timeoutSeconds: number; signal?: AbortSignal }): Promise<SandboxResult> => sandboxImpl(p, d, o);
+    driver.run = (p: VerificationProfile, d: string, o: RunOptions): Promise<SandboxResult> => sandboxImpl(p, d, o);
     [owner, member, viewer, outsider] = await Promise.all([login(app), login(app), login(app), login(app)]);
     const ws = await createWorkspace(owner);
     await addMember(owner, member, ws, 'member');
