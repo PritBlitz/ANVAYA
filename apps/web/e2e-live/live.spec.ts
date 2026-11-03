@@ -4,9 +4,14 @@ const EMAIL = process.env.LIVE_EMAIL ?? "dev@example.test";
 const WORKSPACE = process.env.LIVE_WORKSPACE ?? "dev-workspace";
 const REPO = process.env.LIVE_REPO ?? "acme/demo-service";
 const MODE = process.env.LIVE_MODE ?? "local";
+// Defaults fit the default repository (the acme/demo-service fixture, checked with python-compile).
+// Override both when LIVE_REPO points elsewhere: a task about code the repo lacks can't succeed.
 const TASK =
   process.env.LIVE_TASK ??
-  "Treat hyphenated words as one word in textstats.tokenize and add a test";
+  "Make apply_discount in billing/invoice.py raise ValueError when percent is outside 0 to 100";
+const TASK_DESCRIPTION =
+  process.env.LIVE_TASK_DESCRIPTION ??
+  "apply_discount(total, percent) accepts any percent today. Values below 0 or above 100 should raise ValueError with a clear message; 0 and 100 stay valid.";
 const STAGE = 15 * 60_000;
 
 test.describe.configure({ mode: "serial" });
@@ -122,9 +127,7 @@ test("governed run: task → plan approval → checks → PR", async ({ page }) 
   const dialog = page.getByRole("dialog", { name: "New engineering task" });
   await dialog.getByLabel("Repository").selectOption({ label: REPO });
   await dialog.getByLabel("Title").fill(TASK);
-  await dialog
-    .getByLabel("Description")
-    .fill("Words joined by a hyphen (e.g. well-known) should count as a single token.");
+  await dialog.getByLabel("Description").fill(TASK_DESCRIPTION);
   await dialog.getByRole("button", { name: "Create and investigate" }).click();
   await expect(page).toHaveURL(new RegExp(`/w/${WORKSPACE}/runs/[\\w-]+$`));
 
