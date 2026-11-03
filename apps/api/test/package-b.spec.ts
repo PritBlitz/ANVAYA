@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { OrchestratorService } from '../src/runs/orchestrator.service.js';
 import { FakeAi, type GenerateHandler } from './fake-ai.js';
@@ -146,6 +147,32 @@ describe('work package B: templates, migration plans, call graph, impact, worksp
     await app.close();
     await gh.stop();
     await ai.stop();
+  });
+
+  describe('route security', () => {
+    it('every new route requires a session, and mutations require the CSRF token', async () => {
+      const anon = request(app.getHttpServer());
+      const sym = '00000000-0000-4000-8000-000000000000';
+      for (const [m, path] of [
+        ['get', `/workspaces/${ws}/templates`],
+        ['post', `/workspaces/${ws}/templates`],
+        ['patch', `/workspaces/${ws}/templates/${sym}`],
+        ['delete', `/workspaces/${ws}/templates/${sym}`],
+        ['get', `/repositories/${repo}/symbols/${sym}/call-graph`],
+        ['post', `/repositories/${repo}/impact`],
+        ['get', `/runs/${sym}/impact`],
+        ['post', `/workspaces/${ws}/search`],
+        ['post', `/workspaces/${ws}/questions`],
+      ] as const) {
+        const res = await anon[m](`/api/v1${path}`).send({});
+        expect(res.status, `${m} ${path}`).toBe(401);
+        if (m !== 'get') {
+          const noCsrf = await owner.agent[m](`/api/v1${path}`).send({});
+          expect(noCsrf.status, `${m} ${path} without CSRF`).toBe(403);
+          expect(noCsrf.body.error.code).toBe('CSRF_TOKEN_INVALID');
+        }
+      }
+    });
   });
 
   // -------------------------------------------------------------------------
