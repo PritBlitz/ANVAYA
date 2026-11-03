@@ -368,6 +368,15 @@ describe('tasks, durable runs and plan approval', () => {
       expect((await as(member, 'get', `/runs/${runId}`)).body.data).toMatchObject({ status: 'timed_out', error_code: 'TIMED_OUT' });
     });
 
+    it("caps each model call at the workspace's per-request timeout, not the run's remaining time", async () => {
+      const before = ai.generateCalls.length;
+      await runToPlan(await newTask());
+      const calls = ai.generateCalls.slice(before) as Array<{ budget: { timeout_seconds: number } }>;
+      expect(calls.length).toBeGreaterThan(0);
+      // Default policy: 300s per request, inside a 900s run budget.
+      for (const c of calls) expect(c.budget.timeout_seconds).toBe(300);
+    });
+
     it('does not spend the duration budget while a plan waits for approval', async () => {
       const runId = await runToPlan(await newTask());
       const plan = (await as(member, 'get', `/runs/${runId}/plan`).expect(200)).body.data;
