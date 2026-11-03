@@ -534,6 +534,8 @@ export interface IndexingJobsTable {
   ended_at: NullableTimestamp;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  /** Insertion order (0007); bigint, so the driver returns a string. Order by this, not created_at. */
+  seq: Generated<string>;
 }
 
 export interface Database {

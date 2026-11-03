@@ -77,7 +77,8 @@ export class IndexingController {
     const latest = repository.latest_indexed_commit_sha
       ? await db.selectFrom('repository_snapshots').selectAll().where('repository_id', '=', id).where('commit_sha', '=', repository.latest_indexed_commit_sha).executeTakeFirst()
       : undefined;
-    const jobs = await db.selectFrom('indexing_jobs').selectAll().where('repository_id', '=', id).orderBy('created_at', 'desc').limit(5).execute();
+    // seq, not created_at: insertion order survives a database clock that steps backwards (0007).
+    const jobs = await db.selectFrom('indexing_jobs').selectAll().where('repository_id', '=', id).orderBy('seq', 'desc').limit(5).execute();
     const active = jobs.find((j) => j.status === 'queued' || j.status === 'running');
     const lastFinished = jobs.find((j) => !['queued', 'running'].includes(j.status));
     let coverage = null;

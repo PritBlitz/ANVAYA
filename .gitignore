@@ -12,3 +12,5 @@ Thumbs.db
 .env.*
 !.env.example
 *.pem
+# Agent worktrees
+/.claude/
