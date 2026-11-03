@@ -48,6 +48,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // E2E builds into its own directory so it never overwrites a running server's build.
   distDir: process.env.ANVAYA_DIST_DIR || ".next",
+  // Container images (Dockerfile) ship the self-contained server; local builds are unchanged.
+  output: process.env.ANVAYA_STANDALONE === "1" ? "standalone" : undefined,
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
