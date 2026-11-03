@@ -56,6 +56,10 @@ Problems found and fixed during browser verification:
 - The fixture adapter shared object references with the query cache, which hid an update.
 - The create-task dialog reopened on browser Back because of Activity route preservation.
 
+Problems found and fixed against the live stack (2026-11-03):
+
+- The `/api/v1` rewrite proxy dropped requests after Next's default 30s, so every local-model Q&A or planning call through the web app failed with a bare `500`. `experimental.proxyTimeout` is now 660s, a little over the API's 600s provider maximum, so the API returns a typed `PROVIDER_TIMEOUT` instead. Verified: a `qwen2.5-coder:7b` Q&A through the web origin answered in 60s with code and knowledge citations.
+
 Problems found and fixed while building the homepage:
 
 - Badges rendered their icons on a separate line, because preflight makes SVGs `display:block`.
@@ -70,7 +74,7 @@ Problems found and fixed while building the homepage:
 
 - Homepage screenshots must be regenerated (`npm run screenshots` with the dev server running) whenever the product UI changes.
 
-1. Live API checks so far are sign-in, repository health, lazy code tree, file view, search, Q&A, SSE through to the plan gate, plan view with resolved evidence, settings, usage, members, and audit. Still pending: approving a plan through execution, the PR gate, and PR creation on a real GitHub-connected repository. The Playwright suite runs against fixtures only.
+1. Live API checks cover sign-in, repository health, lazy code tree, file view, search, Q&A (mock and real local model), SSE through to the plan gate, plan view with resolved evidence, settings, usage, members, and audit. One governed run went all the way to a real pull request on 2026-11-02 (`PritBlitz/testRepo#1`). `npm run test:live` skips its own PR step unless `LIVE_RUN=1`, because it opens a real PR.
 2. The CSP is static, so scripts need `'unsafe-inline'` (Next's inline bootstrap). Nonces would force every page dynamic and break the static homepage (M11). Everything else is same-origin-only, framing is denied, and E2E asserts zero violations.
 3. Syntax highlighting is a small built-in lexer (TS/JS family, Python, JSON, shell). Other languages render plain.
 4. The dependency map is a navigable list rather than a drawn graph, because it has to scale to 2,000 files and stay keyboard and screen-reader friendly.
