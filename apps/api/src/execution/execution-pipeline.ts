@@ -15,7 +15,7 @@ import { planSchema } from '../runs/run.schemas.js';
 import { filterProfilesByTemplate, isPlanOnly, parseSnapshot } from '../templates/templates.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from '../runs/stage-toolkit.js';
 import { ObjectStorage } from '../storage/object-storage.js';
-import { PatchRejected, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
+import { PatchRejected, composePatch, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
 import { profileById, selectProfiles, unavailableChecks, type VerificationProfile } from './profiles.js';
 import { SandboxDriver, type SandboxResult } from './sandbox.js';
 import { WorkspaceManager } from './workspace.js';
@@ -227,6 +227,14 @@ export class ExecutionPipeline extends ExecutionStages {
       for (const c of parsed.data.changes) current.set(c.path, await this.workspaces.readText(run.id, c.path).catch(() => null));
       try {
         validated = validatePatch(parsed.data, { allowedFiles: plan.files_to_modify, maxChangedFiles: budget.max_changed_files, current: (p) => current.get(p) ?? null });
+        // A repair is validated against the workspace with the earlier patch applied; store it
+        // cumulatively against the base commit, or the pull request would carry only the delta.
+        const priorPatchId = typeof run.checkpoint.current_patch_id === 'string' ? run.checkpoint.current_patch_id : null;
+        if (priorPatchId) {
+          const prior = await this.loadPatchFiles(priorPatchId);
+          if (prior.length === 0) throw new StageFailure('PATCH_MISSING', 'The patch being repaired could not be loaded.');
+          validated = composePatch(prior, validated, budget.max_changed_files);
+        }
       } catch (err) {
         if (!(err instanceof PatchRejected)) throw err;
         rejection = err;
@@ -551,11 +559,11 @@ export class ExecutionPipeline extends ExecutionStages {
     if (used >= budget.max_repair_attempts) await this.release(run.id);
   }
 
-  private async loadPatchFiles(patchId: string): Promise<Array<{ path: string; action: string; before: string | null; after: string | null }>> {
+  private async loadPatchFiles(patchId: string): Promise<Array<{ path: string; action: string; before: string | null; after: string | null; explanation?: string | null }>> {
     const p = await this.kit.database.db.selectFrom('patches').select('files_object_key').where('id', '=', patchId).executeTakeFirst();
     if (!p?.files_object_key) return [];
     const raw = await this.storage.get(p.files_object_key);
-    const parsed = z.array(z.object({ path: z.string(), action: z.string(), before: z.string().nullable(), after: z.string().nullable() })).safeParse(raw ? JSON.parse(raw.toString('utf8')) : []);
+    const parsed = z.array(z.object({ path: z.string(), action: z.string(), before: z.string().nullable(), after: z.string().nullable(), explanation: z.string().nullable().optional() })).safeParse(raw ? JSON.parse(raw.toString('utf8')) : []);
     return parsed.success ? parsed.data : [];
   }
 }

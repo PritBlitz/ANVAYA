@@ -272,7 +272,12 @@ describe('execution, verification, review and pull-request handoff', () => {
       const v = (await as(member, 'get', `/runs/${run}/verification`)).body.data;
       expect(v.results.filter((r: { attempt: number; status: string }) => r.attempt === 1).some((r: { status: string }) => r.status === 'failed')).toBe(true);
       expect(v.summary.passed).toBe(2);
-      expect((await as(member, 'get', `/runs/${run}/diff`)).body.data.attempt).toBe(2);
+      // The repaired patch is cumulative against the base commit, not a delta on attempt 1.
+      const d = (await as(member, 'get', `/runs/${run}/diff`)).body.data;
+      expect(d).toMatchObject({ attempt: 2, additions: 1, deletions: 1, base_commit_sha: SHA });
+      expect(d.diff).toContain('-  return t;');
+      expect(d.diff).toContain('+  return t.trim();');
+      expect(d.diff).not.toContain('BROKEN');
     });
 
     it('fails with evidence when the repair budget is exhausted', async () => {
