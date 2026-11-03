@@ -12,7 +12,6 @@
  */
 import type * as T from "./types";
 
-
 type ISO = string;
 type UUID = string;
 export type WMode = "local" | "cloud" | "mock";

@@ -458,7 +458,12 @@ export type CreateTaskRequest =
       labels?: string[];
       template_key?: string;
     }
-  | { source_type: "github_issue"; external_number: number; labels?: string[]; template_key?: string };
+  | {
+      source_type: "github_issue";
+      external_number: number;
+      labels?: string[];
+      template_key?: string;
+    };
 
 /** Sources the API currently accepts for creation. */
 export const CREATABLE_TASK_SOURCES = ["manual", "github_issue"] as const;

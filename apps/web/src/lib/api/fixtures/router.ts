@@ -1122,7 +1122,10 @@ route("PATCH", "/workspaces/:workspaceId/ai-policy", (req) => {
   if (body.limits) next.limits = { ...next.limits, ...body.limits };
   if (body.allowed_modes) next.allowed_modes = body.allowed_modes;
   if (body.default_mode) next.default_mode = body.default_mode;
-  if (next.cloud.provider !== null && !(T_HOSTED as readonly string[]).includes(next.cloud.provider))
+  if (
+    next.cloud.provider !== null &&
+    !(T_HOSTED as readonly string[]).includes(next.cloud.provider)
+  )
     throw validation("cloud.provider", `must be one of ${T_HOSTED.join(", ")}`);
   // A new recipient or new data categories is a new disclosure (FR-AI-008).
   const providerChanged =
@@ -1169,10 +1172,17 @@ route("PATCH", "/workspaces/:workspaceId/ai-policy", (req) => {
   if (!next.allowed_modes.includes(next.default_mode))
     throw validation("default_mode", "must be one of the allowed modes");
   req.state.policies[wsId] = next;
-  audit(req, wsId, providerChanged ? "ai_policy.cloud_provider_changed" : "ai_policy.updated", "ai_policy", wsId, {
-    fields: Object.keys(body),
-    cloud_enabled: next.cloud.enabled,
-  });
+  audit(
+    req,
+    wsId,
+    providerChanged ? "ai_policy.cloud_provider_changed" : "ai_policy.updated",
+    "ai_policy",
+    wsId,
+    {
+      fields: Object.keys(body),
+      cloud_enabled: next.cloud.enabled,
+    },
+  );
   return ok(next);
 });
 
@@ -1966,7 +1976,14 @@ route("DELETE", "/knowledge/:documentId", (req) => {
 // ── tasks & runs ─────────────────────────────────────────────────────────
 
 route("POST", "/repositories/:repositoryId/tasks", (req) => {
-  strictBody(req, ["source_type", "title", "description", "external_number", "labels", "template_key"]);
+  strictBody(req, [
+    "source_type",
+    "title",
+    "description",
+    "external_number",
+    "labels",
+    "template_key",
+  ]);
   const repo = findScoped(req, req.state.repositories, req.params.repositoryId!, "member");
   const template =
     typeof req.body.template_key === "string"
@@ -2546,7 +2563,11 @@ function resolveTemplate(req: FixtureRequest, wsId: string, key: string): T.Work
   if (builtin) return builtinView(builtin);
   const t = req.state.templates.find((x) => x.workspace_id === wsId && x.key === key);
   if (!t)
-    throw new FixtureHttpError(422, "TEMPLATE_NOT_FOUND", `No template '${key}' exists in this workspace.`);
+    throw new FixtureHttpError(
+      422,
+      "TEMPLATE_NOT_FOUND",
+      `No template '${key}' exists in this workspace.`,
+    );
   if (t.status !== "active")
     throw new FixtureHttpError(422, "TEMPLATE_ARCHIVED", `The template '${key}' is archived.`);
   return t;
@@ -2577,7 +2598,9 @@ function templateFields(body: Record<string, unknown>, partial: boolean) {
       title_prefix: typeof d.title_prefix === "string" ? d.title_prefix.slice(0, 60) : null,
       description_template:
         typeof d.description_template === "string" ? d.description_template.slice(0, 4000) : null,
-      labels: Array.isArray(d.labels) ? d.labels.filter((l) => typeof l === "string").slice(0, 10) : [],
+      labels: Array.isArray(d.labels)
+        ? d.labels.filter((l) => typeof l === "string").slice(0, 10)
+        : [],
     };
   }
   if (body.budget !== undefined) {
@@ -2601,7 +2624,11 @@ function templateFields(body: Record<string, unknown>, partial: boolean) {
   }
   if (body.planning_guidance !== undefined) {
     const g = body.planning_guidance;
-    if (!Array.isArray(g) || g.length > 8 || !g.every((x) => typeof x === "string" && x.trim() && x.length <= 300))
+    if (
+      !Array.isArray(g) ||
+      g.length > 8 ||
+      !g.every((x) => typeof x === "string" && x.trim() && x.length <= 300)
+    )
       throw validation("planning_guidance", "must be up to 8 items of at most 300 characters");
     out.planning_guidance = g.map((x: string) => x.trim());
   }
@@ -2624,7 +2651,11 @@ route("POST", "/workspaces/:workspaceId/templates", (req) => {
     throw validation("key", "lowercase letters, digits and underscores, starting with a letter");
   if (BUILTIN_KEYS.has(key)) throw validation("key", "this key is reserved by a built-in template");
   if (req.state.templates.some((t) => t.workspace_id === wsId && t.key === key))
-    throw new FixtureHttpError(409, "TEMPLATE_KEY_TAKEN", "A template with this key already exists in the workspace.");
+    throw new FixtureHttpError(
+      409,
+      "TEMPLATE_KEY_TAKEN",
+      "A template with this key already exists in the workspace.",
+    );
   const at = iso(req.now);
   const fields = templateFields(req.body, false);
   const workflow = fields.workflow!;
@@ -2637,7 +2668,11 @@ route("POST", "/workspaces/:workspaceId/templates", (req) => {
     description: fields.description ?? "",
     workflow,
     plan_only: workflow === "migration_plan",
-    task_defaults: fields.task_defaults ?? { title_prefix: null, description_template: null, labels: [] },
+    task_defaults: fields.task_defaults ?? {
+      title_prefix: null,
+      description_template: null,
+      labels: [],
+    },
     budget: fields.budget ?? {},
     allowed_profiles: fields.allowed_profiles ?? null,
     planning_guidance: fields.planning_guidance ?? [],
@@ -2652,14 +2687,17 @@ route("POST", "/workspaces/:workspaceId/templates", (req) => {
 });
 
 function withoutScope(t: Scoped<T.WorkflowTemplate>): T.WorkflowTemplate {
-  const { workspace_id: _ws, ...rest } = t;
-  return structuredClone(rest);
+  const rest: Partial<Scoped<T.WorkflowTemplate>> = structuredClone(t);
+  delete rest.workspace_id;
+  return rest as T.WorkflowTemplate;
 }
 
 function updateTemplate(req: FixtureRequest, body: Record<string, unknown>) {
   const wsId = req.params.workspaceId!;
   requireRole(req, wsId, "admin");
-  const t = req.state.templates.find((x) => x.id === req.params.templateId && x.workspace_id === wsId);
+  const t = req.state.templates.find(
+    (x) => x.id === req.params.templateId && x.workspace_id === wsId,
+  );
   if (!t) throw new FixtureHttpError(404, "NOT_FOUND", "Template not found.");
   const wasActive = t.status === "active";
   Object.assign(t, templateFields(body, true));
@@ -2680,7 +2718,8 @@ function updateTemplate(req: FixtureRequest, body: Record<string, unknown>) {
 
 route("PATCH", "/workspaces/:workspaceId/templates/:templateId", (req) => {
   strictBody(req, [...TEMPLATE_FIELDS, "status"]);
-  if (Object.keys(req.body).length === 0) throw validation("body", "at least one field is required");
+  if (Object.keys(req.body).length === 0)
+    throw validation("body", "at least one field is required");
   return ok(withoutScope(updateTemplate(req, req.body)));
 });
 
@@ -2792,7 +2831,10 @@ route("GET", "/runs/:runId/impact", (req) => {
       selected_tests: [],
       test_files_total: 0,
       truncated: false,
-      limitations: [...IMPACT_LIMITATIONS, "Nothing to analyse yet: the run has no plan files or patch."],
+      limitations: [
+        ...IMPACT_LIMITATIONS,
+        "Nothing to analyse yet: the run has no plan files or patch.",
+      ],
     } satisfies T.RunImpact);
   }
   const max = Math.min(Math.max(Number(req.query.get("max_tests")) || 20, 1), 100);
@@ -2802,7 +2844,13 @@ route("GET", "/runs/:runId/impact", (req) => {
   } satisfies T.RunImpact);
 });
 
-function workspaceHits(req: FixtureRequest, wsId: string, query: string, ids: unknown, perRepo: number) {
+function workspaceHits(
+  req: FixtureRequest,
+  wsId: string,
+  query: string,
+  ids: unknown,
+  perRepo: number,
+) {
   const repos = req.state.repositories.filter(
     (r) => r.workspace_id === wsId && r.status === "connected",
   );
@@ -2837,10 +2885,17 @@ function workspaceHits(req: FixtureRequest, wsId: string, query: string, ids: un
         knowledge_document_id: null,
         title: null,
         snippet: h.snippet,
-        score: Math.round(((h.lexical_score ?? 0) * 0.45 + (h.semantic_score ?? 0) * 0.55) * 100) / 100,
+        score:
+          Math.round(((h.lexical_score ?? 0) * 0.45 + (h.semantic_score ?? 0) * 0.55) * 100) / 100,
       }),
     );
-    summaries.push({ id: repo.id, full_name: repo.full_name, commit_sha: sha, results: hits.length, semantic: "ok" });
+    summaries.push({
+      id: repo.id,
+      full_name: repo.full_name,
+      commit_sha: sha,
+      results: hits.length,
+      semantic: "ok",
+    });
   }
   results.sort(
     (a, b) =>
@@ -2852,7 +2907,14 @@ function workspaceHits(req: FixtureRequest, wsId: string, query: string, ids: un
 }
 
 route("POST", "/workspaces/:workspaceId/search", (req) => {
-  strictBody(req, ["query", "repository_ids", "top_k", "per_repository", "include_knowledge", "mode"]);
+  strictBody(req, [
+    "query",
+    "repository_ids",
+    "top_k",
+    "per_repository",
+    "include_knowledge",
+    "mode",
+  ]);
   const wsId = req.params.workspaceId!;
   membership(req, wsId);
   const query = str(req.body, "query", { min: 2, max: 500 });
@@ -2864,7 +2926,11 @@ route("POST", "/workspaces/:workspaceId/search", (req) => {
     results: h.results.slice(0, topK),
     repositories: h.summaries,
     skipped_repositories: h.skipped,
-    retrieval: { mode: req.body.mode === "lexical" ? "lexical" : "hybrid", repositories_searched: h.summaries.length, duration_ms: 42 },
+    retrieval: {
+      mode: req.body.mode === "lexical" ? "lexical" : "hybrid",
+      repositories_searched: h.summaries.length,
+      duration_ms: 42,
+    },
     limitations: [],
   } satisfies T.WorkspaceSearchResponse);
 });
@@ -2877,7 +2943,11 @@ route("POST", "/workspaces/:workspaceId/questions", (req) => {
   const policy = req.state.policies[wsId] ?? defaultPolicy();
   const mode = (req.body.mode as T.InferenceMode | undefined) ?? policy.default_mode;
   if (!policy.allowed_modes.includes(mode))
-    throw new FixtureHttpError(403, "FORBIDDEN", `Inference mode '${mode}' is not allowed by this workspace's AI policy.`);
+    throw new FixtureHttpError(
+      403,
+      "FORBIDDEN",
+      `Inference mode '${mode}' is not allowed by this workspace's AI policy.`,
+    );
   const h = workspaceHits(req, wsId, question, req.body.repository_ids, 3);
   const top = h.results.slice(0, 3);
   const base = {
@@ -2885,12 +2955,15 @@ route("POST", "/workspaces/:workspaceId/questions", (req) => {
     skipped_repositories: h.skipped,
     mode,
     data_disclosure:
-      mode === "cloud" ? { provider: policy.cloud.provider, data_categories: policy.cloud.data_categories } : null,
+      mode === "cloud"
+        ? { provider: policy.cloud.provider, data_categories: policy.cloud.data_categories }
+        : null,
   };
   if (top.length === 0) {
     return ok({
       ...base,
-      answer: "No indexed evidence in this workspace matched the question, so it cannot be answered with citations.",
+      answer:
+        "No indexed evidence in this workspace matched the question, so it cannot be answered with citations.",
       insufficient_evidence: true,
       citations: [],
       limitations: ["No relevant code was retrieved from any indexed repository."],
@@ -2904,12 +2977,21 @@ route("POST", "/workspaces/:workspaceId/questions", (req) => {
     ...base,
     answer: `[mock] The most relevant code is in ${top.map((t) => `${t.repository_full_name}/${t.path}`).join(", ")}.`,
     insufficient_evidence: false,
-    citations: top.map((t, i) => ({ ...t, evidence_id: `ev-${i + 1}`, supports: `Relevant code in ${t.path}` })),
+    citations: top.map((t, i) => ({
+      ...t,
+      evidence_id: `ev-${i + 1}`,
+      supports: `Relevant code in ${t.path}`,
+    })),
     limitations: ["Generated by the deterministic mock provider; not a model answer."],
     provider: "mock",
     model: "mock-deterministic",
     prompt_version: "repository_qa.v1",
-    usage: { input_tokens: 900, output_tokens: 120, duration_ms: 240, schema_repair_attempted: false },
+    usage: {
+      input_tokens: 900,
+      output_tokens: 120,
+      duration_ms: 240,
+      schema_repair_attempted: false,
+    },
   } satisfies T.WorkspaceAnswer);
 });
 

@@ -13,6 +13,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
     { href: `${root}/members`, label: "Members" },
     { href: `${root}/integrations`, label: "Integrations" },
     { href: `${root}/ai`, label: "AI policy" },
+    { href: `${root}/templates`, label: "Templates" },
     ...(can("audit.view") ? [{ href: `${root}/audit`, label: "Audit log" }] : []),
   ];
   return (

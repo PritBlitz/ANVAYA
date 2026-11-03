@@ -211,7 +211,12 @@ export function createEndpoints(client: ApiClient) {
       callGraph: (
         repositoryId: string,
         symbolId: string,
-        params: { direction?: T.CallGraphDirection; depth?: number; limit?: number; cursor?: string } = {},
+        params: {
+          direction?: T.CallGraphDirection;
+          depth?: number;
+          limit?: number;
+          cursor?: string;
+        } = {},
       ) =>
         client.get<T.CallGraph>(
           `/repositories/${enc(repositoryId)}/symbols/${enc(symbolId)}/call-graph`,

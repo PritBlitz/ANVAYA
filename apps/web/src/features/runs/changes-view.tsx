@@ -21,6 +21,7 @@ import { outOfScopeFiles, parseUnifiedDiff, type DiffFile } from "@/lib/diff";
 import { cn } from "@/lib/utils/cn";
 import { shortSha } from "@/lib/utils/format";
 import { CopyButton } from "@/features/code/code-view";
+import { ImpactPanel } from "./impact-panel";
 import { useRunContext } from "./run-context";
 
 function fileAnchor(path: string) {
@@ -182,13 +183,16 @@ export function ChangesView() {
   if (diff.isError) {
     if (isApiError(diff.error) && diff.error.isNotFound) {
       return (
-        <Card>
-          <EmptyState
-            icon={<FileDiff />}
-            title="No changes yet"
-            description="The patch developer runs only after the plan is approved. Proposed changes appear here, validated before they're applied."
-          />
-        </Card>
+        <div className="flex flex-col gap-4">
+          <Card>
+            <EmptyState
+              icon={<FileDiff />}
+              title="No changes yet"
+              description="The patch developer runs only after the plan is approved. Proposed changes appear here, validated before they're applied."
+            />
+          </Card>
+          {plan.data && <ImpactPanel />}
+        </div>
       );
     }
     return <ErrorState error={diff.error} onRetry={() => diff.refetch()} />;
@@ -278,6 +282,7 @@ export function ChangesView() {
               {[...outOfScope].join(", ")} — review carefully before approving a pull request.
             </InlineAlert>
           ))}
+        <ImpactPanel compact />
         {files.map((f) => (
           <FileDiffCard
             key={f.path}

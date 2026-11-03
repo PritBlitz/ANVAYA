@@ -7,7 +7,10 @@ import type * as T from "../types";
 import { parseImports, parseSymbols, references } from "./code-intel";
 import type { FixtureFile } from "./repo-content";
 
-type Def = Omit<T.WorkflowTemplate, "id" | "source" | "plan_only" | "version" | "status" | "created_at" | "updated_at">;
+type Def = Omit<
+  T.WorkflowTemplate,
+  "id" | "source" | "plan_only" | "version" | "status" | "created_at" | "updated_at"
+>;
 
 export const BUILTIN_TEMPLATES: Def[] = [
   {
@@ -17,7 +20,8 @@ export const BUILTIN_TEMPLATES: Def[] = [
     workflow: "change",
     task_defaults: {
       title_prefix: "Fix: ",
-      description_template: "## Observed behaviour\n\n## Expected behaviour\n\n## Steps to reproduce\n",
+      description_template:
+        "## Observed behaviour\n\n## Expected behaviour\n\n## Steps to reproduce\n",
       labels: ["bug"],
     },
     budget: { max_changed_files: 5, max_repair_attempts: 2 },
@@ -183,7 +187,12 @@ export function buildGraph(files: FixtureFile[], sha: string): CodeGraph {
       type: r.type,
       line: r.line,
     }));
-  return { files: new Set(files.filter((f) => !f.excluded).map((f) => f.path)), imports, symbols, calls };
+  return {
+    files: new Set(files.filter((f) => !f.excluded).map((f) => f.path)),
+    imports,
+    symbols,
+    calls,
+  };
 }
 
 const TEST_PATTERNS = [
@@ -232,7 +241,9 @@ export function predictImpact(
   for (const list of importedBy.values())
     list.sort((a, b) => a.from.localeCompare(b.from) || (a.line ?? 0) - (b.line ?? 0));
   const impacted = new Map<string, T.ImpactCore["impacted_files"][number]>();
-  let frontier = [...changedPaths].sort().map((p) => ({ path: p, chain: [] as T.ImpactEvidenceStep[] }));
+  let frontier = [...changedPaths]
+    .sort()
+    .map((p) => ({ path: p, chain: [] as T.ImpactEvidenceStep[] }));
   for (let depth = 1; depth <= MAX_IMPORT_DEPTH && frontier.length; depth++) {
     const next: typeof frontier = [];
     for (const node of frontier) {
@@ -254,12 +265,14 @@ export function predictImpact(
   for (const p of [...changedPaths].sort()) {
     for (const s of (byPath.get(p) ?? []).sort((a, b) => a.start_line - b.start_line)) {
       const r = ranges.get(p);
-      if (s.kind === "module" || (r && !r.some(([a, b]) => s.start_line <= b && s.end_line >= a))) continue;
+      if (s.kind === "module" || (r && !r.some(([a, b]) => s.start_line <= b && s.end_line >= a)))
+        continue;
       changedSymbols.push(s);
     }
   }
   const callersOf = new Map<string, CallEdge[]>();
-  for (const e of graph.calls) callersOf.set(e.target_symbol_id, [...(callersOf.get(e.target_symbol_id) ?? []), e]);
+  for (const e of graph.calls)
+    callersOf.set(e.target_symbol_id, [...(callersOf.get(e.target_symbol_id) ?? []), e]);
   const reached = new Map<string, T.ImpactCore["impacted_symbols"][number]>();
   const changedIds = new Set(changedSymbols.map((s) => s.id));
   let symFrontier = changedSymbols.map((s) => ({ id: s.id, chain: [] as T.ImpactEvidenceStep[] }));
@@ -285,7 +298,12 @@ export function predictImpact(
         reached.set(caller.id, { symbol: caller, depth, evidence: chain });
         next.push({ id: caller.id, chain });
         if (!changedPaths.has(caller.path) && !impacted.has(caller.path))
-          impacted.set(caller.path, { path: caller.path, distance: depth, reason: "calls", evidence: chain });
+          impacted.set(caller.path, {
+            path: caller.path,
+            distance: depth,
+            reason: "calls",
+            evidence: chain,
+          });
       }
     }
     symFrontier = next;
@@ -295,14 +313,19 @@ export function predictImpact(
   const add = (path: string, score: number, reason: T.SelectedTest["reasons"][number]) => {
     const t = scored.get(path) ?? { path, score: 0, reasons: [] };
     t.score = Math.max(t.score, score);
-    if (t.reasons.length < 3 && !t.reasons.some((r) => r.kind === reason.kind)) t.reasons.push(reason);
+    if (t.reasons.length < 3 && !t.reasons.some((r) => r.kind === reason.kind))
+      t.reasons.push(reason);
     scored.set(path, t);
   };
   const stems = new Map<string, string>();
   for (const p of changedPaths) if (!isTestFile(p)) stems.set(stem(p), p);
   for (const t of tests) {
     if (changedPaths.has(t))
-      add(t, 1, { kind: "changed", description: "The test file itself is changed.", evidence: [{ kind: "changed", path: t }] });
+      add(t, 1, {
+        kind: "changed",
+        description: "The test file itself is changed.",
+        evidence: [{ kind: "changed", path: t }],
+      });
     const imp = impacted.get(t);
     if (imp?.reason === "imports") {
       const last = imp.evidence.at(-1);
@@ -315,17 +338,26 @@ export function predictImpact(
         evidence: imp.evidence,
       });
     }
-    const calling = [...reached.values()].filter((r) => r.symbol.path === t).sort((a, b) => a.depth - b.depth)[0];
+    const calling = [...reached.values()]
+      .filter((r) => r.symbol.path === t)
+      .sort((a, b) => a.depth - b.depth)[0];
     if (calling)
       add(t, Math.max(0.3, 0.85 - 0.15 * (calling.depth - 1)), {
         kind: "calls",
-        description: calling.depth === 1 ? "Calls a changed symbol" : `Calls a changed symbol through ${calling.depth} calls`,
+        description:
+          calling.depth === 1
+            ? "Calls a changed symbol"
+            : `Calls a changed symbol through ${calling.depth} calls`,
         evidence: calling.evidence,
       });
     const subject = testSubjectStem(t);
     const named = subject ? stems.get(subject) : undefined;
     if (named)
-      add(t, 0.5, { kind: "naming", description: `Named after changed file ${named}`, evidence: [{ kind: "naming", from: t, to: named }] });
+      add(t, 0.5, {
+        kind: "naming",
+        description: `Named after changed file ${named}`,
+        evidence: [{ kind: "naming", from: t, to: named }],
+      });
   }
   const selected = [...scored.values()]
     .map((t) => ({ ...t, score: Number(t.score.toFixed(2)) }))
@@ -338,8 +370,12 @@ export function predictImpact(
       symbols: (byPath.get(p) ?? []).filter((s) => s.kind !== "module").length,
     })),
     changed_symbols: changedSymbols,
-    impacted_files: [...impacted.values()].sort((a, b) => a.distance - b.distance || a.path.localeCompare(b.path)),
-    impacted_symbols: [...reached.values()].sort((a, b) => a.depth - b.depth || a.symbol.path.localeCompare(b.symbol.path)),
+    impacted_files: [...impacted.values()].sort(
+      (a, b) => a.distance - b.distance || a.path.localeCompare(b.path),
+    ),
+    impacted_symbols: [...reached.values()].sort(
+      (a, b) => a.depth - b.depth || a.symbol.path.localeCompare(b.symbol.path),
+    ),
     selected_tests: selected.slice(0, maxTests),
     test_files_total: tests.length,
     truncated: selected.length > maxTests,
@@ -365,7 +401,9 @@ export function callGraph(
     for (let d = 1; d <= depth && frontier.length; d++) {
       const next: string[] = [];
       for (const id of frontier) {
-        const list = graph.calls.filter((e) => (dir === "caller" ? e.target_symbol_id : e.source_symbol_id) === id);
+        const list = graph.calls.filter(
+          (e) => (dir === "caller" ? e.target_symbol_id : e.source_symbol_id) === id,
+        );
         for (const e of sorted(list)) {
           const otherId = dir === "caller" ? e.source_symbol_id : e.target_symbol_id;
           const other = graph.symbols.get(otherId);
@@ -377,13 +415,20 @@ export function callGraph(
               continue;
             }
             visited.add(otherId);
-            if (!nodes.has(otherId)) nodes.set(otherId, { symbol: other, depth: d, direction: dir });
+            if (!nodes.has(otherId))
+              nodes.set(otherId, { symbol: other, depth: d, direction: dir });
             next.push(otherId);
           }
           const key = `${e.source_symbol_id}|${e.target_symbol_id}|${e.type}|${e.line}`;
           if (!seen.has(key) && (nodes.has(otherId) || otherId === rootId)) {
             seen.add(key);
-            edges.push({ source_id: e.source_symbol_id, target_id: e.target_symbol_id, type: e.type, line: e.line, path: source.path });
+            edges.push({
+              source_id: e.source_symbol_id,
+              target_id: e.target_symbol_id,
+              type: e.type,
+              line: e.line,
+              path: source.path,
+            });
           }
         }
       }

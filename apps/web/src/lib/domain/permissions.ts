@@ -17,7 +17,8 @@ export type Capability =
   | "tasks.create"
   | "runs.operate"
   | "approvals.decide"
-  | "knowledge.write";
+  | "knowledge.write"
+  | "templates.manage";
 
 const MIN_ROLE: Record<Capability, WorkspaceRole> = {
   "workspace.manage": "admin",
@@ -31,6 +32,7 @@ const MIN_ROLE: Record<Capability, WorkspaceRole> = {
   "runs.operate": "member",
   "approvals.decide": "member",
   "knowledge.write": "member",
+  "templates.manage": "admin",
 };
 
 export function can(role: WorkspaceRole | null | undefined, capability: Capability): boolean {
