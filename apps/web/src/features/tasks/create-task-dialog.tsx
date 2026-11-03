@@ -19,7 +19,7 @@ import { describeError } from "@/lib/api/errors";
 import { CREATABLE_TASK_SOURCES, type CreateTaskRequest } from "@/lib/api/types";
 import { api } from "@/lib/api/runtime";
 import { isQueryable } from "@/lib/domain/status";
-import { applyServerErrors } from "@/lib/forms";
+import { applyServerErrors, notifyError } from "@/lib/forms";
 import { useWorkspace } from "@/lib/workspace/context";
 
 /**
@@ -207,17 +207,23 @@ export function CreateTaskDialog({
         toCreateTaskRequest(v),
         key.current,
       );
-      if (!v.start_now) return { task, run: null };
+      if (!v.start_now) return { task, run: null, startError: null };
       const repo = queryable.find((r) => r.id === v.repository_id);
-      // Mode omitted: the server applies the workspace's default mode (local-first).
-      const run = await api.tasks.startRun(
-        task.id,
-        { base_branch: repo?.default_branch ?? "main" },
-        `start-${task.id}-1`,
-      );
-      return { task, run };
+      try {
+        // Mode omitted: the server applies the workspace's default mode (local-first).
+        const run = await api.tasks.startRun(
+          task.id,
+          { base_branch: repo?.default_branch ?? "main" },
+          `start-${task.id}-1`,
+        );
+        return { task, run, startError: null };
+      } catch (startError) {
+        // The task exists even if the run was refused (e.g. a quota or concurrency limit):
+        // say so and open the task instead of leaving the dialog to create a duplicate.
+        return { task, run: null, startError };
+      }
     },
-    onSuccess: ({ task, run }) => {
+    onSuccess: ({ task, run, startError }) => {
       key.current = createIdempotencyKey();
       void queryClient.invalidateQueries({ queryKey: qk.tasks(workspaceId) });
       void queryClient.invalidateQueries({ queryKey: qk.runs(workspaceId) });
@@ -231,7 +237,8 @@ export function CreateTaskDialog({
         // would reopen the dialog (Activity preserves the hidden route).
         router.replace(`${base}/runs/${run.id}`);
       } else {
-        toast.success("Task created");
+        if (startError) notifyError(startError, "Task created, but the run didn't start");
+        else toast.success("Task created");
         router.replace(`${base}/tasks/${task.id}`);
       }
     },
