@@ -133,7 +133,10 @@ test("viewers see templates read-only", async ({ page }) => {
 
 test("workspace search shows per-result repository provenance", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Search", exact: true }).first().click();
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Search", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/w\/acme\/search$/);
   await page.getByLabel("Search all repositories").fill("token refresh");
   await page.getByRole("button", { name: "Search", exact: true }).last().click();

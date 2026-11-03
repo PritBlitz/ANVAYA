@@ -104,7 +104,10 @@ test("repository intelligence against the real index", async ({ page }) => {
   await page.getByRole("link", { name: "Dependencies", exact: true }).click();
   await expect(page.getByLabel("Dependency map summary")).toBeVisible();
 
-  await page.getByRole("link", { name: "Search", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Repository sections" })
+    .getByRole("link", { name: "Search", exact: true })
+    .click();
   await page.getByLabel("Search query").fill("test");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByText(/\d+ results|No matching code/)).toBeVisible();

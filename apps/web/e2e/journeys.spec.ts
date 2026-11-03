@@ -125,7 +125,10 @@ test("search and grounded Q&A open cited lines", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Language coverage" })).toBeVisible();
   await expectAccessible(page);
 
-  await page.getByRole("link", { name: "Search", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Repository sections" })
+    .getByRole("link", { name: "Search", exact: true })
+    .click();
   await page.getByLabel("Search query").fill("refresh token expiry");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page).toHaveURL(/q=refresh\+token\+expiry/);
