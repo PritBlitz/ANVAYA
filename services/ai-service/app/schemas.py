@@ -12,7 +12,9 @@ from typing import Annotated, Any, Literal
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 Mode = Literal["local", "cloud", "mock"]
-Task = Literal["repository_qa", "investigation", "planning", "patch", "repair", "review", "verification_summary"]
+Task = Literal[
+    "repository_qa", "investigation", "planning", "migration_plan", "patch", "repair", "review", "verification_summary"
+]
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
@@ -166,6 +168,33 @@ class Plan(Strict):
     out_of_scope: list[ShortText] = Field(default_factory=list, max_length=10)
 
 
+class MigrationStep(PlanStep):
+    rollback: ShortText
+
+
+class AffectedArea(Strict):
+    area: ShortText
+    description: ShortText
+    files: list[RelPath] = Field(default_factory=list, max_length=16)
+    evidence_ids: list[EvidenceId] = Field(default_factory=list, max_length=8)
+
+
+class MigrationPlan(Strict):
+    """Plan-only migration workflow: ordered steps each with a rollback, the affected areas with the
+    evidence that shows them, prerequisites and an overall rollback strategy. Nothing is executed."""
+
+    objective: ShortText
+    assumptions: list[ShortText] = Field(default_factory=list, max_length=10)
+    steps: list[MigrationStep] = Field(min_length=1, max_length=12)
+    files_to_modify: list[RelPath] = Field(default_factory=list, max_length=32)
+    tests: list[ShortText] = Field(default_factory=list, max_length=12)
+    risks: list[ShortText] = Field(default_factory=list, max_length=10)
+    out_of_scope: list[ShortText] = Field(default_factory=list, max_length=10)
+    affected_areas: list[AffectedArea] = Field(default_factory=list, max_length=12)
+    prerequisites: list[ShortText] = Field(default_factory=list, max_length=8)
+    rollback_strategy: list[ShortText] = Field(default_factory=list, max_length=8)
+
+
 class FileChange(Strict):
     path: RelPath
     action: Literal["modify", "create", "delete"]
@@ -207,6 +236,7 @@ OUTPUT_SCHEMAS: dict[str, type[BaseModel]] = {
     "repository_qa": QaAnswer,
     "investigation": Investigation,
     "planning": Plan,
+    "migration_plan": MigrationPlan,
     "patch": PatchProposal,
     "repair": PatchProposal,
     "review": Review,

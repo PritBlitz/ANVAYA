@@ -136,7 +136,11 @@ _GRAMMAR_UNSAFE_KEYS = frozenset({"maxLength", "minLength", "pattern", "maxItems
 def grammar_safe_schema(schema: Any) -> Any:
     """Returns a copy of ``schema`` without keywords that blow up grammar compilation."""
     if isinstance(schema, dict):
-        return {k: grammar_safe_schema(v) for k, v in schema.items() if k not in _GRAMMAR_UNSAFE_KEYS or not isinstance(v, (int, str))}
+        return {
+            k: grammar_safe_schema(v)
+            for k, v in schema.items()
+            if k not in _GRAMMAR_UNSAFE_KEYS or not isinstance(v, (int, str))
+        }
     if isinstance(schema, list):
         return [grammar_safe_schema(v) for v in schema]
     return schema

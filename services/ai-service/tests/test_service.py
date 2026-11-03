@@ -31,7 +31,7 @@ def ollama_providers(handler: Callable[[httpx.Request], httpx.Response], mock_em
     return Providers(
         mock=MockProvider(),
         local=OllamaProvider(client, "qwen-test", 4096),
-        cloud=None,
+        hosted={},
         embeddings=MockEmbeddingProvider(768)
         if mock_embeddings
         else OllamaEmbeddingProvider(client, "nomic-embed-text"),
@@ -353,7 +353,10 @@ def test_grammar_safe_schema_keeps_property_names() -> None:
 
     schema = {
         "type": "object",
-        "properties": {"format": {"type": "string", "maxLength": 9}, "pattern": {"type": "array", "maxItems": 3, "items": {"type": "string"}}},
+        "properties": {
+            "format": {"type": "string", "maxLength": 9},
+            "pattern": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
+        },
         "required": ["format", "pattern"],
     }
     out = grammar_safe_schema(schema)

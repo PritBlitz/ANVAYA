@@ -38,7 +38,18 @@ PRICING_PER_MTOK: dict[str, tuple[float, float]] = {
 # Structured outputs reject these keywords; they are still enforced on the parsed
 # output by the Pydantic schema in generation.py.
 _UNSUPPORTED = frozenset(
-    {"minLength", "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minItems", "maxItems", "pattern"}
+    {
+        "minLength",
+        "maxLength",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minItems",
+        "maxItems",
+        "pattern",
+    }
 )
 # Thinking tokens count toward max_tokens; keep headroom so the JSON is not cut off.
 _THINKING_HEADROOM = 8000
@@ -108,12 +119,17 @@ class AnthropicProvider:
                 max_tokens=max_output_tokens + _THINKING_HEADROOM,
                 system=prompt.system,
                 messages=messages,
-                output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": claude_output_schema(prompt.schema)}},
+                output_config={
+                    "effort": self.effort,
+                    "format": {"type": "json_schema", "schema": claude_output_schema(prompt.schema)},
+                },
             )
         except anthropic.APITimeoutError as exc:
             raise provider_timeout(self.name) from exc
         except anthropic.AuthenticationError as exc:
-            raise AiError(503, "PROVIDER_NOT_CONFIGURED", "The hosted provider rejected the configured credentials.") from exc
+            raise AiError(
+                503, "PROVIDER_NOT_CONFIGURED", "The hosted provider rejected the configured credentials."
+            ) from exc
         except anthropic.RateLimitError as exc:
             raise AiError(
                 429,
@@ -153,11 +169,21 @@ class AnthropicProvider:
         try:
             await self.client.with_options(timeout=10, max_retries=0).models.retrieve(self.model)
         except anthropic.AuthenticationError:
-            return ProviderHealth(provider=self.name, mode="cloud", available=False, models=[self.model], detail="invalid credentials")
+            return ProviderHealth(
+                provider=self.name, mode="cloud", available=False, models=[self.model], detail="invalid credentials"
+            )
         except anthropic.NotFoundError:
-            return ProviderHealth(provider=self.name, mode="cloud", available=False, models=[self.model], detail=f"model {self.model} not available")
+            return ProviderHealth(
+                provider=self.name,
+                mode="cloud",
+                available=False,
+                models=[self.model],
+                detail=f"model {self.model} not available",
+            )
         except (anthropic.APIStatusError, anthropic.APIConnectionError) as exc:
-            return ProviderHealth(provider=self.name, mode="cloud", available=False, models=[self.model], detail=type(exc).__name__)
+            return ProviderHealth(
+                provider=self.name, mode="cloud", available=False, models=[self.model], detail=type(exc).__name__
+            )
         return ProviderHealth(provider=self.name, mode="cloud", available=True, models=[self.model], detail=None)
 
 
