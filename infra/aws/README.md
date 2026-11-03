@@ -13,7 +13,7 @@ applied** — no AWS account is wired to this repository.
 | Services | ECS Fargate: web, API (runs migrations then serves), AI service (private, via Cloud Map). Rolling deploys with the ECS circuit breaker and automatic rollback |
 | Execution plane | EC2 hosts running the worker with **gVisor** (ADR-0002). IMDSv2 only (hop limit 1), no public IPs, no SSH (SSM only), unprivileged worker whose only privilege is `sudo -n /usr/bin/runsc`, sandbox images provisioned at boot from digest-pinned references |
 | Egress control | AWS Network Firewall in front of the execution subnets: a domain allowlist (GitHub, npm, PyPI); everything else is dropped and logged (SECURITY §7 "strict egress proxy") |
-| Data | RDS PostgreSQL 16 (pgvector) encrypted with a CMK, TLS enforced, RDS-managed rotating master password, PITR backups (7 days staging / 30 days production), Multi-AZ and deletion protection in production; ElastiCache Redis 7 with TLS and AUTH; EFS (TLS + IAM access point) for `STORAGE_DIR` artifacts, with AWS Backup |
+| Data | RDS PostgreSQL 16 (pgvector) encrypted with a CMK, TLS enforced and verified (the API image ships the checksum-pinned RDS CA bundle), RDS-managed rotating master password, PITR backups (7 days staging / 30 days production), Multi-AZ and deletion protection in production; ElastiCache Redis 7 with TLS and AUTH; EFS (TLS + IAM access point) for `STORAGE_DIR` artifacts, with AWS Backup |
 | Inference | Optional private Ollama hosts behind an internal NLB, reachable only from the AI service (local inference stays the default) |
 | Secrets | Secrets Manager (CMK). Generated: AI service token, metrics token, Redis URL. Provided out of band: GitHub App credentials |
 | Operations | CloudWatch log groups (CMK), SNS alarm topic, alarms for API 5xx, unhealthy targets, RDS CPU and storage, Redis memory, firewall drops |
@@ -48,10 +48,6 @@ terraform apply staging.plan
 
 ## Before the first apply (known gaps)
 
-- **RDS TLS verification**: `DATABASE_URL` uses `sslmode=verify-full` and `NODE_EXTRA_CA_CERTS`
-  points at `/app/certs/rds-global-bundle.pem`. The API image does not ship the RDS CA bundle yet;
-  add it to `apps/api/Dockerfile` (from `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`,
-  pinned by checksum) before deploying.
 - **Web image**: `apps/web` has no Dockerfile yet (it needs a standalone Next.js build in `http` mode).
 - **Separate execution account**: SECURITY §7 recommends a separate account/VPC for the execution
   plane. This module isolates it by subnet, security group and egress firewall inside one VPC
