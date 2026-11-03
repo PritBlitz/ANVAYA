@@ -34,6 +34,9 @@ Each was found by these runs, fixed with a regression test, and the run repeated
 | Approved runs timed out right after a slow human approval | Duration budget counted time waiting at approval gates | Active time excludes `awaiting_*` states |
 | Runs with a budget over 30 min failed on the first model call | Per-call timeout was the run's remaining time, above the AI service's 1800 s cap | Calls capped at the workspace `request_timeout_seconds` |
 | Patch step `INVALID_MODEL_OUTPUT` | The live test asked for a function that does not exist in that repository | Test now uses a task that fits the repository |
+| Patch and repair both `PATCH_INVALID` "missing content for …" (2026-11-04) | `content` was optional in the patch schema used as Ollama's decoding grammar, so the 7B model returned paths only | `content` is required (still nullable for deletes) |
+| A three-file change became a one-line patch after a repair (2026-11-04) | The repair, validated against the already-patched workspace, was stored as the run's patch on its own | Repairs are composed onto the earlier patch and stored cumulatively against the base commit |
+| PR approval stayed disabled although the repaired patch passed every check (2026-11-04) | The web gate counted the failed checks of the superseded attempt | The gate uses only the current patch's results |
 
 ## Known limits
 
