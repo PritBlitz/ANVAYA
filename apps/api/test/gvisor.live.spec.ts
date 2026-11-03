@@ -70,26 +70,32 @@ describe.skipIf(!enabled)('gVisor sandbox against real runsc', () => {
     // must stop the loop. They are reaped afterwards so the sandbox exits promptly.
     const res = await probe(
       [
-        'import os, signal',
+        'import os, signal, sys',
+        'def note(m):',
+        '    sys.stderr.write("[probe] " + m + "\\n"); sys.stderr.flush()',
         'pids = []',
         'try:',
-        '    with self.assertRaises(OSError):',
+        '    with self.assertRaises(OSError) as raised:',
         '        for _ in range(5000):',
         '            pid = os.fork()',
         '            if pid == 0:',
         '                signal.pause()',
         '                os._exit(0)',
         '            pids.append(pid)',
+        '            if len(pids) % 16 == 0: note("forked %d" % len(pids))',
+        '    note("fork refused after %d: %r" % (len(pids), raised.exception))',
         'finally:',
         '    for p in pids:',
         '        os.kill(p, signal.SIGKILL)',
         '    for p in pids:',
         '        os.waitpid(p, 0)',
+        '    note("reaped %d" % len(pids))',
         'self.assertLess(len(pids), 5000)',
       ].join('\n'),
     );
-    expect(res.error).toBeNull();
-    expect(res.exitCode, res.stderr).toBe(0);
+    const detail = JSON.stringify({ exitCode: res.exitCode, timedOut: res.timedOut, durationMs: res.durationMs, stdout: res.stdout.slice(-800), stderr: res.stderr.slice(-1500) });
+    expect(res.error, detail).toBeNull();
+    expect(res.exitCode, detail).toBe(0);
   });
 
   it('is killed at the wall-clock limit', async () => {
