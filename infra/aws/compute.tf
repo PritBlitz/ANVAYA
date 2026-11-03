@@ -11,23 +11,23 @@ locals {
 
   # Shared by the API service and the execution hosts' worker (same image, same config contract).
   control_plane_env = {
-    NODE_ENV                = "production"
-    PORT                    = "3001"
-    LOG_LEVEL               = "info"
-    PUBLIC_API_URL          = local.public_url
-    WEB_APP_URL             = local.public_url
-    WEB_ORIGINS             = local.public_url
-    TRUST_PROXY             = "true"
-    COOKIE_SECURE           = "true"
-    AUTH_DEV_LOGIN_ENABLED  = "false"
-    DATABASE_URL            = local.database_url
-    NODE_EXTRA_CA_CERTS     = "/app/certs/rds-global-bundle.pem"
-    AI_SERVICE_URL          = local.ai_internal
-    REPOSITORY_SOURCE       = "github"
-    STORAGE_DIR             = "/mnt/storage"
+    NODE_ENV               = "production"
+    PORT                   = "3001"
+    LOG_LEVEL              = "info"
+    PUBLIC_API_URL         = local.public_url
+    WEB_APP_URL            = local.public_url
+    WEB_ORIGINS            = local.public_url
+    TRUST_PROXY            = "true"
+    COOKIE_SECURE          = "true"
+    AUTH_DEV_LOGIN_ENABLED = "false"
+    DATABASE_URL           = local.database_url
+    NODE_EXTRA_CA_CERTS    = "/app/certs/rds-global-bundle.pem"
+    AI_SERVICE_URL         = local.ai_internal
+    REPOSITORY_SOURCE      = "github"
+    STORAGE_DIR            = "/mnt/storage"
     # No collector is deployed by this module; point OTLP at one (e.g. ADOT) to enable traces.
-    OTEL_TRACES_EXPORTER    = "none"
-    EXECUTION_DRIVER        = "gvisor"
+    OTEL_TRACES_EXPORTER     = "none"
+    EXECUTION_DRIVER         = "gvisor"
     SANDBOX_DEPENDENCY_FETCH = "disabled"
   }
   control_plane_secrets = {
@@ -104,7 +104,7 @@ resource "aws_service_discovery_service" "svc" {
 locals {
   task_defs = {
     web = {
-      cpu = 512, memory = 1024, port = 3000, image = local.images.web, role = aws_iam_role.no_access_task.arn
+      cpu     = 512, memory = 1024, port = 3000, image = local.images.web, role = aws_iam_role.no_access_task.arn
       command = null
       env = {
         NODE_ENV          = "production"
@@ -123,7 +123,7 @@ locals {
       health  = ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/v1/health/live >/dev/null || exit 1"]
     }
     ai = {
-      cpu = 1024, memory = 2048, port = 8001, image = local.images.ai, role = aws_iam_role.no_access_task.arn
+      cpu     = 1024, memory = 2048, port = 8001, image = local.images.ai, role = aws_iam_role.no_access_task.arn
       command = null
       env = {
         NODE_ENV           = "production"

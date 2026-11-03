@@ -49,15 +49,15 @@ resource "aws_launch_template" "execution" {
   }
 
   user_data = base64encode(templatefile("${path.module}/templates/execution-host.sh.tftpl", {
-    region          = var.region
-    api_image       = local.images.api
-    ecr_registry    = split("/", aws_ecr_repository.repo["api"].repository_url)[0]
-    sandbox_images  = join(" ", local.sandbox_images)
-    efs_id          = aws_efs_file_system.storage.id
-    efs_access      = aws_efs_access_point.storage.id
-    env             = merge(local.control_plane_env, { METRICS_PORT = "9464" })
-    secrets         = local.control_plane_secrets
-    log_group       = aws_cloudwatch_log_group.svc["worker"].name
+    region         = var.region
+    api_image      = local.images.api
+    ecr_registry   = split("/", aws_ecr_repository.repo["api"].repository_url)[0]
+    sandbox_images = join(" ", local.sandbox_images)
+    efs_id         = aws_efs_file_system.storage.id
+    efs_access     = aws_efs_access_point.storage.id
+    env            = merge(local.control_plane_env, { METRICS_PORT = "9464" })
+    secrets        = local.control_plane_secrets
+    log_group      = aws_cloudwatch_log_group.svc["worker"].name
   }))
 
   tag_specifications {

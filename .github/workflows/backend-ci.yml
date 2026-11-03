@@ -142,6 +142,22 @@ jobs:
       - run: pytest -q
       - run: pip-audit --skip-editable
 
+  # The deployable images build from a clean checkout (BuildKit; checksum-pinned downloads).
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the API / worker image
+        run: docker buildx build --load -t anvaya-api:ci apps/api
+      - name: Build the AI service image
+        run: docker buildx build --load -t anvaya-ai-service:ci services/ai-service
+      - name: The API image runs as the unprivileged user and ships the RDS CA bundle
+        run: |
+          test "$(docker run --rm --entrypoint id anvaya-api:ci -u)" != "0"
+          docker run --rm --entrypoint sh anvaya-api:ci -c 'grep -c "BEGIN CERTIFICATE" /app/certs/rds-global-bundle.pem'
+
   # AWS reference deployment (releases/V1.md: infrastructure as code, never applied from CI).
   terraform:
     runs-on: ubuntu-latest
