@@ -6,6 +6,73 @@ import type * as W from "./wire";
  * Samples follow the backend's documented responses (docs/backend/API_CONTRACT_NOTES.md),
  * not the fixture adapter, so these tests pin the integration boundary independently.
  */
+describe("task source and quota mappers", () => {
+  const task: W.WTask = {
+    id: "t1",
+    workspace_id: "w1",
+    repository_id: "r1",
+    created_by: "u1",
+    source_type: "failing_check",
+    external_number: null,
+    external_id: "31000000001",
+    source_url: "https://github.com/acme/api/runs/31000000001",
+    source_context: {
+      check_name: "test",
+      app: "github-actions",
+      conclusion: "failure",
+      head_sha: "a".repeat(40),
+      started_at: null,
+      completed_at: null,
+      pull_request_numbers: [],
+      output_title: null,
+      annotations: [],
+      annotations_total: 0,
+      annotations_truncated: false,
+    },
+    title: "Fix failing check: test",
+    description: "1 failed",
+    status: "open",
+    labels: [],
+    created_at: "2026-11-03T00:00:00.000Z",
+    updated_at: "2026-11-03T00:00:00.000Z",
+  };
+
+  it("tags imported context by source and keeps the check run id as text", () => {
+    const t = M.toTask(task);
+    expect(t).toMatchObject({
+      external_id: "31000000001",
+      source_context: { kind: "failing_check" },
+    });
+    // Manual/issue tasks get `{}` from the server, and older responses omit the fields.
+    expect(
+      M.toTask({ ...task, source_type: "manual", source_context: {} }).source_context,
+    ).toBeNull();
+    const legacy: W.WTask = { ...task, source_type: "manual" };
+    delete legacy.external_id;
+    delete legacy.source_url;
+    delete legacy.source_context;
+    expect(M.toTask(legacy)).toMatchObject({
+      external_id: null,
+      source_url: null,
+      source_context: null,
+    });
+  });
+
+  it("only keeps http(s) source links", () => {
+    expect(M.toTask({ ...task, source_url: "javascript:alert(1)" }).source_url).toBeNull();
+    expect(M.safeHttpUrl("https://github.com/a")).toBe("https://github.com/a");
+  });
+
+  it("reads configured quotas, dropping nulls", () => {
+    expect(
+      M.runQuotas({ settings: { run_quotas: { max_active_runs: 2, daily_runs: null } } }),
+    ).toEqual({
+      max_active_runs: 2,
+    });
+    expect(M.runQuotas(null)).toEqual({});
+  });
+});
+
 describe("wire → UI mappers", () => {
   it("maps index status: coverage, active job progress, limitations", () => {
     const w: W.WIndexStatus = {

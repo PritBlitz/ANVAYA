@@ -207,6 +207,29 @@ describe("retry policy", () => {
     expect(describeError(new Error("secret stack")).description).not.toMatch(/secret/);
   });
 
+  it("explains workspace quota and concurrency limits (FR-OBS-004)", () => {
+    const concurrency = describeError(
+      err(429, "CONCURRENCY_LIMIT_REACHED", { limit: 2, active_runs: 2 }),
+    );
+    expect(concurrency.title).toBe("Too many active runs");
+    expect(concurrency.description).toMatch(/allows 2 active runs/);
+    const tokens = describeError(
+      err(429, "QUOTA_EXCEEDED", {
+        quota: "daily_tokens",
+        limit: 50000,
+        used: 50100,
+        resets_at: "2026-11-04T00:00:00.000Z",
+        retry_after_seconds: 3600,
+      }),
+    );
+    expect(tokens.title).toBe("Daily token quota used up");
+    expect(tokens.description).toMatch(/midnight UTC/);
+    expect(describeError(err(429, "QUOTA_EXCEEDED", { quota: "daily_runs" })).title).toBe(
+      "Daily run quota used up",
+    );
+    expect(describeError(err(422, "CHECK_NOT_FAILING")).title).toMatch(/didn't fail/);
+  });
+
   it("explains hosted-provider outcomes without implying a fallback (B-1)", () => {
     const refused = describeError(
       new ApiError({ status: 422, code: "PROVIDER_REFUSED", message: "x" }),
