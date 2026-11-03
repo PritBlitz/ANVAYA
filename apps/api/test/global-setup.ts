@@ -10,7 +10,8 @@ const REDIS_URL = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/1';
  * migration from scratch (DATABASE.md §9: test migrations from empty).
  */
 export default async function setup(): Promise<void> {
-  if (!/\/anvaya_test(\?|$)/.test(DATABASE_URL)) {
+  // anvaya_test, or anvaya_test_<suffix> so parallel checkouts can each own a test database.
+  if (!/\/anvaya_test(_[a-z0-9]+)?(\?|$)/.test(DATABASE_URL)) {
     throw new Error(`Refusing to reset a non-test database: ${DATABASE_URL.replace(/:[^:@/]+@/, ':***@')}`);
   }
   const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 1 });
