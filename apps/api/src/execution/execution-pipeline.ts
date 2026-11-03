@@ -381,7 +381,7 @@ export class ExecutionPipeline extends ExecutionStages {
     const prepared = await spec.prepare(workspaceDir);
     if (!prepared.ok) return { ok: false, reason: `Dependencies were not installed: ${prepared.reason}` };
     const hash = createHash('sha256');
-    for (const f of prepared.stage) hash.update(f).update(' ').update(await readFile(join(workspaceDir, f)));
+    for (const f of prepared.stage) hash.update(f).update('\0').update(await readFile(join(workspaceDir, f)));
     const digest = hash.digest('hex');
     const dir = resolve(workspaceDir, '..', 'deps', spec.ecosystem);
     const marker = join(dir, '.anvaya-installed');
