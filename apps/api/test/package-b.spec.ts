@@ -218,7 +218,7 @@ describe('work package B: templates, migration plans, call graph, impact, worksp
       await as(outsider, 'patch', `/workspaces/${otherWs}/templates/${customId}`).send({ name: 'x' }).expect(404);
       const res = await as(admin, 'patch', `/workspaces/${ws}/templates/${customId}`).send({ planning_guidance: ['Do not change public interfaces.', 'Add a regression test.'] }).expect(200);
       expect(res.body.data.version).toBe(2);
-      const audit = await db(app).selectFrom('audit_events').select(['action', 'actor_user_id']).where('organization_id', '=', ws).where('resource_type', '=', 'workflow_template').orderBy('id').execute();
+      const audit = await db(app).selectFrom('audit_events').select(['action', 'actor_user_id']).where('organization_id', '=', ws).where('resource_type', '=', 'workflow_template').orderBy('created_at').execute();
       expect(audit.map((a) => a.action)).toEqual(['template.created', 'template.updated']);
       expect(audit.every((a) => a.actor_user_id === admin.id)).toBe(true);
     });
