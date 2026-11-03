@@ -43,6 +43,25 @@ export function runBudgetLimits(
 ): T.RunBudgets {
   return { ...DEFAULT_LIMITS, ...(w?.settings.run_budget_limits ?? {}) };
 }
+/** Configured workspace quotas (FR-OBS-004); nulls and absent keys mean unlimited. */
+export function runQuotas(w: Pick<W.WWorkspace, "settings"> | null | undefined): T.RunQuotas {
+  const out: T.RunQuotas = {};
+  for (const [k, v] of Object.entries(w?.settings.run_quotas ?? {})) {
+    if (typeof v === "number") out[k as keyof T.RunQuotas] = v;
+  }
+  return out;
+}
+
+export function toQuotaStatus(w: W.WQuotaStatus): T.QuotaStatus {
+  return {
+    active_runs: w.active_runs,
+    daily_runs: w.daily_runs,
+    daily_tokens: w.daily_tokens,
+    window_start: w.window_start,
+    resets_at: w.resets_at,
+  };
+}
+
 const DEFAULT_LIMITS: T.RunBudgets = {
   max_steps: 8,
   max_input_tokens: 6000,
@@ -436,6 +455,32 @@ function toRunSummary(w: W.WRunSummary, taskId: string): T.RunSummary {
   };
 }
 
+/** Only http(s) links are rendered; anything else from the server is dropped. */
+export function safeHttpUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Tags imported metadata with its source so the UI can narrow it; `{}` becomes null. */
+export function toTaskSourceContext(
+  source: W.WTask["source_type"],
+  ctx: W.WTask["source_context"],
+): T.TaskSourceContext | null {
+  if (!ctx || Object.keys(ctx).length === 0) return null;
+  if (source === "pull_request" && "head_branch" in ctx) {
+    return { kind: "pull_request", ...(ctx as W.WPullRequestContext) };
+  }
+  if (source === "failing_check" && "check_name" in ctx) {
+    return { kind: "failing_check", ...(ctx as W.WCheckFailureContext) };
+  }
+  return null;
+}
+
 export function toTask(w: W.WTask): T.EngineeringTask {
   return {
     id: w.id,
@@ -444,6 +489,9 @@ export function toTask(w: W.WTask): T.EngineeringTask {
     created_by: w.created_by,
     source_type: w.source_type,
     external_number: w.external_number,
+    external_id: w.external_id ?? null,
+    source_url: safeHttpUrl(w.source_url),
+    source_context: toTaskSourceContext(w.source_type, w.source_context),
     title: w.title,
     description: w.description,
     status: w.status,

@@ -94,6 +94,8 @@ export function createEndpoints(client: ApiClient) {
         client.get<T.AiPolicy>(`/workspaces/${enc(workspaceId)}/ai-policy`),
       updateAiPolicy: (workspaceId: string, body: T.UpdateAiPolicyRequest) =>
         client.patch<T.AiPolicy>(`/workspaces/${enc(workspaceId)}/ai-policy`, body),
+      quotas: async (workspaceId: string) =>
+        M.toQuotaStatus(await client.get<W.WQuotaStatus>(`/workspaces/${enc(workspaceId)}/quotas`)),
       usage: async (workspaceId: string, query?: { from?: string; to?: string }) =>
         M.toUsage(await client.get<W.WUsage>(`/workspaces/${enc(workspaceId)}/usage`, { query })),
       auditEvents: (workspaceId: string, params: T.AuditListParams = {}) =>
@@ -235,6 +237,11 @@ export function createEndpoints(client: ApiClient) {
             idempotencyKey,
           }),
         ),
+      /** Recent failing check runs on a branch/commit (defaults to the default branch). */
+      failingChecks: (repositoryId: string, ref?: string): Promise<T.FailingChecks> =>
+        client.get<W.WFailingChecks>(`/repositories/${enc(repositoryId)}/failing-checks`, {
+          query: ref ? { ref } : undefined,
+        }),
       createTask: async (repositoryId: string, body: T.CreateTaskRequest, idempotencyKey: string) =>
         M.toTask(
           await client.post<W.WTask>(`/repositories/${enc(repositoryId)}/tasks`, body, {

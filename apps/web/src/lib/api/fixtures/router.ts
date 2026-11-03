@@ -8,7 +8,7 @@
  * UI-model form and encoded at this boundary, so the real mappers run in fixtures mode.
  */
 import type * as T from "../types";
-import { ACTIVE_RUN_STATUSES, TERMINAL_RUN_STATUSES } from "../types";
+import { ACTIVE_RUN_STATUSES, CREATABLE_TASK_SOURCES, TERMINAL_RUN_STATUSES } from "../types";
 import type * as W from "../wire";
 import {
   contentHash,
@@ -384,6 +384,14 @@ function wRunDetail(state: FixtureState, run: FixtureRun): W.WRun {
   };
 }
 
+/** The server sends `{}` for manual and issue tasks, and the untagged metadata otherwise. */
+function wSourceContext(ctx: T.TaskSourceContext | null): NonNullable<W.WTask["source_context"]> {
+  if (!ctx) return {};
+  const { kind: _k, ...rest } = ctx;
+  void _k;
+  return rest;
+}
+
 function wTask(state: FixtureState, task: Scoped<T.EngineeringTask>): W.WTask {
   const repo = state.repositories.find((r) => r.id === task.repository_id);
   const latest = state.runs
@@ -396,6 +404,9 @@ function wTask(state: FixtureState, task: Scoped<T.EngineeringTask>): W.WTask {
     created_by: task.created_by,
     source_type: task.source_type,
     external_number: task.external_number,
+    external_id: task.external_id,
+    source_url: task.source_url,
+    source_context: wSourceContext(task.source_context),
     title: task.title,
     description: task.description,
     status: task.status,
@@ -835,9 +846,123 @@ route("PATCH", "/workspaces/:workspaceId", (req) => {
       ...ws.settings,
       retention: { ...ws.settings.retention, ...settings.retention },
     };
+  let quotaChange: { from: W.WRunQuotas; to: W.WRunQuotas } | null = null;
+  if (settings?.run_quotas) {
+    const from = { ...(ws.settings.run_quotas ?? {}) };
+    const to: W.WRunQuotas = { ...from };
+    for (const [k, v] of Object.entries(settings.run_quotas)) {
+      const key = k as keyof W.WRunQuotas;
+      const range = QUOTA_RANGES[key];
+      if (!range) throw validation(`settings.run_quotas.${k}`, "is not a known quota");
+      if (v === null) delete to[key];
+      else if (typeof v !== "number" || !Number.isInteger(v) || v < range[0] || v > range[1])
+        throw validation(
+          `settings.run_quotas.${k}`,
+          `must be an integer from ${range[0]} to ${range[1]}`,
+        );
+      else to[key] = v;
+    }
+    ws.settings = { ...ws.settings, run_quotas: to };
+    quotaChange = { from, to };
+  }
   ws.updated_at = iso(req.now);
   audit(req, ws.id, "workspace.updated", "workspace", ws.id, { fields: Object.keys(req.body) });
+  if (quotaChange) audit(req, ws.id, "workspace.quotas_updated", "workspace", ws.id, quotaChange);
   return ok(wWorkspace(req, ws));
+});
+
+const QUOTA_RANGES: Record<keyof W.WRunQuotas, [number, number]> = {
+  max_active_runs: [1, 1000],
+  daily_runs: [1, 100_000],
+  daily_tokens: [1000, 1_000_000_000],
+};
+
+/** Start of the UTC day containing `now` and the next UTC midnight. */
+function utcDay(now: number) {
+  const d = new Date(now);
+  const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return { start, end: start + 86_400_000 };
+}
+
+function quotaUsage(state: FixtureState, workspaceId: string, now: number) {
+  const { start } = utcDay(now);
+  const runs = state.runs.filter((r) => r.workspace_id === workspaceId);
+  const today = runs.filter((r) => Date.parse(r.created_at) >= start);
+  return {
+    active: runs.filter((r) => (ACTIVE_RUN_STATUSES as readonly string[]).includes(r.status))
+      .length,
+    runsToday: today.length,
+    // Fixture approximation of usage_records: tokens recorded by today's runs.
+    tokensToday: today.reduce(
+      (s, r) => s + (r.usage_summary.input_tokens ?? 0) + (r.usage_summary.output_tokens ?? 0),
+      0,
+    ),
+  };
+}
+
+/** FR-OBS-004: mirrors the API's checks when a run starts (or is retried). */
+function assertCanStartRun(req: FixtureRequest, workspaceId: string) {
+  const ws = req.state.workspaces.find((w) => w.id === workspaceId)!;
+  const q = ws.settings.run_quotas ?? {};
+  const u = quotaUsage(req.state, workspaceId, req.now);
+  const { end } = utcDay(req.now);
+  const retry_after_seconds = Math.max(1, Math.ceil((end - req.now) / 1000));
+  const resets_at = new Date(end).toISOString();
+  if (typeof q.max_active_runs === "number" && u.active >= q.max_active_runs)
+    throw new FixtureHttpError(
+      429,
+      "CONCURRENCY_LIMIT_REACHED",
+      `This workspace already has ${u.active} active run(s); its limit is ${q.max_active_runs}. Wait for a run to finish or cancel one.`,
+      { limit: q.max_active_runs, active_runs: u.active },
+    );
+  if (typeof q.daily_runs === "number" && u.runsToday >= q.daily_runs)
+    throw new FixtureHttpError(
+      429,
+      "QUOTA_EXCEEDED",
+      `This workspace has used its daily quota of ${q.daily_runs} run(s). It resets at ${resets_at}.`,
+      {
+        quota: "daily_runs",
+        limit: q.daily_runs,
+        used: u.runsToday,
+        resets_at,
+        retry_after_seconds,
+      },
+    );
+  if (typeof q.daily_tokens === "number" && u.tokensToday >= q.daily_tokens)
+    throw new FixtureHttpError(
+      429,
+      "QUOTA_EXCEEDED",
+      `This workspace has used its daily quota of ${q.daily_tokens} model tokens. It resets at ${resets_at}.`,
+      {
+        quota: "daily_tokens",
+        limit: q.daily_tokens,
+        used: u.tokensToday,
+        resets_at,
+        retry_after_seconds,
+      },
+    );
+}
+
+route("GET", "/workspaces/:workspaceId/quotas", (req) => {
+  membership(req, req.params.workspaceId!);
+  const ws = req.state.workspaces.find((w) => w.id === req.params.workspaceId)!;
+  const q = ws.settings.run_quotas ?? {};
+  const u = quotaUsage(req.state, ws.id, req.now);
+  const { start, end } = utcDay(req.now);
+  const entry = (limit: number | null | undefined, used: number): W.WQuotaEntry => ({
+    limit: limit ?? null,
+    used,
+    remaining: typeof limit === "number" ? Math.max(0, limit - used) : null,
+  });
+  const body: W.WQuotaStatus = {
+    workspace_id: ws.id,
+    active_runs: entry(q.max_active_runs, u.active),
+    daily_runs: entry(q.daily_runs, u.runsToday),
+    daily_tokens: entry(q.daily_tokens, u.tokensToday),
+    window_start: new Date(start).toISOString(),
+    resets_at: new Date(end).toISOString(),
+  };
+  return ok(body);
 });
 
 route("GET", "/workspaces/:workspaceId/members", (req) => {
@@ -1923,26 +2048,231 @@ route("DELETE", "/knowledge/:documentId", (req) => {
 
 // ── tasks & runs ─────────────────────────────────────────────────────────
 
+/**
+ * Simulated GitHub for task imports. PR numbers 1–999 exist; anything larger is outside
+ * what the installation can see (the server answers 403 FORBIDDEN). Check runs come from
+ * `fixtureCheckRuns`.
+ */
+const FIXTURE_HIDDEN_FROM = 1000;
+
+function fixtureCheckRuns(repo: { id: string; default_branch: string | null }) {
+  const sha = createHashLike(`${repo.id}:${repo.default_branch ?? "main"}`);
+  const base = 31_000_000_000 + (parseInt(repo.id.slice(-4), 16) || 0) * 10;
+  return [
+    {
+      id: base + 1,
+      name: "test (node 22)",
+      conclusion: "failure",
+      status: "completed",
+      head_sha: sha,
+      summary:
+        "1 failed, 212 passed. TokenRefresher › retries once on 401 — expected 1 call, got 2.",
+      annotations: [
+        {
+          path: "src/auth/token-refresher.ts",
+          start_line: 42,
+          end_line: 42,
+          level: "failure",
+          title: "retries once on 401",
+          message: "AssertionError: expected fetch to be called 1 time, but it was called 2 times",
+        },
+      ],
+    },
+    {
+      id: base + 2,
+      name: "typecheck",
+      conclusion: "timed_out",
+      status: "completed",
+      head_sha: sha,
+      summary: "The job exceeded the maximum execution time of 10 minutes.",
+      annotations: [],
+    },
+    {
+      id: base + 3,
+      name: "lint",
+      conclusion: "success",
+      status: "completed",
+      head_sha: sha,
+      summary: "No problems found.",
+      annotations: [],
+    },
+  ];
+}
+
+const FAILING_CONCLUSIONS = new Set(["failure", "timed_out", "startup_failure", "action_required"]);
+
+/** Deterministic 40-hex pseudo SHA (fixtures only). */
+function createHashLike(seed: string): string {
+  let h = 2166136261;
+  let out = "";
+  for (let i = 0; out.length < 40; i++) {
+    h ^= seed.charCodeAt(i % seed.length) + i;
+    h = Math.imul(h, 16777619) >>> 0;
+    out += h.toString(16).padStart(8, "0");
+  }
+  return out.slice(0, 40);
+}
+
+function positiveInt(value: unknown, field: string, message: string): number {
+  const n = Number(value);
+  if (value === undefined || !Number.isSafeInteger(n) || n < 1) throw validation(field, message);
+  return n;
+}
+
+route("GET", "/repositories/:repositoryId/failing-checks", (req) => {
+  const repo = findScoped(req, req.state.repositories, req.params.repositoryId!, "member");
+  const ref = req.query.get("ref") ?? repo.default_branch ?? "main";
+  if (!/^[A-Za-z0-9._/-]+$/.test(ref) || ref.includes(".."))
+    throw validation("ref", "must be a branch name or commit SHA");
+  const runs = ref === (repo.default_branch ?? "main") ? fixtureCheckRuns(repo) : [];
+  const body: W.WFailingChecks = {
+    ref,
+    check_runs: runs
+      .filter((r) => FAILING_CONCLUSIONS.has(r.conclusion))
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        conclusion: r.conclusion,
+        head_sha: r.head_sha,
+        html_url: `https://github.com/${repo.full_name}/runs/${r.id}`,
+        completed_at: iso(req.now - 3_600_000),
+        app: "github-actions",
+      })),
+  };
+  return ok(body);
+});
+
 route("POST", "/repositories/:repositoryId/tasks", (req) => {
-  strictBody(req, ["source_type", "title", "description", "external_number", "labels"]);
+  strictBody(req, [
+    "source_type",
+    "title",
+    "description",
+    "external_number",
+    "check_run_id",
+    "include_review_comments",
+    "labels",
+  ]);
   const repo = findScoped(req, req.state.repositories, req.params.repositoryId!, "member");
   const source_type = req.body.source_type as T.TaskSourceType;
-  if (source_type !== "manual" && source_type !== "github_issue")
-    throw validation("source_type", "must be manual or github_issue");
-  const labels = Array.isArray(req.body.labels)
+  if (!(CREATABLE_TASK_SOURCES as readonly string[]).includes(source_type))
+    throw validation("source_type", "must be manual, github_issue, pull_request or failing_check");
+  if (source_type !== "failing_check" && req.body.check_run_id !== undefined)
+    throw validation("check_run_id", "only accepted for failing_check tasks");
+  if (source_type !== "pull_request" && req.body.include_review_comments !== undefined)
+    throw validation("include_review_comments", "only accepted for pull_request tasks");
+  if (source_type === "failing_check" && req.body.external_number !== undefined)
+    throw validation("external_number", "use check_run_id for failing_check tasks");
+  let labels = Array.isArray(req.body.labels)
     ? (req.body.labels as unknown[]).filter((l): l is string => typeof l === "string").slice(0, 20)
     : [];
+  // Like the server: a caller-supplied title/description wins over the imported one.
+  const given = (field: "title" | "description", min: number, max: number) =>
+    req.body[field] === undefined ? undefined : str(req.body, field, { min, max });
   let title: string;
   let description: string;
   let external_number: number | null = null;
+  let external_id: string | null = null;
+  let source_url: string | null = null;
+  let source_context: T.TaskSourceContext | null = null;
   if (source_type === "github_issue") {
     if (req.body.title !== undefined || req.body.description !== undefined)
       throw validation("title", "is imported from the GitHub issue and must not be sent");
-    external_number = Number(req.body.external_number);
-    if (!Number.isInteger(external_number) || external_number < 1)
-      throw validation("external_number", "is required for GitHub issues");
+    external_number = positiveInt(
+      req.body.external_number,
+      "external_number",
+      "required for github_issue tasks",
+    );
     title = `Issue #${external_number} in ${repo.full_name}`;
     description = `Imported from GitHub issue #${external_number}. The issue body is treated as untrusted context.`;
+    source_url = `https://github.com/${repo.full_name}/issues/${external_number}`;
+  } else if (source_type === "pull_request") {
+    external_number = positiveInt(
+      req.body.external_number,
+      "external_number",
+      "required for pull_request tasks",
+    );
+    if (external_number >= FIXTURE_HIDDEN_FROM)
+      throw new FixtureHttpError(
+        403,
+        "FORBIDDEN",
+        "The GitHub App installation does not grant access to this resource.",
+      );
+    const headBranch = `feature/pr-${external_number}`;
+    const withComments = req.body.include_review_comments === true;
+    title = given("title", 1, 300) ?? `Pull request #${external_number} in ${repo.full_name}`;
+    description =
+      given("description", 1, 20000) ??
+      `Imported from pull request #${external_number}. The PR body is treated as untrusted context.`;
+    labels = labels.length > 0 ? labels : ["from-pr"];
+    source_url = `https://github.com/${repo.full_name}/pull/${external_number}`;
+    source_context = {
+      kind: "pull_request",
+      state: "open",
+      draft: false,
+      merged: false,
+      head_branch: headBranch,
+      head_sha: createHashLike(headBranch),
+      base_branch: repo.default_branch ?? "main",
+      base_sha: createHashLike(repo.default_branch ?? "main"),
+      changed_files: [
+        { path: "src/auth/token-refresher.ts", status: "modified", additions: 18, deletions: 6 },
+        { path: "src/auth/token-refresher.test.ts", status: "added", additions: 64, deletions: 0 },
+      ],
+      changed_files_total: 2,
+      changed_files_truncated: false,
+      review_comments: withComments
+        ? [
+            {
+              path: "src/auth/token-refresher.ts",
+              line: 42,
+              author: "reviewer",
+              body: "This still retries twice when the refresh itself returns 401.",
+            },
+          ]
+        : [],
+      review_comments_truncated: false,
+    };
+  } else if (source_type === "failing_check") {
+    const id = positiveInt(
+      req.body.check_run_id,
+      "check_run_id",
+      "required for failing_check tasks",
+    );
+    const check = fixtureCheckRuns(repo).find((c) => c.id === id);
+    if (!check)
+      throw new FixtureHttpError(
+        403,
+        "FORBIDDEN",
+        "The GitHub App installation does not grant access to this resource.",
+      );
+    if (!FAILING_CONCLUSIONS.has(check.conclusion))
+      throw new FixtureHttpError(
+        422,
+        "CHECK_NOT_FAILING",
+        "This check run has not failed, so there is no failure to fix.",
+        {
+          status: check.status,
+          conclusion: check.conclusion,
+        },
+      );
+    external_id = String(check.id);
+    title = given("title", 1, 300) ?? `Fix failing check: ${check.name}`;
+    description = given("description", 1, 20000) ?? check.summary;
+    source_url = `https://github.com/${repo.full_name}/runs/${check.id}`;
+    source_context = {
+      kind: "failing_check",
+      check_name: check.name,
+      app: "github-actions",
+      conclusion: check.conclusion,
+      head_sha: check.head_sha,
+      started_at: iso(req.now - 3_900_000),
+      completed_at: iso(req.now - 3_600_000),
+      pull_request_numbers: [],
+      output_title: check.conclusion === "failure" ? "1 test failed" : "Timed out",
+      annotations: check.annotations,
+      annotations_total: check.annotations.length,
+      annotations_truncated: false,
+    };
   } else {
     title = str(req.body, "title", { min: 4, max: 200 });
     description = str(req.body, "description", { min: 10, max: 10000 });
@@ -1955,6 +2285,9 @@ route("POST", "/repositories/:repositoryId/tasks", (req) => {
     created_by: req.state.session_user_id!,
     source_type,
     external_number,
+    external_id,
+    source_url,
+    source_context,
     title,
     description,
     status: "open",
@@ -2032,6 +2365,7 @@ route("POST", "/tasks/:taskId/runs", (req) => {
       `The ${mode} mode is not allowed by workspace policy. No other provider was used.`,
     );
   }
+  assertCanStartRun(req, task.workspace_id);
   const base_branch =
     typeof req.body.base_branch === "string" && req.body.base_branch.trim()
       ? req.body.base_branch.trim()
@@ -2145,6 +2479,7 @@ route("POST", "/runs/:runId/retry", (req) => {
   ) {
     throw new FixtureHttpError(409, "RUN_ALREADY_ACTIVE", "This task already has an active run.");
   }
+  assertCanStartRun(req, task.workspace_id);
   const next = createRun(
     req.state,
     task,

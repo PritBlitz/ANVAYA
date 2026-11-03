@@ -433,6 +433,12 @@ export interface EngineeringTask {
   created_by: UUID;
   source_type: TaskSourceType;
   external_number: number | null;
+  /** GitHub check run id (failing_check tasks). */
+  external_id: string | null;
+  /** Link to the imported issue, pull request or check run (http/https only). */
+  source_url: string | null;
+  /** Imported GitHub metadata (untrusted: render as text). Null for manual/issue tasks. */
+  source_context: TaskSourceContext | null;
   title: string;
   description: string;
   status: TaskStatus;
@@ -442,17 +448,113 @@ export interface EngineeringTask {
   updated_at: ISODateTime;
 }
 
+export interface PullRequestContext {
+  kind: "pull_request";
+  state: string;
+  draft: boolean;
+  merged: boolean;
+  head_branch: string;
+  head_sha: string;
+  base_branch: string;
+  base_sha: string;
+  changed_files: { path: string; status: string; additions: number; deletions: number }[];
+  changed_files_total: number;
+  changed_files_truncated: boolean;
+  review_comments: {
+    path: string | null;
+    line: number | null;
+    author: string | null;
+    body: string;
+  }[];
+  review_comments_truncated: boolean;
+}
+
+export interface CheckFailureContext {
+  kind: "failing_check";
+  check_name: string;
+  app: string | null;
+  conclusion: string;
+  head_sha: string;
+  started_at: string | null;
+  completed_at: string | null;
+  pull_request_numbers: number[];
+  output_title: string | null;
+  annotations: {
+    path: string;
+    start_line: number | null;
+    end_line: number | null;
+    level: string | null;
+    title: string | null;
+    message: string;
+  }[];
+  annotations_total: number;
+  annotations_truncated: boolean;
+}
+
+export type TaskSourceContext = PullRequestContext | CheckFailureContext;
+
 /**
- * Task creation. GitHub-issue tasks send only the issue number: the server imports the
- * title and body (as untrusted context). PR and failing-check sources are not yet
- * supported by the API.
+ * Task creation. GitHub-sourced tasks send only a reference (issue or PR number, or a
+ * check run id): the server imports title, body and metadata as untrusted context.
  */
 export type CreateTaskRequest =
   | { source_type: "manual"; title: string; description: string; labels?: string[] }
-  | { source_type: "github_issue"; external_number: number; labels?: string[] };
+  | { source_type: "github_issue"; external_number: number; labels?: string[] }
+  | {
+      source_type: "pull_request";
+      external_number: number;
+      include_review_comments?: boolean;
+      labels?: string[];
+    }
+  | { source_type: "failing_check"; check_run_id: number; labels?: string[] };
 
-/** Sources the API currently accepts for creation. */
-export const CREATABLE_TASK_SOURCES = ["manual", "github_issue"] as const;
+/** Sources the API accepts for creation. */
+export const CREATABLE_TASK_SOURCES = [
+  "manual",
+  "github_issue",
+  "pull_request",
+  "failing_check",
+] as const;
+
+/** A failing check run offered by GET /repositories/:id/failing-checks. */
+export interface FailingCheckRun {
+  id: number;
+  name: string;
+  conclusion: string;
+  head_sha: string;
+  html_url: string | null;
+  completed_at: ISODateTime | null;
+  app: string | null;
+}
+
+export interface FailingChecks {
+  ref: string;
+  check_runs: FailingCheckRun[];
+}
+
+// ── Quotas and concurrency limits (FR-OBS-004) ──────────────────────────────
+
+/** Admin-configured limits; an absent key means unlimited. */
+export interface RunQuotas {
+  max_active_runs?: number;
+  daily_runs?: number;
+  daily_tokens?: number;
+}
+
+export interface QuotaEntry {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+}
+
+export interface QuotaStatus {
+  active_runs: QuotaEntry;
+  daily_runs: QuotaEntry;
+  daily_tokens: QuotaEntry;
+  /** Daily quotas count from UTC midnight and reset at `resets_at`. */
+  window_start: ISODateTime;
+  resets_at: ISODateTime;
+}
 
 export interface UpdateTaskRequest {
   title?: string;

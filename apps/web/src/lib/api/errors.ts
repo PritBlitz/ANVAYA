@@ -103,6 +103,46 @@ const PROVIDER_ERRORS: Record<string, { title: string; description: string }> = 
   },
 };
 
+function formatResetTime(iso: unknown): string | null {
+  if (typeof iso !== "string") return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** FR-OBS-004 workspace limits, and task-import outcomes that need a specific hint. */
+function workspaceLimitError(error: ApiError): { title: string; description: string } | null {
+  const d = error.details as {
+    limit?: unknown;
+    active_runs?: unknown;
+    quota?: unknown;
+    resets_at?: unknown;
+  };
+  if (error.code === "CONCURRENCY_LIMIT_REACHED") {
+    const limit = typeof d.limit === "number" ? d.limit : null;
+    return {
+      title: "Too many active runs",
+      description: `This workspace allows ${limit ?? "a limited number of"} active run${limit === 1 ? "" : "s"} at a time, including runs waiting for approval. Finish, approve or cancel a run, then try again. An admin can raise the limit in AI settings.`,
+    };
+  }
+  if (error.code === "QUOTA_EXCEEDED") {
+    const reset = formatResetTime(d.resets_at);
+    const what = d.quota === "daily_tokens" ? "model-token" : "run";
+    return {
+      title: d.quota === "daily_tokens" ? "Daily token quota used up" : "Daily run quota used up",
+      description: `This workspace has used today's ${what} quota${typeof d.limit === "number" ? ` (${d.limit.toLocaleString()})` : ""}. It resets at midnight UTC${reset ? ` (${reset} your time)` : ""}. An admin can change the quota in AI settings.`,
+    };
+  }
+  if (error.code === "CHECK_NOT_FAILING") {
+    return {
+      title: "That check didn't fail",
+      description:
+        "Only failed, timed-out or action-required check runs can become tasks. Pick a failing check.",
+    };
+  }
+  return null;
+}
+
 /** Human-readable, safe message for any thrown value. Never surfaces stack traces. */
 export function describeError(error: unknown): {
   title: string;
@@ -130,6 +170,8 @@ export function describeError(error: unknown): {
     }
     return { title: provider.title, description, requestId };
   }
+  const limit = workspaceLimitError(error);
+  if (limit) return { ...limit, requestId };
   if (error.isNetwork) {
     return {
       title: "Can't reach Anvaya",
