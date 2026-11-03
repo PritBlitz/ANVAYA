@@ -1,6 +1,6 @@
 # Remaining work tracker
 
-Last updated: 2026-11-03. Update this file whenever an item changes state. A box is ticked only
+Last updated: 2026-11-03 (evening). Update this file whenever an item changes state. A box is ticked only
 after the item has been verified (tests run or behaviour observed), not just written.
 
 Overall: both branches are merged into `main` and pushed. On 2026-11-03 the whole stack was run together
@@ -32,9 +32,9 @@ frontend needed. B = backend side, F = frontend side.
 | X-1 | Register a GitHub App (dev) | App ID, private key file, webhook secret, OAuth client ID/secret, app slug. Permissions: contents R/W, pull requests R/W, issues R, metadata R. Webhook URL needs a public tunnel (e.g. smee.io) for local work | ☑ App configured; no webhook has been delivered yet (optional: only needed for push/issue events) |
 | X-2 | Live GitHub validation | X-1, plus a throwaway test repository: OAuth sign-in, install handshake, webhook delivery, index, PR creation | ☑ except webhook delivery |
 | X-3 | Live local model | Install Ollama; `ollama pull qwen2.5-coder:7b` and `nomic-embed-text`; then run Q&A and a run in `local` mode | ☑ Ollama runs in WSL. Its system service reads models from the C: drive, so for Anvaya a second instance serves `Z:\ollama\models` on port 11435 (`OLLAMA_BASE_URL=http://127.0.0.1:11435`) |
-| X-4 | CI | Push the branch so `.github/workflows/backend-ci.yml` actually runs, then fix whatever it reports | ☐ |
-| X-5 | Canonical docs | `Z:/ANVAYA/docs/*.md` (PRD, ARCHITECTURE, API_SPEC, …) are **untracked on every branch**. Commit them to `main` | ☐ |
-| X-6 | Release scope | `releases/V1.md` does not exist; both sessions used the ROADMAP phases as scope | ☐ write or confirm |
+| X-4 | CI | Push the branch so `.github/workflows/backend-ci.yml` actually runs, then fix whatever it reports | ☑ backend-ci (API, real gVisor, images, Terraform, AI service, secrets) and web-ci (checks, E2E in Chromium/Firefox/WebKit) green on `main` (2026-11-03) |
+| X-5 | Canonical docs | `Z:/ANVAYA/docs/*.md` (PRD, ARCHITECTURE, API_SPEC, …) are **untracked on every branch**. Commit them to `main` | ☑ committed 2026-11-03 |
+| X-6 | Release scope | `releases/V1.md` does not exist; both sessions used the ROADMAP phases as scope | ☑ `releases/V1.md` written 2026-11-03 |
 
 ## 3. Backend features not built yet
 
@@ -42,7 +42,7 @@ frontend needed. B = backend side, F = frontend side.
 |---|---|---|---|
 | B-1 | Hosted (cloud) inference adapter | Cloud mode currently fails with `PROVIDER_NOT_CONFIGURED`. Must keep explicit opt-in, disclosure and no silent fallback | ☑ opt-in Claude adapter |
 | B-2 | Knowledge notes in retrieval/Q&A | CRUD exists; notes are not yet chunked, embedded or retrieved | ☑ notes are chunked, embedded and cited |
-| B-3 | Production execution plane | The Docker driver is development-only and refused in production. Needs a microVM or dedicated sandbox service (SECURITY §7) | ☐ |
+| B-3 | Production execution plane | The Docker driver is development-only and refused in production. Needs a microVM or dedicated sandbox service (SECURITY §7) | ☑ gVisor driver (ADR-0002), hostile probes against real runsc in CI; independent security assessment still required |
 | B-4 | Dependency install in the sandbox | Network is always off, so only stdlib/no-dependency check profiles work. Needs a vetted, pre-built dependency cache or mirror | ☑ no-code-execution fetch step |
 | B-5 | Vector index | Exact scan per snapshot today; add an HNSW index when repositories get large | ☑ HNSW indexes |
 | B-6 | OpenTelemetry tracing | Prometheus metrics and structured logs exist; no traces | ☑ OpenTelemetry for API and worker |
@@ -75,3 +75,20 @@ infinite scroll beyond the audit log, WebKit/Firefox E2E, moving contract types 
 | Web Playwright on fixtures (desktop and mobile, axe) | ✅ 20 passed, 1 skipped by design |
 | Web Playwright on the live stack | ✅ 3 passed; PR step skipped (needs `LIVE_RUN=1`, opens a real PR) |
 | Local-model Q&A through the web origin | ✅ `qwen2.5-coder:7b`, 60s, code and knowledge citations |
+
+## 7. V1 hardening and release work (2026-11-03)
+
+| Item | Status |
+|---|---|
+| FR-WF-001 / FR-GIT-006: tasks from pull requests and failing checks | ☑ merged (migration 0006); not yet run against live GitHub (needs `pull_requests:read`, `checks:read`) |
+| FR-OBS-004: run quotas and concurrency limits | ☑ merged |
+| Security suite driven by `openapi.json` | ☑ `test/security.spec.ts` |
+| Retrieval benchmark + stop-word fix | ☑ `docs/evaluations/retrieval.md`; live-embedding numbers pending |
+| Workflow evaluation | ☑ `docs/evaluations/workflow.md` |
+| Backup/restore scripts and runbooks | ☑ tested restore (33 tables) |
+| Production-like deploy with automatic rollback | ☑ tested with a deliberately broken release |
+| Terraform AWS reference deployment | ☑ validated in CI, never applied |
+| Images: API (with pinned RDS CA bundle), AI service, web | ☑ built in CI |
+| Monotonic "latest job" ordering (migration 0007) | ☑ |
+| Team/advanced intelligence (templates, multi-provider, call graph, impact, test selection, cross-repo search, migration planning) | 🚧 in progress on a helper branch |
+| `packages/contracts` | ☐ after the helper branch merges |
