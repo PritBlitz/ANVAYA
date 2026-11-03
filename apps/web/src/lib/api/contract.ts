@@ -79,6 +79,8 @@ export type ContractChecks = [
   Expect<Fits<Item<Data<"/workspaces/{workspaceId}/audit-events", "get">>, W.WAuditEvent>>,
   Expect<Fits<Data<"/workspaces/{workspaceId}/ai-policy", "get">, W.WAiPolicy>>,
   Expect<Fits<Data<"/workspaces/{workspaceId}/usage", "get">, W.WUsage>>,
+  Expect<Fits<Data<"/workspaces/{workspaceId}/quotas", "get">, W.WQuotaStatus>>,
+  Expect<Fits<Data<"/repositories/{repositoryId}/failing-checks", "get">, W.WFailingChecks>>,
   Expect<Fits<Data<"/ai/providers/health-check", "post">, W.WProviderHealth>>,
   Expect<Fits<Data<"/integrations/github/install-url", "get">, W.WInstallUrl>>,
   Expect<Fits<Data<"/integrations/github/complete", "post">, W.WInstallation>>,

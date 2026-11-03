@@ -13,6 +13,7 @@ import { isActiveRun } from "@/lib/domain/status";
 import { useWorkspace } from "@/lib/workspace/context";
 import { formatDateTime, formatRelative } from "@/lib/utils/format";
 import { sourceLabel, SourceIcon } from "./tasks-screen";
+import { SourceContextCard } from "./source-context";
 import { StartRunForm } from "./start-run-form";
 
 export function TaskDetailScreen() {
@@ -32,13 +33,16 @@ export function TaskDetailScreen() {
   if (task.isError) return <ErrorState error={task.error} onRetry={() => task.refetch()} />;
   const t = task.data;
   const active = runs.data?.find((r) => isActiveRun(r.status));
+  // The server-provided link (http/https only, checked by the mapper) wins; older tasks
+  // without one fall back to the conventional GitHub URL.
   const githubUrl =
-    t.external_number &&
+    t.source_url ??
+    (t.external_number &&
     t.repository_full_name &&
     t.source_type !== "manual" &&
     t.source_type !== "failing_check"
       ? `https://github.com/${t.repository_full_name}/${t.source_type === "pull_request" ? "pull" : "issues"}/${t.external_number}`
-      : null;
+      : null);
 
   return (
     <PageContainer>
@@ -83,6 +87,7 @@ export function TaskDetailScreen() {
               <RichText text={t.description} />
             </CardBody>
           </Card>
+          {t.source_context && <SourceContextCard context={t.source_context} />}
           <section className="flex flex-col gap-3" aria-labelledby="runs-title">
             <SectionTitle>
               <span id="runs-title">Runs</span>

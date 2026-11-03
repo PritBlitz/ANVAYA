@@ -79,9 +79,33 @@ export interface WWorkspace {
   settings: {
     retention?: { snapshot_days?: number; run_artifact_days?: number; log_days?: number };
     run_budget_limits?: Partial<WRunBudget>;
+    /** FR-OBS-004. Absent = unlimited. On update, `null` removes a limit. */
+    run_quotas?: WRunQuotas;
   };
   created_at: ISO;
   updated_at: ISO;
+}
+
+export interface WRunQuotas {
+  max_active_runs?: number | null;
+  daily_runs?: number | null;
+  daily_tokens?: number | null;
+}
+
+export interface WQuotaEntry {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+}
+
+/** GET /workspaces/:id/quotas */
+export interface WQuotaStatus {
+  workspace_id: UUID;
+  active_runs: WQuotaEntry;
+  daily_runs: WQuotaEntry;
+  daily_tokens: WQuotaEntry;
+  window_start: ISO;
+  resets_at: ISO;
 }
 
 export interface WMember {
@@ -417,6 +441,11 @@ export interface WTask {
   created_by: UUID;
   source_type: "manual" | "github_issue" | "pull_request" | "failing_check";
   external_number: number | null;
+  /** Check run id for failing_check tasks (exceeds int4, so a string). */
+  external_id?: string | null;
+  source_url?: string | null;
+  /** Imported GitHub metadata. Untrusted content: render as text only. */
+  source_context?: WPullRequestContext | WCheckFailureContext | Record<string, never>;
   title: string;
   description: string;
   status: "open" | "active" | "completed" | "failed" | "cancelled" | "archived";
@@ -427,6 +456,61 @@ export interface WTask {
   latest_run?: WRunSummary | null;
   /** R2 */
   repository_full_name?: string;
+}
+
+export interface WPullRequestContext {
+  state: string;
+  draft: boolean;
+  merged: boolean;
+  head_branch: string;
+  head_sha: string;
+  base_branch: string;
+  base_sha: string;
+  changed_files: { path: string; status: string; additions: number; deletions: number }[];
+  changed_files_total: number;
+  changed_files_truncated: boolean;
+  review_comments: {
+    path: string | null;
+    line: number | null;
+    author: string | null;
+    body: string;
+  }[];
+  review_comments_truncated: boolean;
+}
+
+export interface WCheckFailureContext {
+  check_name: string;
+  app: string | null;
+  conclusion: string;
+  head_sha: string;
+  started_at: string | null;
+  completed_at: string | null;
+  pull_request_numbers: number[];
+  output_title: string | null;
+  annotations: {
+    path: string;
+    start_line: number | null;
+    end_line: number | null;
+    level: string | null;
+    title: string | null;
+    message: string;
+  }[];
+  annotations_total: number;
+  annotations_truncated: boolean;
+}
+
+/** GET /repositories/:id/failing-checks */
+export interface WFailingChecks {
+  ref: string;
+  check_runs: {
+    id: number;
+    name: string;
+    conclusion: string;
+    head_sha: string;
+    html_url: string | null;
+    completed_at: string | null;
+    app: string | null;
+  }[];
 }
 
 export interface WApproval {

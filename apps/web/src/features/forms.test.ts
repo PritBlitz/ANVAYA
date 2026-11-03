@@ -7,7 +7,7 @@ import type {
   WorkflowRun,
 } from "@/lib/api/types";
 import { createWorkspaceSchema } from "./onboarding/create-workspace-form";
-import { createTaskSchema } from "./tasks/create-task-dialog";
+import { createTaskSchema, toCreateTaskRequest } from "./tasks/create-task-dialog";
 import { clampBudgets } from "./tasks/start-run-form";
 import { inviteSchema } from "./settings/members-settings";
 import { formToPlan, planFormSchema, planToForm, undeclaredStepFiles } from "./runs/plan-schema";
@@ -58,6 +58,53 @@ describe("form validation", () => {
       title: expect.any(String),
       repository_id: "Choose a repository",
     });
+  });
+
+  it("validates pull-request and failing-check task sources and builds strict bodies", () => {
+    const base = {
+      repository_id: "r",
+      title: "",
+      description: "",
+      start_now: false,
+    };
+    expect(
+      errorsOf(
+        createTaskSchema.safeParse({ ...base, source_type: "pull_request", external_number: "x" }),
+      ),
+    ).toHaveProperty("external_number");
+    expect(
+      errorsOf(
+        createTaskSchema.safeParse({ ...base, source_type: "failing_check", check_run_id: "" }),
+      ),
+    ).toHaveProperty("check_run_id");
+    const pr = createTaskSchema.parse({
+      ...base,
+      source_type: "pull_request",
+      external_number: "87",
+      include_review_comments: true,
+    });
+    expect(toCreateTaskRequest(pr)).toEqual({
+      source_type: "pull_request",
+      external_number: 87,
+      include_review_comments: true,
+    });
+    const check = createTaskSchema.parse({
+      ...base,
+      source_type: "failing_check",
+      check_run_id: "31000000001",
+      external_number: "5",
+    });
+    // Only the check run id is sent: the server rejects external_number for failing checks.
+    expect(toCreateTaskRequest(check)).toEqual({
+      source_type: "failing_check",
+      check_run_id: 31000000001,
+    });
+    const issue = createTaskSchema.parse({
+      ...base,
+      source_type: "github_issue",
+      external_number: "9",
+    });
+    expect(toCreateTaskRequest(issue)).toEqual({ source_type: "github_issue", external_number: 9 });
   });
 
   it("validates invitations and pull requests", () => {

@@ -76,19 +76,97 @@ export const DEFAULT_RUN_BUDGET: RunBudget = {
   max_repair_attempts: 1,
 };
 
+export const TASK_SOURCE_TYPES = ['manual', 'github_issue', 'pull_request', 'failing_check'] as const;
+
 export const createTaskBody = z
   .object({
-    source_type: z.enum(['manual', 'github_issue']),
+    source_type: z.enum(TASK_SOURCE_TYPES),
     title: z.string().trim().min(1).max(300).optional(),
     description: z.string().trim().min(1).max(20_000).optional(),
-    external_number: z.number().int().positive().optional(),
+    /** Issue number (`github_issue`) or pull request number (`pull_request`). */
+    external_number: z.number().int().positive().max(2_147_483_647).optional(),
+    /** GitHub check run id (`failing_check`). */
+    check_run_id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+    /** `pull_request` only: also import the first review comments as untrusted context. */
+    include_review_comments: z.boolean().optional(),
     labels: z.array(z.string().trim().min(1).max(50)).max(20).default([]),
   })
   .strict()
   .superRefine((b, ctx) => {
     if (b.source_type === 'manual' && (!b.title || !b.description)) ctx.addIssue({ code: 'custom', path: ['title'], message: 'title and description are required for manual tasks' });
-    if (b.source_type === 'github_issue' && !b.external_number) ctx.addIssue({ code: 'custom', path: ['external_number'], message: 'required for github_issue tasks' });
+    if ((b.source_type === 'github_issue' || b.source_type === 'pull_request') && !b.external_number) {
+      ctx.addIssue({ code: 'custom', path: ['external_number'], message: `required for ${b.source_type} tasks` });
+    }
+    if (b.source_type === 'failing_check' && b.external_number !== undefined) ctx.addIssue({ code: 'custom', path: ['external_number'], message: 'use check_run_id for failing_check tasks' });
+    if (b.source_type === 'failing_check' && !b.check_run_id) ctx.addIssue({ code: 'custom', path: ['check_run_id'], message: 'required for failing_check tasks' });
+    if (b.source_type !== 'failing_check' && b.check_run_id !== undefined) ctx.addIssue({ code: 'custom', path: ['check_run_id'], message: 'only accepted for failing_check tasks' });
+    if (b.source_type !== 'pull_request' && b.include_review_comments !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['include_review_comments'], message: 'only accepted for pull_request tasks' });
+    }
   });
+
+// Response shapes of imported task context (task-sources.ts). Untrusted content: render as text.
+const prContextSchema = z
+  .object({
+    state: z.string(),
+    draft: z.boolean(),
+    merged: z.boolean(),
+    head_branch: z.string(),
+    head_sha: z.string(),
+    base_branch: z.string(),
+    base_sha: z.string(),
+    changed_files: z.array(z.object({ path: z.string(), status: z.string(), additions: z.number().int(), deletions: z.number().int() })),
+    changed_files_total: z.number().int(),
+    changed_files_truncated: z.boolean(),
+    review_comments: z.array(z.object({ path: z.string().nullable(), line: z.number().int().nullable(), author: z.string().nullable(), body: z.string() })),
+    review_comments_truncated: z.boolean(),
+  })
+  .strict();
+const checkContextSchema = z
+  .object({
+    check_name: z.string(),
+    app: z.string().nullable(),
+    conclusion: z.string(),
+    head_sha: z.string(),
+    started_at: z.string().nullable(),
+    completed_at: z.string().nullable(),
+    pull_request_numbers: z.array(z.number().int()),
+    output_title: z.string().nullable(),
+    annotations: z.array(
+      z.object({ path: z.string(), start_line: z.number().int().nullable(), end_line: z.number().int().nullable(), level: z.string().nullable(), title: z.string().nullable(), message: z.string() }),
+    ),
+    annotations_total: z.number().int(),
+    annotations_truncated: z.boolean(),
+  })
+  .strict();
+/** `source_context`: pull-request metadata, failing-check metadata, or `{}` (manual and issue tasks). */
+export const taskSourceContextSchema = z.union([prContextSchema, checkContextSchema, z.object({}).strict()]);
+
+export const failingCheckView = z.object({
+  ref: z.string(),
+  check_runs: z.array(
+    z.object({
+      id: z.number().int(),
+      name: z.string(),
+      conclusion: z.string(),
+      head_sha: z.string(),
+      html_url: z.string().nullable(),
+      completed_at: z.string().nullable(),
+      app: z.string().nullable(),
+    }),
+  ),
+});
+
+/** `GET /repositories/:id/failing-checks`: a branch name or a commit SHA; defaults to the default branch. */
+export const failingChecksQuery = z.object({
+  ref: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[A-Za-z0-9._/-]+$/)
+    .refine((b) => !b.includes('..') && !b.startsWith('/') && !b.endsWith('/'))
+    .optional(),
+});
 
 export const updateTaskBody = z
   .object({

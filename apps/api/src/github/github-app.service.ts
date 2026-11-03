@@ -14,6 +14,9 @@ export type GithubPermissions = Partial<Record<'contents' | 'metadata' | 'pull_r
 export const PERMISSION_SETS = {
   read: { contents: 'read', metadata: 'read' },
   readIssues: { contents: 'read', metadata: 'read', issues: 'read', pull_requests: 'read' },
+  readIssue: { metadata: 'read', issues: 'read' },
+  readPullRequest: { metadata: 'read', pull_requests: 'read' },
+  readChecks: { metadata: 'read', checks: 'read' },
   writePullRequest: { contents: 'write', metadata: 'read', pull_requests: 'write' },
 } as const satisfies Record<string, GithubPermissions>;
 
@@ -54,6 +57,65 @@ export const githubIssue = z.object({
   pull_request: z.unknown().optional(),
 });
 export type GithubIssue = z.infer<typeof githubIssue>;
+
+const ref = z.object({ ref: z.string(), sha: z.string() });
+export const githubPullRequest = z.object({
+  number: z.number().int(),
+  title: z.string(),
+  body: z.string().nullable().optional(),
+  html_url: z.string(),
+  state: z.string(),
+  draft: z.boolean().optional(),
+  merged: z.boolean().optional(),
+  head: ref,
+  base: ref,
+  changed_files: z.number().int().optional(),
+  labels: z.array(z.union([z.string(), z.object({ name: z.string().optional() })])).default([]),
+});
+export type GithubPullRequest = z.infer<typeof githubPullRequest>;
+export const githubPullRequestFile = z.object({ filename: z.string(), status: z.string(), additions: z.number().int().default(0), deletions: z.number().int().default(0) });
+export type GithubPullRequestFile = z.infer<typeof githubPullRequestFile>;
+export const githubReviewComment = z.object({
+  path: z.string().nullable().optional(),
+  line: z.number().int().nullable().optional(),
+  body: z.string().default(''),
+  user: z.object({ login: z.string() }).nullable().optional(),
+});
+export type GithubReviewComment = z.infer<typeof githubReviewComment>;
+export const githubCheckRun = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  head_sha: z.string(),
+  status: z.string(),
+  conclusion: z.string().nullable().optional(),
+  html_url: z.string().nullable().optional(),
+  started_at: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  output: z
+    .object({
+      title: z.string().nullable().optional(),
+      summary: z.string().nullable().optional(),
+      text: z.string().nullable().optional(),
+      annotations_count: z.number().int().default(0),
+    })
+    .default({ annotations_count: 0 }),
+  app: z.object({ slug: z.string().optional(), name: z.string().optional() }).nullable().optional(),
+  pull_requests: z.array(z.object({ number: z.number().int() })).default([]),
+});
+export type GithubCheckRun = z.infer<typeof githubCheckRun>;
+export const githubCheckAnnotation = z.object({
+  path: z.string(),
+  start_line: z.number().int().nullable().optional(),
+  end_line: z.number().int().nullable().optional(),
+  annotation_level: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  message: z.string().nullable().optional(),
+});
+export type GithubCheckAnnotation = z.infer<typeof githubCheckAnnotation>;
+const checkRunList = z.object({ total_count: z.number().int(), check_runs: z.array(githubCheckRun) });
+
+/** Bounds on what is read from GitHub for one task import (CLAUDE.md §9). */
+export const IMPORT_LIMITS = { prFiles: 100, reviewComments: 30, annotations: 50, checkRuns: 50 } as const;
 
 const pullRequestSchema = z.object({ id: z.number().int(), number: z.number().int(), html_url: z.string(), head: z.object({ sha: z.string(), ref: z.string() }) });
 
@@ -145,8 +207,47 @@ export class GithubAppService {
 
   /** Reads one issue (FR-GIT-006). Issue text is untrusted content. */
   async getIssue(installationId: number, repositoryId: number, fullName: string, issueNumber: number): Promise<GithubIssue> {
-    const token = await this.installationToken(installationId, { metadata: 'read', issues: 'read' }, [repositoryId]);
+    const token = await this.installationToken(installationId, PERMISSION_SETS.readIssue, [repositoryId]);
     return this.call(`/repos/${encodePath(fullName)}/issues/${issueNumber}`, githubIssue, { auth: `token ${token}` });
+  }
+
+  /**
+   * Reads one pull request, its changed-file list (first page) and, when asked,
+   * its first review comments (FR-GIT-006). All of it is untrusted content.
+   */
+  async getPullRequest(
+    installationId: number,
+    repositoryId: number,
+    fullName: string,
+    prNumber: number,
+    opts: { includeReviewComments: boolean },
+  ): Promise<{ pr: GithubPullRequest; files: GithubPullRequestFile[]; comments: GithubReviewComment[] }> {
+    const token = await this.installationToken(installationId, PERMISSION_SETS.readPullRequest, [repositoryId]);
+    const auth = `token ${token}`;
+    const base = `/repos/${encodePath(fullName)}/pulls/${prNumber}`;
+    const pr = await this.call(base, githubPullRequest, { auth });
+    const files = await this.call(`${base}/files?per_page=${IMPORT_LIMITS.prFiles}`, z.array(githubPullRequestFile), { auth });
+    const comments = opts.includeReviewComments ? await this.call(`${base}/comments?per_page=${IMPORT_LIMITS.reviewComments}`, z.array(githubReviewComment), { auth }) : [];
+    return { pr, files: files.slice(0, IMPORT_LIMITS.prFiles), comments: comments.slice(0, IMPORT_LIMITS.reviewComments) };
+  }
+
+  /** Reads one check run and its first annotations (FR-WF-001). Output text is untrusted content. */
+  async getCheckRun(installationId: number, repositoryId: number, fullName: string, checkRunId: number): Promise<{ check: GithubCheckRun; annotations: GithubCheckAnnotation[] }> {
+    const token = await this.installationToken(installationId, PERMISSION_SETS.readChecks, [repositoryId]);
+    const auth = `token ${token}`;
+    const base = `/repos/${encodePath(fullName)}/check-runs/${checkRunId}`;
+    const check = await this.call(base, githubCheckRun, { auth });
+    const annotations = check.output.annotations_count > 0 ? await this.call(`${base}/annotations?per_page=${IMPORT_LIMITS.annotations}`, z.array(githubCheckAnnotation), { auth }) : [];
+    return { check, annotations: annotations.slice(0, IMPORT_LIMITS.annotations) };
+  }
+
+  /** Latest completed check runs for a branch or commit (to pick a failing one). */
+  async listCheckRuns(installationId: number, repositoryId: number, fullName: string, ref: string): Promise<GithubCheckRun[]> {
+    const token = await this.installationToken(installationId, PERMISSION_SETS.readChecks, [repositoryId]);
+    const res = await this.call(`/repos/${encodePath(fullName)}/commits/${ref.split('/').map(encodeURIComponent).join('/')}/check-runs?filter=latest&status=completed&per_page=${IMPORT_LIMITS.checkRuns}`, checkRunList, {
+      auth: `token ${token}`,
+    });
+    return res.check_runs.slice(0, IMPORT_LIMITS.checkRuns);
   }
 
   // ---------------------------------------------------------------------------

@@ -270,6 +270,11 @@ export interface EngineeringTasksTable {
   created_by: string;
   source_type: TaskSourceType;
   external_number: number | null;
+  /** Non-numeric or > int4 external ids (a GitHub check run id). */
+  external_id: Generated<string | null>;
+  source_url: Generated<string | null>;
+  /** Bounded, redacted metadata imported from GitHub. Untrusted content. */
+  source_context: Json<JsonObject>;
   title: string;
   description: string;
   status: Generated<TaskStatus>;

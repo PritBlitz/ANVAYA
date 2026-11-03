@@ -14,7 +14,7 @@ import { createKnowledgeBody, listKnowledgeQuery } from '../knowledge/knowledge.
 import { createRepositoryBody, listRepositoriesQuery, queueIndexBody, updateRepositoryBody } from '../repositories/repositories.schemas.js';
 import { dispositionBody, prApprovalBody, pullRequestBody } from '../review/review.service.js';
 import { cancelBody, sseQuery } from '../runs/runs.controller.js';
-import { createTaskBody, editPlanBody, listRunsQuery, listTasksQuery, planApprovalBody, planSchema, startRunBody, updateTaskBody } from '../runs/run.schemas.js';
+import { createTaskBody, editPlanBody, failingChecksQuery, failingCheckView, listRunsQuery, listTasksQuery, planApprovalBody, planSchema, startRunBody, updateTaskBody } from '../runs/run.schemas.js';
 import {
   acceptInvitationBody,
   changeRoleBody,
@@ -23,6 +23,7 @@ import {
   inviteBody,
   invitationView,
   memberView,
+  quotaStatusView,
   updateWorkspaceBody,
   workspaceView,
 } from '../workspaces/workspaces.schemas.js';
@@ -121,6 +122,7 @@ export const ROUTES: RouteDoc[] = [
   { method: 'get', path: '/workspaces/{workspaceId}/ai-policy', tag: 'AI', summary: 'Read provider policy', status: 200 },
   { method: 'patch', path: '/workspaces/{workspaceId}/ai-policy', tag: 'AI', summary: 'Update provider policy (admin+)', status: 200, body: updateAiPolicyBody },
   { method: 'post', path: '/ai/providers/health-check', tag: 'AI', summary: 'Check a provider permitted by policy', status: 200, body: healthCheckBody, workspaceHeader: true },
+  { method: 'get', path: '/workspaces/{workspaceId}/quotas', tag: 'AI', summary: 'Run quotas and concurrency limits with current usage (FR-OBS-004)', status: 200, response: quotaStatusView },
   { method: 'get', path: '/workspaces/{workspaceId}/usage', tag: 'AI', summary: 'Usage summary', status: 200, query: usageQuery },
 
   // Knowledge
@@ -130,11 +132,20 @@ export const ROUTES: RouteDoc[] = [
   { method: 'delete', path: '/knowledge/{documentId}', tag: 'Knowledge', summary: 'Remove document (author or admin)', status: 204 },
 
   // Tasks & runs
-  { method: 'post', path: '/repositories/{repositoryId}/tasks', tag: 'Tasks', summary: 'Create task (manual or GitHub issue)', status: 201, body: createTaskBody, idempotency: 'optional' },
+  { method: 'post', path: '/repositories/{repositoryId}/tasks', tag: 'Tasks', summary: 'Create task (manual, GitHub issue, pull request or failing check run)', status: 201, body: createTaskBody, idempotency: 'optional' },
+  {
+    method: 'get',
+    path: '/repositories/{repositoryId}/failing-checks',
+    tag: 'Tasks',
+    summary: 'Recent failing check runs on a branch or commit (member+; for failing_check tasks)',
+    status: 200,
+    query: failingChecksQuery,
+    response: failingCheckView,
+  },
   { method: 'get', path: '/tasks', tag: 'Tasks', summary: 'List tasks (with repository_full_name and latest_run)', status: 200, query: listTasksQuery, paginated: true, workspaceHeader: true },
   { method: 'get', path: '/tasks/{taskId}', tag: 'Tasks', summary: 'Task detail', status: 200 },
   { method: 'patch', path: '/tasks/{taskId}', tag: 'Tasks', summary: 'Update task metadata', status: 200, body: updateTaskBody },
-  { method: 'post', path: '/tasks/{taskId}/runs', tag: 'Runs', summary: 'Start workflow run (budgets clamped to policy)', status: 202, body: startRunBody, idempotency: 'optional' },
+  { method: 'post', path: '/tasks/{taskId}/runs', tag: 'Runs', summary: 'Start workflow run (budgets clamped to policy; 429 CONCURRENCY_LIMIT_REACHED / QUOTA_EXCEEDED)', status: 202, body: startRunBody, idempotency: 'optional' },
   { method: 'get', path: '/tasks/{taskId}/runs', tag: 'Runs', summary: 'List task runs', status: 200, query: paginationQuery, paginated: true },
   { method: 'get', path: '/runs', tag: 'Runs', summary: 'List workspace runs (repeat status= to filter by several)', status: 200, query: listRunsQuery, paginated: true, workspaceHeader: true },
   { method: 'get', path: '/runs/{runId}', tag: 'Runs', summary: 'Run detail (with approvals and pull_request)', status: 200 },

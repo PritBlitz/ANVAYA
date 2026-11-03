@@ -22,7 +22,8 @@ returning fake success.
 | Q&A | `POST /repositories/:id/questions` | ✅ (contract verified against the real FastAPI service in mock mode; not yet run against a live Ollama model) |
 | Knowledge | `GET/POST /repositories/:id/knowledge`, `GET/DELETE /knowledge/:id` | ✅ CRUD. Notes are **not yet included in retrieval/Q&A**. |
 | AI service | `services/ai-service`: mock + Ollama adapters, prompts, schemas, embeddings | ✅ 26 pytest tests. Hosted (cloud) adapter not implemented: cloud requests fail with `PROVIDER_NOT_CONFIGURED`. |
-| Tasks | `POST /repositories/:id/tasks` (manual + GitHub issue), `GET /tasks`, `GET/PATCH /tasks/:id` | ✅ |
+| Tasks | `POST /repositories/:id/tasks` (manual, GitHub issue, pull request, failing check run), `GET /repositories/:id/failing-checks`, `GET /tasks`, `GET/PATCH /tasks/:id` | ✅ against a fake GitHub that verifies the App JWT and least-privilege installation tokens (`pull_requests:read`, `checks:read`). **Not yet run against real GitHub.** |
+| Quotas | `settings.run_quotas` via `PATCH /workspaces/:id` (admin+, audited), `GET /workspaces/:id/quotas`; enforced at run start/retry (429 `CONCURRENCY_LIMIT_REACHED` / `QUOTA_EXCEEDED` + `Retry-After`) and before every workflow and Q&A model call | ✅ (FR-OBS-004) |
 | Runs | `POST /tasks/:id/runs`, `GET /tasks/:id/runs`, `GET /runs` (workspace list), `GET /runs/:id` (with approvals, PR), `POST /runs/:id/cancel`, `POST /runs/:id/retry`, `GET /runs/:id/steps`, `GET /runs/:id/artifacts` | ✅ (retrieval → investigation → planning; worker-driven; verified end-to-end with real worker + real AI service in mock mode) |
 | Plan | `GET/PATCH /runs/:id/plan`, `POST /runs/:id/plan-approval` | ✅ approval bound to plan hash |
 | SSE | `GET /runs/:id/events` | ✅ replay + live |
@@ -32,6 +33,8 @@ returning fake success.
 
 ## Not implemented / known limitations
 
+* No webhook-driven "create a task from this failing check" path: `check_run`/`check_suite` events are not consumed; PR and failing-check tasks are created through the API only.
+* PR and failing-check tasks run against the latest indexed default-branch snapshot, not the PR head.
 * Hosted (cloud) inference adapter — cloud mode fails explicitly with `PROVIDER_NOT_CONFIGURED`.
 * Knowledge documents are stored but not yet part of retrieval/Q&A.
 * No live Ollama or live GitHub verification in this environment (no model runtime / App credentials).

@@ -13,6 +13,8 @@ import {
   type CreateWorkspaceBody,
   retentionSettingsSchema,
   runBudgetLimitsSchema,
+  type RunQuotas,
+  runQuotasSchema,
   type UpdateWorkspaceBody,
   type WorkspaceSettings,
 } from './workspaces.schemas.js';
@@ -41,6 +43,17 @@ export function workspaceSettingsView(settings: Record<string, unknown>): Worksp
   if (retention.success) out.retention = retention.data;
   const limits = runBudgetLimitsSchema.safeParse(settings.run_budget_limits);
   if (limits.success) out.run_budget_limits = limits.data;
+  const quotas = storedRunQuotas(settings);
+  if (Object.keys(quotas).length > 0) out.run_quotas = quotas;
+  return out;
+}
+
+/** The workspace's configured quotas; malformed or null entries count as unlimited. */
+export function storedRunQuotas(settings: Record<string, unknown>): RunQuotas {
+  const parsed = runQuotasSchema.safeParse(settings.run_quotas);
+  if (!parsed.success) return {};
+  const out: RunQuotas = {};
+  for (const [k, v] of Object.entries(parsed.data) as Array<[keyof RunQuotas, number | null | undefined]>) if (typeof v === 'number') out[k] = v;
   return out;
 }
 
@@ -121,6 +134,17 @@ export class WorkspacesService {
       if (body.settings?.run_budget_limits) {
         settings.run_budget_limits = { ...(settings.run_budget_limits as object | undefined), ...body.settings.run_budget_limits };
       }
+      let quotaChange: { from: RunQuotas; to: RunQuotas } | null = null;
+      if (body.settings?.run_quotas) {
+        const from = storedRunQuotas(current.settings);
+        const to: RunQuotas = { ...from };
+        for (const [k, v] of Object.entries(body.settings.run_quotas) as Array<[keyof RunQuotas, number | null | undefined]>) {
+          if (v === null) delete to[k];
+          else if (v !== undefined) to[k] = v;
+        }
+        settings.run_quotas = to;
+        quotaChange = { from, to };
+      }
       const org = await tx
         .updateTable('organizations')
         .set({ ...(body.name ? { name: body.name } : {}), settings: json(settings) })
@@ -131,6 +155,12 @@ export class WorkspacesService {
         { organizationId: workspaceId, actorUserId: userId, action: 'workspace.updated', resourceType: 'workspace', resourceId: workspaceId, metadata: { fields: Object.keys(body) } },
         tx,
       );
+      if (quotaChange) {
+        await this.audit.record(
+          { organizationId: workspaceId, actorUserId: userId, action: 'workspace.quotas_updated', resourceType: 'workspace', resourceId: workspaceId, metadata: { from: quotaChange.from, to: quotaChange.to } },
+          tx,
+        );
+      }
       return toWorkspaceView(org, role);
     });
   }

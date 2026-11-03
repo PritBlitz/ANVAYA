@@ -711,6 +711,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{workspaceId}/quotas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run quotas and concurrency limits with current usage (FR-OBS-004) */
+        get: operations["get_workspaces_workspaceId_quotas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{workspaceId}/usage": {
         parameters: {
             query?: never;
@@ -773,8 +790,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create task (manual or GitHub issue) */
+        /** Create task (manual, GitHub issue, pull request or failing check run) */
         post: operations["post_repositories_repositoryId_tasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repositories/{repositoryId}/failing-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent failing check runs on a branch or commit (member+; for failing_check tasks) */
+        get: operations["get_repositories_repositoryId_failing_checks"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -826,7 +860,7 @@ export interface paths {
         /** List task runs */
         get: operations["get_tasks_taskId_runs"];
         put?: never;
-        /** Start workflow run (budgets clamped to policy) */
+        /** Start workflow run (budgets clamped to policy; 429 CONCURRENCY_LIMIT_REACHED / QUOTA_EXCEEDED) */
         post: operations["post_tasks_taskId_runs"];
         delete?: never;
         options?: never;
@@ -2226,6 +2260,11 @@ export interface operations {
                                     max_changed_files?: number;
                                     max_repair_attempts?: number;
                                 };
+                                run_quotas?: {
+                                    max_active_runs?: number | null;
+                                    daily_runs?: number | null;
+                                    daily_tokens?: number | null;
+                                };
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -2351,6 +2390,11 @@ export interface operations {
                                     max_changed_files?: number;
                                     max_repair_attempts?: number;
                                 };
+                                run_quotas?: {
+                                    max_active_runs?: number | null;
+                                    daily_runs?: number | null;
+                                    daily_tokens?: number | null;
+                                };
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -2468,6 +2512,11 @@ export interface operations {
                                     max_changed_files?: number;
                                     max_repair_attempts?: number;
                                 };
+                                run_quotas?: {
+                                    max_active_runs?: number | null;
+                                    daily_runs?: number | null;
+                                    daily_tokens?: number | null;
+                                };
                             };
                             /** Format: date-time */
                             created_at: string;
@@ -2574,6 +2623,11 @@ export interface operations {
                             max_changed_files?: number;
                             max_repair_attempts?: number;
                         };
+                        run_quotas?: {
+                            max_active_runs?: number | null;
+                            daily_runs?: number | null;
+                            daily_tokens?: number | null;
+                        };
                     };
                 };
             };
@@ -2607,6 +2661,11 @@ export interface operations {
                                     max_duration_seconds?: number;
                                     max_changed_files?: number;
                                     max_repair_attempts?: number;
+                                };
+                                run_quotas?: {
+                                    max_active_runs?: number | null;
+                                    daily_runs?: number | null;
+                                    daily_tokens?: number | null;
                                 };
                             };
                             /** Format: date-time */
@@ -3337,6 +3396,11 @@ export interface operations {
                                     max_duration_seconds?: number;
                                     max_changed_files?: number;
                                     max_repair_attempts?: number;
+                                };
+                                run_quotas?: {
+                                    max_active_runs?: number | null;
+                                    daily_runs?: number | null;
+                                    daily_tokens?: number | null;
                                 };
                             };
                             /** Format: date-time */
@@ -6709,6 +6773,118 @@ export interface operations {
             };
         };
     };
+    get_workspaces_workspaceId_quotas: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Request-Id"?: string;
+            };
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: uuid */
+                            workspace_id: string;
+                            active_runs: {
+                                limit: number | null;
+                                used: number;
+                                remaining: number | null;
+                            };
+                            daily_runs: {
+                                limit: number | null;
+                                used: number;
+                                remaining: number | null;
+                            };
+                            daily_tokens: {
+                                limit: number | null;
+                                used: number;
+                                remaining: number | null;
+                            };
+                            /** Format: date-time */
+                            window_start: string;
+                            /** Format: date-time */
+                            resets_at: string;
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     get_workspaces_workspaceId_usage: {
         parameters: {
             query?: {
@@ -7298,10 +7474,12 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    source_type: "manual" | "github_issue";
+                    source_type: "manual" | "github_issue" | "pull_request" | "failing_check";
                     title?: string;
                     description?: string;
                     external_number?: number;
+                    check_run_id?: number;
+                    include_review_comments?: boolean;
                     /** @default [] */
                     labels?: string[];
                 };
@@ -7327,6 +7505,51 @@ export interface operations {
                             /** @enum {string} */
                             source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
+                            external_id: string | null;
+                            source_url: string | null;
+                            source_context: {
+                                state: string;
+                                draft: boolean;
+                                merged: boolean;
+                                head_branch: string;
+                                head_sha: string;
+                                base_branch: string;
+                                base_sha: string;
+                                changed_files: {
+                                    path: string;
+                                    status: string;
+                                    additions: number;
+                                    deletions: number;
+                                }[];
+                                changed_files_total: number;
+                                changed_files_truncated: boolean;
+                                review_comments: {
+                                    path: string | null;
+                                    line: number | null;
+                                    author: string | null;
+                                    body: string;
+                                }[];
+                                review_comments_truncated: boolean;
+                            } | {
+                                check_name: string;
+                                app: string | null;
+                                conclusion: string;
+                                head_sha: string;
+                                started_at: string | null;
+                                completed_at: string | null;
+                                pull_request_numbers: number[];
+                                output_title: string | null;
+                                annotations: {
+                                    path: string;
+                                    start_line: number | null;
+                                    end_line: number | null;
+                                    level: string | null;
+                                    title: string | null;
+                                    message: string;
+                                }[];
+                                annotations_total: number;
+                                annotations_truncated: boolean;
+                            } | Record<string, never>;
                             title: string;
                             description: string;
                             /** @enum {string} */
@@ -7336,6 +7559,109 @@ export interface operations {
                             created_at: string;
                             /** Format: date-time */
                             updated_at: string;
+                        };
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden (insufficient role) or CSRF_TOKEN_INVALID */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found, or concealed because the caller is not a member of the owning workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description State or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate or budget limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_repositories_repositoryId_failing_checks: {
+        parameters: {
+            query?: {
+                ref?: string;
+            };
+            header?: {
+                "X-Request-Id"?: string;
+            };
+            path: {
+                repositoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            ref: string;
+                            check_runs: {
+                                id: number;
+                                name: string;
+                                conclusion: string;
+                                head_sha: string;
+                                html_url: string | null;
+                                completed_at: string | null;
+                                app: string | null;
+                            }[];
                         };
                         meta: components["schemas"]["Meta"];
                     };
@@ -7444,6 +7770,51 @@ export interface operations {
                             /** @enum {string} */
                             source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
+                            external_id: string | null;
+                            source_url: string | null;
+                            source_context: {
+                                state: string;
+                                draft: boolean;
+                                merged: boolean;
+                                head_branch: string;
+                                head_sha: string;
+                                base_branch: string;
+                                base_sha: string;
+                                changed_files: {
+                                    path: string;
+                                    status: string;
+                                    additions: number;
+                                    deletions: number;
+                                }[];
+                                changed_files_total: number;
+                                changed_files_truncated: boolean;
+                                review_comments: {
+                                    path: string | null;
+                                    line: number | null;
+                                    author: string | null;
+                                    body: string;
+                                }[];
+                                review_comments_truncated: boolean;
+                            } | {
+                                check_name: string;
+                                app: string | null;
+                                conclusion: string;
+                                head_sha: string;
+                                started_at: string | null;
+                                completed_at: string | null;
+                                pull_request_numbers: number[];
+                                output_title: string | null;
+                                annotations: {
+                                    path: string;
+                                    start_line: number | null;
+                                    end_line: number | null;
+                                    level: string | null;
+                                    title: string | null;
+                                    message: string;
+                                }[];
+                                annotations_total: number;
+                                annotations_truncated: boolean;
+                            } | Record<string, never>;
                             title: string;
                             description: string;
                             /** @enum {string} */
@@ -7566,6 +7937,51 @@ export interface operations {
                             /** @enum {string} */
                             source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
+                            external_id: string | null;
+                            source_url: string | null;
+                            source_context: {
+                                state: string;
+                                draft: boolean;
+                                merged: boolean;
+                                head_branch: string;
+                                head_sha: string;
+                                base_branch: string;
+                                base_sha: string;
+                                changed_files: {
+                                    path: string;
+                                    status: string;
+                                    additions: number;
+                                    deletions: number;
+                                }[];
+                                changed_files_total: number;
+                                changed_files_truncated: boolean;
+                                review_comments: {
+                                    path: string | null;
+                                    line: number | null;
+                                    author: string | null;
+                                    body: string;
+                                }[];
+                                review_comments_truncated: boolean;
+                            } | {
+                                check_name: string;
+                                app: string | null;
+                                conclusion: string;
+                                head_sha: string;
+                                started_at: string | null;
+                                completed_at: string | null;
+                                pull_request_numbers: number[];
+                                output_title: string | null;
+                                annotations: {
+                                    path: string;
+                                    start_line: number | null;
+                                    end_line: number | null;
+                                    level: string | null;
+                                    title: string | null;
+                                    message: string;
+                                }[];
+                                annotations_total: number;
+                                annotations_truncated: boolean;
+                            } | Record<string, never>;
                             title: string;
                             description: string;
                             /** @enum {string} */
@@ -7700,6 +8116,51 @@ export interface operations {
                             /** @enum {string} */
                             source_type: "github_issue" | "pull_request" | "failing_check" | "manual";
                             external_number: number | null;
+                            external_id: string | null;
+                            source_url: string | null;
+                            source_context: {
+                                state: string;
+                                draft: boolean;
+                                merged: boolean;
+                                head_branch: string;
+                                head_sha: string;
+                                base_branch: string;
+                                base_sha: string;
+                                changed_files: {
+                                    path: string;
+                                    status: string;
+                                    additions: number;
+                                    deletions: number;
+                                }[];
+                                changed_files_total: number;
+                                changed_files_truncated: boolean;
+                                review_comments: {
+                                    path: string | null;
+                                    line: number | null;
+                                    author: string | null;
+                                    body: string;
+                                }[];
+                                review_comments_truncated: boolean;
+                            } | {
+                                check_name: string;
+                                app: string | null;
+                                conclusion: string;
+                                head_sha: string;
+                                started_at: string | null;
+                                completed_at: string | null;
+                                pull_request_numbers: number[];
+                                output_title: string | null;
+                                annotations: {
+                                    path: string;
+                                    start_line: number | null;
+                                    end_line: number | null;
+                                    level: string | null;
+                                    title: string | null;
+                                    message: string;
+                                }[];
+                                annotations_total: number;
+                                annotations_truncated: boolean;
+                            } | Record<string, never>;
                             title: string;
                             description: string;
                             /** @enum {string} */

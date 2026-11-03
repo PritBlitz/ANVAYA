@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { useWorkspaceId } from "@/lib/workspace/context";
 import { isActiveRun } from "@/lib/domain/status";
-import { runBudgetLimits } from "./mappers";
+import { runBudgetLimits, runQuotas } from "./mappers";
 import { api } from "./runtime";
 import type * as T from "./types";
 
@@ -25,6 +25,9 @@ export const qk = {
   invitations: (ws: string) => ["ws", ws, "invitations"] as const,
   aiPolicy: (ws: string) => ["ws", ws, "ai-policy"] as const,
   usage: (ws: string) => ["ws", ws, "usage"] as const,
+  quotas: (ws: string) => ["ws", ws, "quotas"] as const,
+  failingChecks: (ws: string, repoId: string) =>
+    ["ws", ws, "repositories", repoId, "failing-checks"] as const,
   audit: (ws: string, params: object) => ["ws", ws, "audit", params] as const,
   installations: (ws: string) => ["ws", ws, "installations"] as const,
   available: (ws: string, installationId: string) =>
@@ -88,6 +91,34 @@ export function useWorkspaceSettings() {
 export function useRunBudgetLimits() {
   const settings = useWorkspaceSettings();
   return { ...settings, data: settings.data ? runBudgetLimits(settings.data) : undefined };
+}
+
+/** Configured run quotas (FR-OBS-004): absent keys mean unlimited. */
+export function useRunQuotas() {
+  const settings = useWorkspaceSettings();
+  return { ...settings, data: settings.data ? runQuotas(settings.data) : undefined };
+}
+
+/** Quota limits with current usage (refreshes while the settings page is open). */
+export function useQuotaStatus() {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: qk.quotas(ws),
+    queryFn: () => api.workspaces.quotas(ws),
+    refetchInterval: 30_000,
+  });
+}
+
+/** Recent failing check runs on the repository's default branch. */
+export function useFailingChecks(repositoryId: string | undefined, enabled = true) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: qk.failingChecks(ws, repositoryId ?? ""),
+    queryFn: () => api.repositories.failingChecks(repositoryId!),
+    enabled: enabled && Boolean(repositoryId),
+    staleTime: 30_000,
+    retry: false,
+  });
 }
 
 export function useMembers() {

@@ -31,6 +31,22 @@ export const Errors = {
   rateLimited: (retryAfterSeconds: number) =>
     new AppError(429, 'RATE_LIMITED', 'Too many requests.', { retry_after_seconds: retryAfterSeconds }),
   budgetExceeded: (message: string) => new AppError(429, 'BUDGET_EXCEEDED', message),
+  /** FR-OBS-004: the workspace already has its maximum number of active runs. No Retry-After: it frees up when a run ends. */
+  concurrencyLimit: (limit: number, active: number) =>
+    new AppError(429, 'CONCURRENCY_LIMIT_REACHED', `This workspace already has ${active} active run(s); its limit is ${limit}. Wait for a run to finish or cancel one.`, {
+      limit,
+      active_runs: active,
+    }),
+  /** FR-OBS-004: a daily workspace quota is used up; `Retry-After` points at the next UTC midnight. */
+  quotaExceeded: (quota: 'daily_runs' | 'daily_tokens', limit: number, used: number, resetsAt: Date, retryAfterSeconds: number) =>
+    new AppError(
+      429,
+      'QUOTA_EXCEEDED',
+      quota === 'daily_runs'
+        ? `This workspace has used its daily quota of ${limit} run(s). It resets at ${resetsAt.toISOString()}.`
+        : `This workspace has used its daily quota of ${limit} model tokens. It resets at ${resetsAt.toISOString()}.`,
+      { quota, limit, used, resets_at: resetsAt.toISOString(), retry_after_seconds: retryAfterSeconds },
+    ),
   upstream: (code: string, message: string) => new AppError(502, code, message),
   unavailable: (code: string, message: string) => new AppError(503, code, message),
   upstreamTimeout: (code: string, message: string) => new AppError(504, code, message),

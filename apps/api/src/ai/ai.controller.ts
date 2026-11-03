@@ -9,6 +9,7 @@ import { AccessService } from '../workspaces/access.service.js';
 import { AiClient } from './ai-client.js';
 import { aiErrorToApp, AiPolicyService, updateAiPolicyBody } from './ai-policy.service.js';
 import { askBody, QuestionsService } from './questions.service.js';
+import { QuotaService } from './quota.service.js';
 import { UsageService } from './usage.service.js';
 
 export const healthCheckBody = z.object({ workspace_id: z.uuid().optional(), mode: z.enum(['local', 'cloud', 'mock']).optional() }).strict();
@@ -24,6 +25,7 @@ export class AiController {
     private readonly usage: UsageService,
     private readonly access: AccessService,
     private readonly ai: AiClient,
+    private readonly quotas: QuotaService,
   ) {}
 
   @Get('workspaces/:workspaceId/ai-policy')
@@ -70,6 +72,12 @@ export class AiController {
       throw Errors.validation({ issues: [{ path: 'from', message: `the period must be between 0 and ${MAX_USAGE_PERIOD_DAYS} days`, code: 'invalid_range' }] });
     }
     return this.usage.summary(user.id, workspaceId, from, to);
+  }
+
+  /** FR-OBS-004: configured quotas/concurrency limits and current usage (any member). */
+  @Get('workspaces/:workspaceId/quotas')
+  quotaStatus(@CurrentUser() user: AuthUser, @Param('workspaceId', new UuidParamPipe('Workspace')) workspaceId: string) {
+    return this.quotas.status(user.id, workspaceId);
   }
 
   @Post('repositories/:repositoryId/questions')

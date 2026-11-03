@@ -145,6 +145,146 @@ describe("fixture adapter contract", () => {
     expect(task.title).toMatch(/#77/);
   });
 
+  it("imports pull request tasks with their metadata as untrusted context", async () => {
+    const { api } = setup();
+    const task = await api.repositories.createTask(
+      IDS.repoPayments,
+      { source_type: "pull_request", external_number: 87, include_review_comments: true },
+      "pr",
+    );
+    expect(task).toMatchObject({
+      source_type: "pull_request",
+      external_number: 87,
+      external_id: null,
+    });
+    expect(task.source_url).toMatch(/\/pull\/87$/);
+    expect(task.source_context).toMatchObject({
+      kind: "pull_request",
+      head_branch: "feature/pr-87",
+    });
+    if (task.source_context?.kind !== "pull_request") throw new Error("expected PR context");
+    expect(task.source_context.changed_files.length).toBeGreaterThan(0);
+    expect(task.source_context.review_comments).toHaveLength(1);
+    // Like the server: unknown PRs are hidden by the installation (403), fields are strict.
+    expect(
+      await fail(
+        api.repositories.createTask(
+          IDS.repoPayments,
+          { source_type: "pull_request", external_number: 5000 },
+          "pr2",
+        ),
+      ),
+    ).toMatchObject({ status: 403, code: "FORBIDDEN" });
+    const misplaced = await fail(
+      api.repositories.createTask(
+        IDS.repoPayments,
+        {
+          source_type: "manual",
+          title: "A new task",
+          description: "Long enough text.",
+          include_review_comments: true,
+        } as never,
+        "pr3",
+      ),
+    );
+    expect(misplaced).toMatchObject({ status: 422 });
+  });
+
+  it("lists failing checks and imports one as a task (members only)", async () => {
+    const { api } = setup();
+    const checks = await api.repositories.failingChecks(IDS.repoPayments);
+    expect(checks.ref).toBe("main");
+    expect(checks.check_runs.map((c) => c.conclusion)).toEqual(["failure", "timed_out"]);
+    const check = checks.check_runs[0]!;
+    const task = await api.repositories.createTask(
+      IDS.repoPayments,
+      { source_type: "failing_check", check_run_id: check.id },
+      "fc",
+    );
+    expect(task).toMatchObject({
+      source_type: "failing_check",
+      external_number: null,
+      external_id: String(check.id),
+      title: `Fix failing check: ${check.name}`,
+    });
+    expect(task.source_context).toMatchObject({ kind: "failing_check", conclusion: "failure" });
+    // The passing "lint" check can't become a task.
+    expect(
+      await fail(
+        api.repositories.createTask(
+          IDS.repoPayments,
+          { source_type: "failing_check", check_run_id: check.id + 2 },
+          "fc2",
+        ),
+      ),
+    ).toMatchObject({ status: 422, code: "CHECK_NOT_FAILING" });
+    const viewer = setup(IDS.userViewer);
+    expect(await fail(viewer.api.repositories.failingChecks(IDS.repoPayments))).toMatchObject({
+      status: 403,
+    });
+  });
+
+  it("enforces workspace quotas and concurrency limits like the API (FR-OBS-004)", async () => {
+    const { api } = setup();
+    const before = await api.workspaces.quotas(IDS.workspace);
+    expect(before.active_runs.limit).toBeNull();
+    const active = before.active_runs.used;
+    // Members can't change quotas; admins can, with validated ranges.
+    const member = setup(IDS.userMember);
+    expect(
+      await fail(
+        member.api.workspaces.update(IDS.workspace, {
+          settings: { run_quotas: { max_active_runs: 5 } },
+        }),
+      ),
+    ).toMatchObject({ status: 403 });
+    expect(
+      await fail(
+        api.workspaces.update(IDS.workspace, { settings: { run_quotas: { daily_tokens: 5 } } }),
+      ),
+    ).toMatchObject({ status: 422 });
+    const newTask = (key: string) =>
+      api.repositories.createTask(
+        IDS.repoPayments,
+        { source_type: "manual", title: "Quota task", description: "Something to investigate." },
+        key,
+      );
+    // One run started today, so both counters are at least 1.
+    await api.tasks.startRun((await newTask("q0")).id, { base_branch: "main" }, "q-start-0");
+    const now = await api.workspaces.quotas(IDS.workspace);
+    expect(now.active_runs.used).toBe(active + 1);
+    await api.workspaces.update(IDS.workspace, {
+      settings: { run_quotas: { max_active_runs: now.active_runs.used } },
+    });
+    const task = await newTask("q1");
+    expect(
+      await fail(api.tasks.startRun(task.id, { base_branch: "main" }, "q-start")),
+    ).toMatchObject({
+      status: 429,
+      code: "CONCURRENCY_LIMIT_REACHED",
+      details: { limit: now.active_runs.used, active_runs: now.active_runs.used },
+    });
+    expect((await api.workspaces.quotas(IDS.workspace)).active_runs).toMatchObject({
+      limit: now.active_runs.used,
+      remaining: 0,
+    });
+    // null clears a limit; a daily run quota that is already used up blocks with a reset hint.
+    await api.workspaces.update(IDS.workspace, {
+      settings: { run_quotas: { max_active_runs: null, daily_runs: now.daily_runs.used } },
+    });
+    const daily = await fail(api.tasks.startRun(task.id, { base_branch: "main" }, "q-start-2"));
+    expect(daily).toMatchObject({ status: 429, code: "QUOTA_EXCEEDED" });
+    expect(daily!.details).toMatchObject({ quota: "daily_runs", limit: now.daily_runs.used });
+    expect(daily!.details.retry_after_seconds).toBeGreaterThan(0);
+    expect(daily!.details.retry_after_seconds).toBeLessThanOrEqual(86_400);
+    await api.workspaces.update(IDS.workspace, { settings: { run_quotas: { daily_runs: null } } });
+    await api.tasks.startRun(task.id, { base_branch: "main" }, "q-start-3");
+    const audit = await api.workspaces.auditEvents(IDS.workspace, {
+      action: "workspace.quotas_updated",
+    });
+    expect(audit.items.length).toBeGreaterThan(0);
+  });
+
   it("refuses modes the policy doesn't allow (no silent paid fallback)", async () => {
     const { api } = setup();
     const task = await api.repositories.createTask(

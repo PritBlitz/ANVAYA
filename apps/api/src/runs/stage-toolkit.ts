@@ -2,17 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AiClient, type EvidenceItem, type GenerationRequest, type GenerationResponse, AiServiceError } from '../ai/ai-client.js';
 import { AiPolicyService } from '../ai/ai-policy.service.js';
+import { QuotaService } from '../ai/quota.service.js';
 import { UsageService } from '../ai/usage.service.js';
 import { logger } from '../common/logger.js';
 import { redactValue } from '../common/redact.js';
 import { DatabaseService, type Tx } from '../database/database.service.js';
-import { type EngineeringTask, json, type JsonObject, type WorkflowRun } from '../database/types.js';
+import { type EngineeringTask, json, type JsonObject, type TaskSourceType, type WorkflowRun } from '../database/types.js';
 import { RunEventsService } from './run-events.service.js';
 import { DEFAULT_RUN_BUDGET, type RunBudget } from './run.schemas.js';
 import { RunTransitionsService } from './run-transitions.service.js';
 import { isTerminal } from './state-machine.js';
+import { untrustedSourceInputs } from './task-sources.js';
 
 const log = logger('orchestrator');
+
+const DESCRIPTION_LABELS: Record<TaskSourceType, string> = {
+  manual: 'task_description',
+  github_issue: 'github_issue_body',
+  pull_request: 'github_pull_request_body',
+  failing_check: 'github_check_run_output',
+};
 
 /** States where the run waits for a human decision; they don't spend the duration budget. */
 const HUMAN_GATES: ReadonlySet<string> = new Set(['awaiting_plan_approval', 'awaiting_pr_approval']);
@@ -44,6 +53,7 @@ export class StageToolkit {
     private readonly ai: AiClient,
     private readonly usage: UsageService,
     private readonly policies: AiPolicyService,
+    private readonly quotas: QuotaService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -51,11 +61,12 @@ export class StageToolkit {
   // ---------------------------------------------------------------------------
   intent(task: EngineeringTask): Record<string, unknown> {
     // Only application-structured fields here; user/issue text goes to untrusted_inputs.
-    return { objective_title: task.title, source_type: task.source_type, external_number: task.external_number };
+    return { objective_title: task.title, source_type: task.source_type, external_number: task.external_number, external_id: task.external_id };
   }
 
+  /** Task text and imported GitHub context, each as a labelled untrusted input (CLAUDE.md §9). */
   untrusted(task: EngineeringTask): Array<{ label: string; content: string }> {
-    return [{ label: task.source_type === 'github_issue' ? 'github_issue_body' : 'task_description', content: task.description }];
+    return [{ label: DESCRIPTION_LABELS[task.source_type], content: task.description }, ...untrustedSourceInputs(task.source_type, task.source_context)];
   }
 
   budget(run: WorkflowRun): RunBudget {
@@ -96,6 +107,9 @@ export class StageToolkit {
     if (steps >= budget.max_steps) throw new StageFailure('BUDGET_EXHAUSTED', `The run reached its step budget (${budget.max_steps}).`);
     const remainingSeconds = await this.remainingSeconds(run);
     if (remainingSeconds < 10) throw new StageFailure('BUDGET_EXHAUSTED', 'The run has no time budget left for another model call.');
+    // FR-OBS-004: the workspace's daily token quota is checked before every model call.
+    const quotaError = await this.quotas.tokenQuotaError(run.organization_id);
+    if (quotaError) throw new StageFailure('QUOTA_EXCEEDED', `${quotaError.message} Retry the run after the reset.`);
     // One call may use the rest of the run's time, but never more than the workspace's
     // per-request timeout (the same limit Q&A uses, and at most what the AI service accepts).
     const requestTimeout = (await this.policies.load(run.organization_id)).limits.request_timeout_seconds;

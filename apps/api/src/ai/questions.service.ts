@@ -14,6 +14,7 @@ import { type RetrievedChunk, RetrievalService } from '../retrieval/retrieval.se
 import { AccessService } from '../workspaces/access.service.js';
 import { AiClient, type EvidenceItem } from './ai-client.js';
 import { aiErrorToApp, AiPolicyService } from './ai-policy.service.js';
+import { QuotaService } from './quota.service.js';
 import { UsageService } from './usage.service.js';
 
 const log = logger('questions');
@@ -123,6 +124,7 @@ export class QuestionsService {
     private readonly audit: AuditService,
     private readonly knowledge: KnowledgeIndexService,
     private readonly database: DatabaseService,
+    private readonly quotas: QuotaService,
   ) {}
 
   async ask(userId: string, repositoryId: string, body: z.infer<typeof askBody>) {
@@ -156,6 +158,10 @@ export class QuestionsService {
         usage: null,
       };
     }
+
+    // FR-OBS-004: refuse the model call when the daily token quota is used up.
+    const quotaError = await this.quotas.tokenQuotaError(repository.organization_id);
+    if (quotaError) throw quotaError;
 
     let gen;
     try {
