@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AiClient, type EvidenceItem, type GenerationRequest, type GenerationResponse, AiServiceError } from '../ai/ai-client.js';
+import { AiPolicyService } from '../ai/ai-policy.service.js';
 import { UsageService } from '../ai/usage.service.js';
 import { logger } from '../common/logger.js';
 import { redactValue } from '../common/redact.js';
@@ -42,6 +43,7 @@ export class StageToolkit {
     readonly events: RunEventsService,
     private readonly ai: AiClient,
     private readonly usage: UsageService,
+    private readonly policies: AiPolicyService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -94,6 +96,9 @@ export class StageToolkit {
     if (steps >= budget.max_steps) throw new StageFailure('BUDGET_EXHAUSTED', `The run reached its step budget (${budget.max_steps}).`);
     const remainingSeconds = await this.remainingSeconds(run);
     if (remainingSeconds < 10) throw new StageFailure('BUDGET_EXHAUSTED', 'The run has no time budget left for another model call.');
+    // One call may use the rest of the run's time, but never more than the workspace's
+    // per-request timeout (the same limit Q&A uses, and at most what the AI service accepts).
+    const requestTimeout = (await this.policies.load(run.organization_id)).limits.request_timeout_seconds;
     const stepId = await this.startStep(run, agentType, { task: req.task, evidence_ids: req.evidence.map((e) => e.id) });
     await this.assertActive(run.id);
     try {
@@ -102,7 +107,7 @@ export class StageToolkit {
         mode: run.mode,
         provider: run.provider,
         model: run.model,
-        budget: { max_input_tokens: budget.max_input_tokens, max_output_tokens: budget.max_output_tokens, timeout_seconds: Math.max(10, Math.floor(remainingSeconds)) },
+        budget: { max_input_tokens: budget.max_input_tokens, max_output_tokens: budget.max_output_tokens, timeout_seconds: Math.max(10, Math.floor(Math.min(remainingSeconds, requestTimeout))) },
       });
       await this.usage.record({
         organizationId: run.organization_id,
