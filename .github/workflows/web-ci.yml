@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - "apps/web/**"
-      - "apps/api/openapi.json"
+      - "packages/contracts/**"
       - ".github/workflows/web-ci.yml"
   push:
     branches: [main]
     paths:
       - "apps/web/**"
-      - "apps/api/openapi.json"
+      - "packages/contracts/**"
       - ".github/workflows/web-ci.yml"
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - name: Generated API types match the backend OpenAPI document
+      - name: Generated API types match the shared contract (packages/contracts)
         run: npm run gen:api && npx prettier --write src/lib/api/generated && git diff --exit-code src/lib/api/generated
       - run: npm run build
         env:

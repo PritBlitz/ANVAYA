@@ -87,7 +87,7 @@ Problems found and fixed while building the homepage:
 4. The dependency map is a navigable list rather than a drawn graph, because it has to scale to 2,000 files and stay keyboard and screen-reader friendly.
 5. Lists load up to 100 items; infinite scrolling is only wired for the audit log.
 6. Browser E2E coverage is Chromium only (desktop and Pixel 7). Add WebKit and Firefox in CI.
-7. Contract types should move to `packages/contracts` when that package exists.
+7. Contract types come from `packages/contracts/openapi.json` (`npm run gen:api`); the generated copy stays in `apps/web` because its build compiles only files inside `apps/web`, and CI fails on drift.
 8. Next auto-writes `apps/web/AGENTS.md`; it is intentionally kept.
 
 ## Outstanding backend dependencies

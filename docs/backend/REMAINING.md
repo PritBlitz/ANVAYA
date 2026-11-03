@@ -90,5 +90,5 @@ infinite scroll beyond the audit log, WebKit/Firefox E2E, moving contract types 
 | Terraform AWS reference deployment | ☑ validated in CI, never applied |
 | Images: API (with pinned RDS CA bundle), AI service, web | ☑ built in CI |
 | Monotonic "latest job" ordering (migration 0007) | ☑ |
-| Team/advanced intelligence (templates, multi-provider, call graph, impact, test selection, cross-repo search, migration planning) | 🚧 in progress on a helper branch |
-| `packages/contracts` | ☐ after the helper branch merges |
+| Team/advanced intelligence (templates, multi-provider, call graph, impact, test selection, cross-repo search, migration planning) | ☑ merged (migration 0010); hosted adapters tested against fakes only |
+| `packages/contracts` | ☑ shared OpenAPI contract; API writes it, web generates types from it, CI checks drift |
