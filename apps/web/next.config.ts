@@ -51,6 +51,13 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  experimental: {
+    // The /api/v1 rewrite proxy drops a request after 30s by default. Local models on CPU
+    // take minutes per Q&A or planning call, and the API allows provider calls up to 600s
+    // (AI_REQUEST_TIMEOUT_MS max). Wait a little longer than that so the API, not the
+    // proxy, decides when a call has timed out and returns a typed PROVIDER_TIMEOUT.
+    proxyTimeout: 660_000,
+  },
   turbopack: {
     // apps/web is self-contained (own node_modules and lockfile): pin the root so a
     // lockfile elsewhere in the monorepo can't change how modules resolve.
