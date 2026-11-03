@@ -38,7 +38,20 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "service": "anvaya-ai",
         }
-        for key in ("task", "provider", "attempts", "in", "out", "request_id", "trace_id", "span_id", "path", "status", "duration_ms", "code"):
+        for key in (
+            "task",
+            "provider",
+            "attempts",
+            "in",
+            "out",
+            "request_id",
+            "trace_id",
+            "span_id",
+            "path",
+            "status",
+            "duration_ms",
+            "code",
+        ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         return json.dumps(payload)
