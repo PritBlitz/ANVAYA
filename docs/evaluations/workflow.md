@@ -54,6 +54,20 @@ not ask for, and left two files without a final newline. Verification still pass
 were about documentation (although the function has a docstring) and a redundant empty-string test.
 Human review of the diff remains necessary.
 
+## Later runs on 2026-11-04
+
+| Run | Task | Outcome |
+|---|---|---|
+| `7922104d` | `average_word_length` | Stopped in planning: the session's low-memory guard killed the stack at about 0.6 GB free |
+| `eba7e669` | `average_word_length` | `VERIFICATION_FAILED`, the gate working as intended. Attempt 1 had a syntax error in the test; the repair fixed it but the test expected 5.0 where the correct value is 4.0, and the single repair was used up. No pull request was opened |
+| `728acaf6` | `average_word_length`, two repairs allowed | Stopped about a minute into investigation, while the model was loading, by the same guard. Started with 7.3 GB free |
+
+So of the three runs that reached a result on this task family, one produced a pull request and one
+was correctly refused; the sample is too small to state a success rate. Starting with more free
+memory did not prevent the second stop. The 7B model removed the test file's `__main__` block in both
+completed runs, once despite being told to keep existing code, and attempt 1 failed on a syntax error
+in the test file in both. Removal is now reported as a review finding.
+
 ## Failure modes found and fixed
 
 Each was found by these runs, fixed with a regression test, and the run repeated:
