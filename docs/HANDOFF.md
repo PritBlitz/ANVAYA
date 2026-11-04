@@ -67,9 +67,6 @@ Notes:
 - GitHub App permissions `pull_requests:read` and `checks:read` for PR / failing-check tasks; then
   try one of each on testRepo.
 - Webhooks locally need a smee.io channel + `npx smee-client` (optional).
-- Accessibility follow-up from helper B: two pre-existing axe issues on the Changes view (alert
-  secondary text contrast; diff scroll region not keyboard-focusable) — see `docs/frontend/STATUS.md`.
-- Backend tracker B-10 (reconnect a repository in another workspace) — owner chose "follow-up".
 
 ### 2.4 Housekeeping
 - `Z:\ANVAYA\apps\api\node_modules` and `Z:\ANVAYA\apps\web\node_modules` in the main checkout are
@@ -131,7 +128,7 @@ Stopping: `TaskStop` only kills the shell wrapper; find and stop the real `node`
   were fine (`hashicorp/terraform`, `pgvector`).
 - Production config refuses: dev login, insecure cookies, `local_fixture` source, the Docker sandbox,
   WSL path mapping, an unproxied gVisor fetch network, a missing AI service token.
-- Migrations on `main`: 0001–0007 and 0010 (0008/0009 intentionally unused). Next: 0011.
+- Migrations on `main`: 0001–0007, 0010 and 0011 (0008/0009 intentionally unused). Next: 0012.
 - The dev database's Docker clock drifts; order "latest" rows by identity/sequence, not `created_at`.
 - GitHub App: `anvaya-dev`, installed on the owner's account and bound to the `pritblitz` workspace;
-  a repository can belong to only one workspace (B-10).
+  a repository can be attached to only one workspace at a time.
