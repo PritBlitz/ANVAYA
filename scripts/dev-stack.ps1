@@ -90,7 +90,8 @@ switch ($Action) {
     if (-not (Test-Path $PidFile)) { Write-Output 'Nothing recorded as running.'; return }
     foreach ($line in Get-Content $PidFile) {
       $id, $name = $line -split ' ', 2
-      & taskkill.exe /T /F /PID $id 2>$null | Out-Null
+      # A process that already exited is fine: stopping must work after a crash too.
+      cmd /c "taskkill /T /F /PID $id >nul 2>&1"
       Write-Output "stopped $name"
     }
     Remove-Item $PidFile
