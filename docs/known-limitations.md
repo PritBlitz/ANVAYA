@@ -30,7 +30,7 @@ Kept honest and current; each item says what would close it.
 - A 7B local model on CPU is slow (15–25 minutes of model time per run) and its patches vary in
   quality; verification and approvals are the safety net, not the model.
 - The retrieval benchmark's CI numbers use a hashed bag-of-words test embedding; live-embedding
-  results are still to be recorded (`docs/evaluations/retrieval.md`).
+  results are recorded separately (`docs/evaluations/retrieval.md`).
 - Live GitHub validation covers sign-in, install, indexing, pull requests, PR and failing-check
   tasks, and webhooks through a smee tunnel, all on one small test repository.
 
