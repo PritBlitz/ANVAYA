@@ -12,6 +12,7 @@ const FEATURE_SHA = 'f'.repeat(40);
 const TOKEN = `ghp_${'A'.repeat(36)}`;
 const CHECK_ID = 31_000_000_001; // > int4: check run ids are stored as text
 const PASSING_CHECK_ID = 31_000_000_002;
+const LOGGED_CHECK_ID = 31_000_000_003;
 
 type GenBody = Record<string, unknown> & { task: string; mode: string; evidence: Array<{ id: string }>; untrusted_inputs?: Array<{ label: string; content: string }> };
 
@@ -60,6 +61,14 @@ describe('tasks from pull requests and failing checks (FR-WF-001, FR-GIT-006)', 
             comments: [{ path: 'src/invoice.ts', line: 2, body: `Please also handle negatives. ${TOKEN}`, user: 'reviewer' }],
           },
         },
+        jobLogs: {
+          [LOGGED_CHECK_ID]: [
+            '2026-11-04T06:37:01.1234567Z ##[group]Run python -m unittest',
+            `2026-11-04T06:37:02.1234567Z FAIL: test_counts_words AssertionError: 4 != 5 token=${TOKEN}`,
+            '2026-11-04T06:37:03.1234567Z ##[error]Process completed with exit code 1.',
+            '2026-11-04T06:37:04.1234567Z Post job cleanup.',
+          ].join('\r\n'),
+        },
         checkRuns: {
           [CHECK_ID]: {
             name: 'test (node 22)',
@@ -70,6 +79,7 @@ describe('tasks from pull requests and failing checks (FR-WF-001, FR-GIT-006)', 
             annotations: [{ path: 'src/invoice.ts', start_line: 2, end_line: 2, annotation_level: 'failure', message: 'AssertionError: expected 10.01 to equal 10' }],
           },
           [PASSING_CHECK_ID]: { name: 'lint', head_sha: SHA, status: 'completed', conclusion: 'success' },
+          [LOGGED_CHECK_ID]: { name: 'unit', head_sha: 'd'.repeat(40), status: 'completed', conclusion: 'failure' },
         },
       },
       link.installationId,
@@ -154,7 +164,7 @@ describe('tasks from pull requests and failing checks (FR-WF-001, FR-GIT-006)', 
       const res = await as(member, 'post', `/repositories/${repo}/tasks`).send({ source_type: 'failing_check', check_run_id: CHECK_ID }).expect(201);
       const task = res.body.data;
       expect(task).toMatchObject({ source_type: 'failing_check', external_number: null, external_id: String(CHECK_ID), title: 'Fix failing check: test (node 22)' });
-      expect(gh.grants.at(-1)!.permissions).toEqual({ metadata: 'read', checks: 'read' });
+      expect(gh.grants.map((g) => g.permissions)).toContainEqual({ metadata: 'read', checks: 'read' });
       expect(task.source_context).toMatchObject({
         check_name: 'test (node 22)',
         conclusion: 'failure',
@@ -170,6 +180,17 @@ describe('tasks from pull requests and failing checks (FR-WF-001, FR-GIT-006)', 
       expect(task.description).not.toContain('s3cr3tValue');
       expect(task.description.length).toBeLessThanOrEqual(20_000);
       expect(task.description).toContain('[truncated]');
+    });
+
+    it('adds the end of the Actions job log, redacted and without what follows the error', async () => {
+      const res = await as(member, 'post', `/repositories/${repo}/tasks`).send({ source_type: 'failing_check', check_run_id: LOGGED_CHECK_ID }).expect(201);
+      const { description } = res.body.data;
+      expect(gh.grants.map((g) => g.permissions)).toContainEqual({ metadata: 'read', actions: 'read' });
+      expect(description).toContain('AssertionError: 4 != 5');
+      expect(description).toContain('##[error]Process completed with exit code 1.');
+      expect(description).not.toContain('Post job cleanup');
+      expect(description).not.toContain('2026-11-04T06:37');
+      expect(description).not.toContain(TOKEN);
     });
 
     it('refuses a check run that did not fail, and validates input', async () => {

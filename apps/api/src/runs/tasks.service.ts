@@ -168,7 +168,8 @@ export class TasksService {
     if (check.status !== 'completed' || !FAILING_CONCLUSIONS.has(check.conclusion ?? '')) {
       throw Errors.unprocessable('CHECK_NOT_FAILING', 'This check run has not failed, so there is no failure to fix.', { status: check.status, conclusion: check.conclusion ?? null });
     }
-    return importCheckFailure(check, annotations, { annotations: IMPORT_LIMITS.annotations });
+    const jobLog = check.app?.slug === 'github-actions' ? await this.github.getJobLog(installationId, repoId, repository.full_name, check.id) : null;
+    return importCheckFailure(check, annotations, { annotations: IMPORT_LIMITS.annotations }, jobLog);
   }
 
   async list(userId: string, q: z.infer<typeof listTasksQuery> & { workspace_id: string }): Promise<Page<unknown>> {
