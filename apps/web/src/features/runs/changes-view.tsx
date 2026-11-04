@@ -92,7 +92,12 @@ function FileDiffCard({
         </p>
       )}
       {open && (
-        <div className="scrollbar-thin overflow-x-auto font-mono text-[12.5px] leading-6">
+        <div
+          role="region"
+          aria-label={`Scrollable diff of ${file.path}`}
+          tabIndex={0}
+          className="scrollbar-thin overflow-x-auto font-mono text-[12.5px] leading-6 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        >
           {file.binary ? (
             <p className="px-4 py-3 text-xs text-fg-muted">Binary file — not displayed.</p>
           ) : (

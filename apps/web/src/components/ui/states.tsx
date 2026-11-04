@@ -131,7 +131,7 @@ export function InlineAlert({
       {icon}
       <div className="min-w-0 flex-1 text-fg">
         {title && <p className="font-medium">{title}</p>}
-        {children && <div className={cn("text-fg-muted", title && "mt-0.5")}>{children}</div>}
+        {children && <div className={cn(title && "mt-0.5")}>{children}</div>}
       </div>
       {action && <div className="shrink-0 self-center">{action}</div>}
     </div>

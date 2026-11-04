@@ -1,15 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { expectAccessible, signIn } from "./helpers";
-
-/** WCAG 2.1 A/AA scan limited to one region (used where the surrounding page is out of scope). */
-async function expectRegionAccessible(page: Page, selector: string) {
-  const results = await new AxeBuilder({ page })
-    .include(selector)
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  expect(results.violations.map((v) => v.id)).toEqual([]);
-}
 
 test("a template prefills the task, and its run shows heuristic impact and test selection", async ({
   page,
@@ -67,7 +57,7 @@ test("a template prefills the task, and its run shows heuristic impact and test 
       name: /test\/auth\/refresh\.test\.ts imports src\/auth\/refresh\.ts \(line \d+\)/,
     }),
   ).toBeVisible();
-  await expectRegionAccessible(page, '[data-testid="impact-panel"]');
+  await expectAccessible(page);
 
   await page.getByRole("link", { name: "Verification" }).click();
   await expect(page.getByTestId("impact-panel").filter({ visible: true })).toBeVisible();
