@@ -84,10 +84,12 @@ export class RepositoriesService {
     }
 
     const result = await this.database.transaction(async (tx) => {
-      const existing = await tx.selectFrom('repositories').selectAll().where('external_repository_id', '=', remote.id).forUpdate().executeTakeFirst();
-      if (existing && existing.organization_id !== body.workspace_id) {
+      // Disconnected rows keep their history in the old workspace and do not hold the repository.
+      const rows = await tx.selectFrom('repositories').selectAll().where('external_repository_id', '=', remote.id).forUpdate().execute();
+      if (rows.some((r) => r.status !== 'disconnected' && r.organization_id !== body.workspace_id)) {
         throw Errors.conflict('REPOSITORY_ALREADY_CONNECTED', 'This repository is connected to another workspace.');
       }
+      const existing = rows.find((r) => r.organization_id === body.workspace_id);
       if (existing && existing.status === 'connected') {
         throw Errors.conflict('REPOSITORY_ALREADY_CONNECTED', 'This repository is already connected.', { repository_id: existing.id });
       }

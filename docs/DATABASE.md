@@ -115,7 +115,7 @@ CREATE TABLE repositories (
   organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   installation_id uuid REFERENCES git_installations(id) ON DELETE SET NULL,
   provider text NOT NULL DEFAULT 'github',
-  external_repository_id bigint NOT NULL UNIQUE,
+  external_repository_id bigint NOT NULL,
   owner text NOT NULL,
   name text NOT NULL,
   full_name text NOT NULL,
@@ -130,8 +130,15 @@ CREATE TABLE repositories (
   settings jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, full_name)
+  UNIQUE (organization_id, full_name),
+  UNIQUE (organization_id, external_repository_id)
 );
+
+-- A repository belongs to one workspace at a time. Disconnected rows keep their history in the
+-- old workspace and no longer hold it, so it can be connected elsewhere.
+CREATE UNIQUE INDEX uq_repositories_external_attached
+  ON repositories (external_repository_id)
+  WHERE status <> 'disconnected';
 
 CREATE TABLE repository_snapshots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

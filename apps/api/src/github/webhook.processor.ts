@@ -140,6 +140,7 @@ export class WebhookProcessor {
       .innerJoin('git_installations as i', 'i.id', 'r.installation_id')
       .select(['r.id', 'r.organization_id', 'r.default_branch', 'r.status', 'r.settings', 'i.status as installation_status'])
       .where('r.external_repository_id', '=', p.data.repository.id)
+      .where('r.status', '<>', 'disconnected')
       .where('i.external_installation_id', '=', p.data.installation.id)
       .executeTakeFirst();
     if (!repo || repo.status !== 'connected' || repo.installation_status !== 'active') return null;
@@ -153,7 +154,7 @@ export class WebhookProcessor {
   private async repository(tx: Tx, payload: unknown): Promise<WebhookOutcome | null> {
     const p = repositoryEvent.safeParse(payload);
     if (!p.success) return null;
-    const repo = await tx.selectFrom('repositories').select(['id', 'organization_id']).where('external_repository_id', '=', p.data.repository.id).executeTakeFirst();
+    const repo = await tx.selectFrom('repositories').select(['id', 'organization_id']).where('external_repository_id', '=', p.data.repository.id).where('status', '<>', 'disconnected').executeTakeFirst();
     if (!repo) return null;
     if (p.data.action === 'deleted') {
       await tx.updateTable('repositories').set({ status: 'disconnected', indexing_status: 'disabled' }).where('id', '=', repo.id).execute();
