@@ -48,6 +48,7 @@ export const PROFILES: readonly VerificationProfile[] = [
     argv: ['python', '-B', '-m', 'unittest', 'discover', '-v'],
     commandDisplay: 'python -m unittest discover -v',
     detect: (p) => [...p].some((f) => /(^|\/)test_[^/]+\.py$|(^|\/)[^/]+_test\.py$/.test(f)),
+    testSelection: { pattern: /(^|\/)(test_[^/]+|[^/]+_test)\.py$/, argv: (files) => ['python', '-B', '-m', 'unittest', '-v', ...files] },
   },
   {
     id: 'node-syntax',
