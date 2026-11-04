@@ -60,13 +60,21 @@ Notes:
 - On success the spec prints `PR: https://github.com/PritBlitz/testRepo/pull/<n>`. Record it in
   `docs/evaluations/workflow.md` and `docs/demo-walkthrough.md` ("Recorded results").
 
+### 2.2a Open live checks (2026-11-04)
+Verified live: PR import, failing-check listing and import, webhooks through smee into the API
+(`new_permissions_accepted` stored, a `master` push re-indexed). Not yet verified in a live run:
+`narrow` test selection on unittest, the removed-code finding, final-newline preservation, a full
+run from a PR or failing-check task, and the Actions job log (the App needs `Actions: read`). Two
+live runs were killed by Claude Code's low-memory guard, which stops background shells; see
+`docs/evaluations/workflow.md`. testRepo has `test_selection: narrow`, and `pritblitz` has
+`max_repair_attempts: 2`.
+
 ### 2.3 Owner-only / needs accounts (report, don't attempt)
 - Independent security assessment of the gVisor execution plane (SECURITY §7).
 - Applying `infra/aws` (validated in CI, never applied; needs an AWS account and budget).
 - Live tests of the hosted providers (Anthropic, OpenAI-compatible) — fakes only so far.
-- GitHub App permissions `pull_requests:read` and `checks:read` for PR / failing-check tasks; then
-  try one of each on testRepo.
-- Webhooks locally need a smee.io channel + `npx smee-client` (optional).
+- GitHub App permission `Actions: read`, so failing-check tasks can include the job log.
+- Webhooks locally need `npx smee-client` pointed at the App's smee channel and `/api/v1/webhooks/github`.
 
 ### 2.4 Housekeeping
 - `Z:\ANVAYA\apps\api\node_modules` and `Z:\ANVAYA\apps\web\node_modules` in the main checkout are
