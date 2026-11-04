@@ -29,7 +29,7 @@ frontend needed. B = backend side, F = frontend side.
 
 | # | Item | What is needed | Status |
 |---|---|---|---|
-| X-1 | Register a GitHub App (dev) | App ID, private key file, webhook secret, OAuth client ID/secret, app slug. Permissions: contents R/W, pull requests R/W, issues R, metadata R. Webhook URL needs a public tunnel (e.g. smee.io) for local work | ☑ App configured; no webhook has been delivered yet (optional: only needed for push/issue events) |
+| X-1 | Register a GitHub App (dev) | App ID, private key file, webhook secret, OAuth client ID/secret, app slug. Permissions: contents R/W, pull requests R/W, issues R, metadata R. Webhook URL needs a public tunnel (e.g. smee.io) for local work | ☑ App configured; webhooks delivered through smee on 2026-11-04 |
 | X-2 | Live GitHub validation | X-1, plus a throwaway test repository: OAuth sign-in, install handshake, webhook delivery, index, PR creation | ☑ except webhook delivery |
 | X-3 | Live local model | Install Ollama; `ollama pull qwen2.5-coder:7b` and `nomic-embed-text`; then run Q&A and a run in `local` mode | ☑ Ollama runs in WSL. Its system service reads models from the C: drive, so for Anvaya a second instance serves `Z:\ollama\models` on port 11435 (`OLLAMA_BASE_URL=http://127.0.0.1:11435`) |
 | X-4 | CI | Push the branch so `.github/workflows/backend-ci.yml` actually runs, then fix whatever it reports | ☑ backend-ci (API, real gVisor, images, Terraform, AI service, secrets) and web-ci (checks, E2E in Chromium/Firefox/WebKit) green on `main` (2026-11-03) |
@@ -50,7 +50,7 @@ frontend needed. B = backend side, F = frontend side.
 | B-8 | Q&A history endpoint | The frontend keeps history per browser session only | ☑ per-user history |
 | B-10 | Reconnect a repository in another workspace | `repositories.external_repository_id` is globally `UNIQUE` (DATABASE.md), and disconnecting keeps the row. So once a repo has been connected in one workspace it can never be connected in another, e.g. after moving the GitHub App installation (`REPOSITORY_ALREADY_CONNECTED`). Now unique per `(organization_id, external_repository_id)` and, among rows that are not disconnected, globally (migration 0011); history stays with the old workspace, webhook and connect lookups ignore disconnected rows | ☑ 2026-11-04, tested in `test/github.spec.ts` |
 | B-9 | GitLab / Bitbucket | Out of scope for V1 | — |
-| B-11 | Work package B (templates, OpenAI-compatible provider, call graph, impact/test selection, cross-repo search, migration plans) | See STATUS.md and API_CONTRACT_NOTES.md §8 | ☑ built and tested with fakes; live hosted-provider check and a real-Docker run of `test_selection: narrow` still to do |
+| B-11 | Work package B (templates, OpenAI-compatible provider, call graph, impact/test selection, cross-repo search, migration plans) | See STATUS.md and API_CONTRACT_NOTES.md §8 | ☑ built and tested with fakes; live hosted-provider check still to do; `test_selection: narrow` ran under real Docker on 2026-11-04 |
 
 ## 4. Frontend items (owned by the frontend session; listed for visibility)
 
@@ -80,7 +80,7 @@ infinite scroll beyond the audit log, WebKit/Firefox E2E, moving contract types 
 
 | Item | Status |
 |---|---|
-| FR-WF-001 / FR-GIT-006: tasks from pull requests and failing checks | ☑ merged (migration 0006); not yet run against live GitHub (needs `pull_requests:read`, `checks:read`) |
+| FR-WF-001 / FR-GIT-006: tasks from pull requests and failing checks | ☑ merged (migration 0006); run against live GitHub on 2026-11-04 (PRs #4 and #6 on testRepo) |
 | FR-OBS-004: run quotas and concurrency limits | ☑ merged |
 | Security suite driven by `openapi.json` | ☑ `test/security.spec.ts` |
 | Retrieval benchmark + stop-word fix | ☑ `docs/evaluations/retrieval.md`; live embeddings measured 2026-11-04 (hybrid recall@10 0.92, semantic 0.88) |
