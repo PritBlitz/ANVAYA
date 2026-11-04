@@ -62,8 +62,8 @@ Human review of the diff remains necessary.
 | `eba7e669` | `average_word_length` | `VERIFICATION_FAILED`, the gate working as intended. Attempt 1 had a syntax error in the test; the repair fixed it but the test expected 5.0 where the correct value is 4.0, and the single repair was used up. No pull request was opened |
 | `728acaf6` | `average_word_length`, two repairs allowed | Stopped about a minute into investigation, while the model was loading, by the same guard. Started with 7.3 GB free |
 
-So of the three runs that reached a result on this task family, one produced a pull request and one
-was correctly refused; the sample is too small to state a success rate. Starting with more free
+So two runs reached a result since the fixes: `81cad19c` produced a pull request and `eba7e669`
+was correctly refused. That is too small a sample for a success rate. Starting with more free
 memory did not prevent the second stop. The 7B model removed the test file's `__main__` block in both
 completed runs, once despite being told to keep existing code, and attempt 1 failed on a syntax error
 in the test file in both. Removal is now reported as a review finding.
