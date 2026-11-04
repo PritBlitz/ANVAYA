@@ -177,6 +177,11 @@ export class GithubAppService {
       method: 'POST',
       auth: `Bearer ${this.appJwt()}`,
       body: { permissions, ...(repositoryIds ? { repository_ids: repositoryIds } : {}) },
+    }).catch((err: unknown) => {
+      // GitHub answers 422 when the installation lacks a requested permission or repository,
+      // for example after the App gains a permission the account has not accepted yet.
+      if (err instanceof GithubApiError && err.status === 422) throw new GithubApiError(403, 'installation does not grant the requested access', false);
+      throw err;
     });
     this.tokenCache.set(key, { token: res.token, expiresAt: Date.parse(res.expires_at) });
     return res.token;
@@ -411,7 +416,7 @@ function redactPath(path: string): string {
 /** Maps a GitHub client error to an API error for request/response paths. */
 export function toAppError(err: unknown): Error {
   if (err instanceof GithubApiError) {
-    if (err.status === 404 || err.status === 403) return Errors.forbidden('The GitHub App installation does not grant access to this resource.');
+    if (err.status === 404 || err.status === 403) return Errors.forbidden("The GitHub App installation does not grant access to this resource. If the App's permissions changed, accept them in the installation's settings on GitHub.");
     if (err.status === 401) return Errors.upstream('GITHUB_AUTH_FAILED', 'GitHub rejected the App credentials.');
     if (err.status === 429 || err.message.includes('rate limit')) return Errors.unavailable('GITHUB_RATE_LIMITED', 'GitHub rate limit reached; try again later.');
     return Errors.upstream('GITHUB_ERROR', 'GitHub request failed.');
