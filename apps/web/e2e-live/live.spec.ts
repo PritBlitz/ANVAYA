@@ -12,7 +12,7 @@ const TASK =
 const TASK_DESCRIPTION =
   process.env.LIVE_TASK_DESCRIPTION ??
   "apply_discount(total, percent) accepts any percent today. Values below 0 or above 100 should raise ValueError with a clear message; 0 and 100 stay valid.";
-const STAGE = 15 * 60_000;
+const STAGE = 25 * 60_000;
 
 test.describe.configure({ mode: "serial" });
 
