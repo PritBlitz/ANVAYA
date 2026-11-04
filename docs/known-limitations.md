@@ -31,8 +31,8 @@ Kept honest and current; each item says what would close it.
   quality; verification and approvals are the safety net, not the model.
 - The retrieval benchmark's CI numbers use a hashed bag-of-words test embedding; live-embedding
   results are still to be recorded (`docs/evaluations/retrieval.md`).
-- Live GitHub validation covers sign-in, install, indexing and one PR; webhooks have never been
-  delivered live (they need a public tunnel such as smee).
+- Live GitHub validation covers sign-in, install, indexing, pull requests, PR and failing-check
+  tasks, and webhooks through a smee tunnel, all on one small test repository.
 
 ## Operations and deployment
 - The AWS Terraform has been validated, never applied; the web image needs the API origin at build

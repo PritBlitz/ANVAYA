@@ -107,6 +107,10 @@ switch ($Action) {
 
   'live' {
     if (-not $Task -or -not $Description) { throw 'live needs -Task and -Description.' }
+    # Two Playwright processes share test-results and break each other.
+    if (Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'playwright' }) {
+      throw 'A Playwright run is still in progress.'
+    }
     $env:LIVE_TASK = $Task
     $env:LIVE_TASK_DESCRIPTION = $Description
     $self = Join-Path $PSScriptRoot 'dev-stack.ps1'

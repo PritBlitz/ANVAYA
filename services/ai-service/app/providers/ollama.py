@@ -99,7 +99,11 @@ class OllamaProvider:
             "messages": messages,
             "stream": False,
             "format": grammar_safe_schema(prompt.schema),
-            "options": {"temperature": 0, "num_predict": max_output_tokens, "num_ctx": self.context_tokens},
+            "options": {
+                "temperature": REPAIR_TEMPERATURE if request.task == "repair" else 0,
+                "num_predict": max_output_tokens,
+                "num_ctx": self.context_tokens,
+            },
         }
         data = await self.client.post("/api/chat", body, timeout=timeout_seconds)
         message = data.get("message") or {}
@@ -130,6 +134,9 @@ class OllamaProvider:
 # bounds (e.g. maxLength 500 inside an array of up to 12 items) exceed the
 # grammar's repetition limit and crash the runner. They are removed only from
 # the grammar hint; the full schema is still enforced on the parsed output.
+# At temperature 0 a repair can repeat the broken file exactly, so a retry could never differ.
+REPAIR_TEMPERATURE = 0.3
+
 _GRAMMAR_UNSAFE_KEYS = frozenset({"maxLength", "minLength", "pattern", "maxItems", "minItems", "format"})
 
 

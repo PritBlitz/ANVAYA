@@ -60,20 +60,19 @@ Notes:
 - On success the spec prints `PR: https://github.com/PritBlitz/testRepo/pull/<n>`. Record it in
   `docs/evaluations/workflow.md` and `docs/demo-walkthrough.md` ("Recorded results").
 
-### 2.2a Open live checks (2026-11-04)
-Verified live: PR import, failing-check listing and import, webhooks through smee into the API
-(`new_permissions_accepted` stored, a `master` push re-indexed). Not yet verified in a live run:
-`narrow` test selection on unittest, the removed-code finding, final-newline preservation, a full
-run from a PR or failing-check task, and the Actions job log (the App needs `Actions: read`). Two
-live runs were killed by Claude Code's low-memory guard, which stops background shells; see
-`docs/evaluations/workflow.md`. testRepo has `test_selection: narrow`, and `pritblitz` has
-`max_repair_attempts: 2`.
+### 2.2a Live checks — DONE 2026-11-04
+PR tasks, failing-check tasks with job logs, webhooks through smee, and `narrow` on unittest all
+worked in live runs (`docs/evaluations/workflow.md`). The removed-code finding has only been run on
+the real PR #2 patch, not in a live run. `pritblitz` keeps `max_repair_attempts: 2`; `test_selection`
+is off again. testRepo has CI and open test pull requests #2 to #7. Run the stack with
+`scripts/dev-stack.ps1`: background tasks started by Claude Code can be killed by its low-memory
+guard. Do not push to `main` during a live run: `PritBlitz/ANVAYA` is connected, and with the
+webhook relay up that starts a large re-index.
 
 ### 2.3 Owner-only / needs accounts (report, don't attempt)
 - Independent security assessment of the gVisor execution plane (SECURITY §7).
 - Applying `infra/aws` (validated in CI, never applied; needs an AWS account and budget).
 - Live tests of the hosted providers (Anthropic, OpenAI-compatible) — fakes only so far.
-- GitHub App permission `Actions: read`, so failing-check tasks can include the job log.
 - Webhooks locally need `npx smee-client` pointed at the App's smee channel and `/api/v1/webhooks/github`.
 
 ### 2.4 Housekeeping

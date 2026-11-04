@@ -18,7 +18,7 @@ const COMMENTS_TOTAL_MAX = 16_000;
 const ANNOTATION_MAX = 1_000;
 const CHECK_SUMMARY_MAX = 4_000;
 const CHECK_TEXT_MAX = 8_000;
-const CHECK_LOG_MAX = 6_000;
+const CHECK_LOG_MAX = 3_000;
 const BRANCH_MAX = 255;
 
 /** Check conclusions that count as a failure worth a task. */
@@ -112,14 +112,18 @@ export interface CheckFailureContext {
   annotations_truncated: boolean;
 }
 
-/** The part of an Actions log that explains the failure: up to the last error, without timestamps. */
+/**
+ * The output of the step that failed: between the last group header and the last error, without
+ * timestamps. The rest of an Actions log is setup noise, and it costs a local model its context.
+ */
 export function failureLogTail(log: string): string {
   const lines = log
     .replace(/\r\n/g, '\n')
     .split('\n')
     .map((l) => l.replace(/^\S*\d{4}-\d{2}-\d{2}T[\d:.]+Z /, ''));
-  const lastError = lines.findLastIndex((l) => l.includes('##[error]'));
-  return (lastError >= 0 ? lines.slice(0, lastError + 1) : lines).join('\n').trim().slice(-CHECK_LOG_MAX);
+  const end = lines.findLastIndex((l) => l.includes('##[error]')) + 1 || lines.length;
+  const start = lines.slice(0, end).findLastIndex((l) => l.includes('##[endgroup]')) + 1;
+  return lines.slice(start, end).join('\n').trim().slice(-CHECK_LOG_MAX);
 }
 
 export function importCheckFailure(check: GithubCheckRun, annotations: GithubCheckAnnotation[], limits: { annotations: number }, jobLog: string | null = null): ImportedTask {

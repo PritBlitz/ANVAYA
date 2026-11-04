@@ -63,7 +63,11 @@ describe('tasks from pull requests and failing checks (FR-WF-001, FR-GIT-006)', 
         },
         jobLogs: {
           [LOGGED_CHECK_ID]: [
+            '2026-11-04T06:37:00.1234567Z ##[group]Run actions/checkout@v4',
+            '2026-11-04T06:37:00.2234567Z   ssh-strict: true',
+            '2026-11-04T06:37:00.3234567Z ##[endgroup]',
             '2026-11-04T06:37:01.1234567Z ##[group]Run python -m unittest',
+            '2026-11-04T06:37:01.2234567Z ##[endgroup]',
             `2026-11-04T06:37:02.1234567Z FAIL: test_counts_words AssertionError: 4 != 5 token=${TOKEN}`,
             '2026-11-04T06:37:03.1234567Z ##[error]Process completed with exit code 1.',
             '2026-11-04T06:37:04.1234567Z Post job cleanup.',
@@ -189,6 +193,7 @@ describe('tasks from pull requests and failing checks (FR-WF-001, FR-GIT-006)', 
       expect(description).toContain('AssertionError: 4 != 5');
       expect(description).toContain('##[error]Process completed with exit code 1.');
       expect(description).not.toContain('Post job cleanup');
+      expect(description).not.toContain('ssh-strict');
       expect(description).not.toContain('2026-11-04T06:37');
       expect(description).not.toContain(TOKEN);
     });

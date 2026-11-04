@@ -54,19 +54,42 @@ not ask for, and left two files without a final newline. Verification still pass
 were about documentation (although the function has a docstring) and a redundant empty-string test.
 Human review of the diff remains necessary.
 
-## Later runs on 2026-11-04
+## All runs on 2026-11-04
 
-| Run | Task | Outcome |
-|---|---|---|
-| `7922104d` | `average_word_length` | Stopped in planning: the session's low-memory guard killed the stack at about 0.6 GB free |
-| `eba7e669` | `average_word_length` | `VERIFICATION_FAILED`, the gate working as intended. Attempt 1 had a syntax error in the test; the repair fixed it but the test expected 5.0 where the correct value is 4.0, and the single repair was used up. No pull request was opened |
-| `728acaf6` | `average_word_length`, two repairs allowed | Stopped about a minute into investigation, while the model was loading, by the same guard. Started with 7.3 GB free |
+| Run | Source | Task | Outcome |
+|---|---|---|---|
+| `81cad19c` | Manual | `unique_word_count` | PR #2, after one repair |
+| `1bb61b27` | Manual | `contains_word` | PR #3, first attempt, 4 model calls |
+| `58b77b25` | Pull request | Imported from PR #2 | PR #4, first attempt, 21.5 min |
+| `c0c78739` | Manual | `top_words` rejects a non-integer `n` | PR #5, first attempt, +6/−0 |
+| `e223d4ae` | Failing check | Off-by-one bug in `word_count` on `master` | PR #6, first attempt, one-line fix, 18.7 min |
+| `e1c834f2` | Manual | `unique_word_count`, reworded | PR #7, first attempt |
+| `eba7e669`, `c4cea93a`, `62a11925`, `37cea529` | Manual | `average_word_length` | Refused by verification or patch validation; no PR |
+| `e2814495` | Failing check | A deliberately wrong test on `master` | Refused: the plan changed the code and left the test out of scope |
+| `907446c1` | Failing check | Same | `PROVIDER_TIMEOUT`: the raw job log overflowed the 4096-token context (since fixed) |
 
-So two runs reached a result since the fixes: `81cad19c` produced a pull request and `eba7e669`
-was correctly refused. That is too small a sample for a success rate. Starting with more free
-memory did not prevent the second stop. The 7B model removed the test file's `__main__` block in both
-completed runs, once despite being told to keep existing code, and attempt 1 failed on a syntax error
-in the test file in both. Removal is now reported as a review finding.
+Stopped before a result, and not counted: `7922104d` and `728acaf6` (Claude Code's low-memory guard),
+`f4cb2178` (stack stopped by hand), `fcf8c52e` (garbled launch).
+
+Five of seven different tasks reached a pull request (the two `unique_word_count` wordings count as
+one task). With the repair fixes in place there were seven attempts: five pull requests and two
+refusals. This is a small sample on one small repository and is not a success rate. No patch with
+failing checks reached a pull request, but passing checks do not make a patch good: PR #2 passed
+while dropping the test file's `__main__` block. `average_word_length` shows the
+model's limit: it fixed its syntax error but stayed convinced that "the quick brown fox" averages
+5.0, and the test failed every time.
+
+Findings from these runs:
+
+- Temperature 0 makes the model repeat itself, so rerunning one task is weak evidence and a repair
+  could reproduce the same broken file. Repairs now use temperature 0.3.
+- The AI reviewer is unreliable at this size: it reported a missing docstring on a documented
+  function and questioned correct code. Deterministic results are what to trust.
+- The removed-code finding did not fire in a live run, because no patch that reached review removed
+  code. Run over the real patch from PR #2, it reports exactly the two deleted `__main__` lines.
+- `test_selection: narrow` ran under real Docker on unittest, recording why each file was selected.
+- A push to a large connected repository starts a re-index that competes with a local model for
+  memory: one started the moment a run was killed. Avoid pushing to it during live runs.
 
 ## Failure modes found and fixed
 
@@ -82,6 +105,9 @@ Each was found by these runs, fixed with a regression test, and the run repeated
 | Patch and repair both `PATCH_INVALID` "missing content for …" (2026-11-04) | `content` was optional in the patch schema used as Ollama's decoding grammar, so the 7B model returned paths only | `content` is required (still nullable for deletes) |
 | A three-file change became a one-line patch after a repair (2026-11-04) | The repair, validated against the already-patched workspace, was stored as the run's patch on its own | Repairs are composed onto the earlier patch and stored cumulatively against the base commit |
 | PR approval stayed disabled although the repaired patch passed every check (2026-11-04) | The web gate counted the failed checks of the superseded attempt | The gate uses only the current patch's results |
+| A second repair produced nothing useful (2026-11-04) | A rejected repair overwrote the failure being repaired, so the next attempt could not see the error | The failure is kept and the rejection is added to it |
+| Repairs returned the file unchanged (2026-11-04) | The prompt pointed at the wrong input, and temperature 0 repeated the same output | Prompt `repair.v2` names the check output; repairs use temperature 0.3 |
+| Failing-check task timed out in planning (2026-11-04) | The whole Actions log doubled the prompt and exceeded the 4096-token context | Only the failing step's output is imported |
 
 ## Known limits
 

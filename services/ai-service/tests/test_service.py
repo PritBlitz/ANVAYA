@@ -245,6 +245,21 @@ def qa_json(evidence_id: str) -> str:
     )
 
 
+def test_ollama_varies_only_repairs() -> None:
+    seen: list[dict[str, Any]] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"message": {"content": "{}"}, "prompt_eval_count": 1, "eval_count": 1})
+
+    with TestClient(create_app(settings(), ollama_providers(handler))) as c:
+        c.post("/internal/v1/generate", json=gen("repair", mode="local"), headers=AUTH)
+        repairs = len(seen)
+        c.post("/internal/v1/generate", json=gen("patch", mode="local"), headers=AUTH)
+    assert repairs > 0 and seen[0]["options"]["temperature"] == 0.3
+    assert seen[repairs]["options"]["temperature"] == 0
+
+
 def test_ollama_request_shape_and_usage() -> None:
     seen: list[dict[str, Any]] = []
 

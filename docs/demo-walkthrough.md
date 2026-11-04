@@ -49,3 +49,5 @@ real behaviour; nothing in the UI is mocked when the web app runs in `http` mode
   (stage timings in `docs/evaluations/workflow.md`).
 - 2026-11-04: a governed run with the local 7B model, including one automatic repair, opened
   pull request [#2](https://github.com/PritBlitz/testRepo/pull/2) on `PritBlitz/testRepo` in 26.8 minutes.
+- 2026-11-04: pull requests #3 to #7 followed, including one from a pull-request task (#4) and one from
+  a real failing check on `master` (#6). See `docs/video-script.md` for a recording plan.
