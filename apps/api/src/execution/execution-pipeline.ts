@@ -15,7 +15,7 @@ import { planSchema } from '../runs/run.schemas.js';
 import { filterProfilesByTemplate, isPlanOnly, parseSnapshot } from '../templates/templates.js';
 import { RunNoLongerActive, StageFailure, StageToolkit } from '../runs/stage-toolkit.js';
 import { ObjectStorage } from '../storage/object-storage.js';
-import { PatchRejected, composePatch, patchProposalSchema, validatePatch, type ValidatedPatch } from './patch-validator.js';
+import { PatchRejected, composePatch, patchProposalSchema, removedCode, validatePatch, type ValidatedPatch } from './patch-validator.js';
 import { profileById, selectProfiles, unavailableChecks, type VerificationProfile } from './profiles.js';
 import { SandboxDriver, type SandboxResult } from './sandbox.js';
 import { WorkspaceManager } from './workspace.js';
@@ -26,6 +26,7 @@ import { normalizePath } from '../indexing/classifier.js';
 const log = logger('execution');
 const MAX_CONTEXT_FILE_BYTES = 64 * 1024;
 const MAX_REVIEW_DIFF_BYTES = 60 * 1024;
+const MAX_REMOVED_LINES_SHOWN = 5;
 const FAILURE_TAIL_BYTES = 4096;
 
 const reviewOutput = z.object({
@@ -477,6 +478,16 @@ export class ExecutionPipeline extends ExecutionStages {
       }
     }
 
+    // Not a blocker: removing code can be the task. The reviewer decides, but must be told.
+    const removals = files.flatMap((f) => {
+      const lines = f.before === null || f.after === null ? [] : removedCode(f.before, f.after);
+      if (lines.length === 0) return [];
+      const shown = lines.slice(0, MAX_REMOVED_LINES_SHOWN).map((l) => redactText(l.text).slice(0, 200));
+      const more = lines.length - shown.length;
+      const description = `Check these were meant to go. Tests can still pass when nothing covers them:\n${shown.join('\n')}${more > 0 ? `\n…and ${more} more` : ''}`;
+      return [{ file: f.path, line: lines[0]!.line, title: `Existing code removed from ${f.path}`.slice(0, 200), description }];
+    });
+
     const verification = await this.kit.database.db.selectFrom('verification_runs').select(['profile_id', 'status', 'exit_code']).where('patch_id', '=', patch.id).execute();
     const task = await this.kit.task(run);
     const gen = await this.kit.callModel(run, 'code_reviewer', {
@@ -503,6 +514,14 @@ export class ExecutionPipeline extends ExecutionStages {
           .returning('id')
           .executeTakeFirstOrThrow();
         await this.kit.events.emit(tx, current, 'review.finding.created', { finding_id: row.id, source: 'security_scanner', severity: s.severity, file_path: s.file });
+      }
+      for (const r of removals) {
+        const row = await tx
+          .insertInto('review_findings')
+          .values({ run_id: run.id, patch_id: patch.id, source: 'static_analysis', severity: 'medium', file_path: r.file, start_line: r.line, end_line: r.line, title: r.title, description: r.description, evidence: json({ analyzer: 'anvaya-removed-code', deterministic: true }) })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await this.kit.events.emit(tx, current, 'review.finding.created', { finding_id: row.id, source: 'static_analysis', severity: 'medium', file_path: r.file });
       }
       for (const f of aiFindings) {
         const row = await tx

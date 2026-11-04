@@ -74,10 +74,9 @@ Problems found and fixed while building the homepage:
 ## Known limitations / follow-ups
 
 - 2026-11-03 (V1 work package A): pull-request and failing-check task sources (create dialog with a failing-check picker, imported-context card on the task page) and admin quota settings with usage meters. Covered by fixture-parity, mapper, form and error-message unit tests and two new E2E journeys. Not yet exercised against a live API with a real GitHub App (needs `pull_requests:read` and `checks:read`).
-- Two pre-existing accessibility issues on the run Changes view were found by axe while adding
-  the impact panel and are **not fixed** in work package B: the AI patch-summary alert's
-  secondary text fails colour contrast, and the diff table's horizontal scroll region is not
-  keyboard-focusable. The package-B E2E scans only the impact panel on that page.
+- Two accessibility issues on the run Changes view, found by axe while adding the impact panel,
+  were fixed on 2026-11-04: alert body text now uses the full-contrast colour, and the diff's
+  scroll region is keyboard-focusable and named. The package-B E2E now scans the whole page.
 
 - Homepage screenshots must be regenerated (`npm run screenshots` with the dev server running) whenever the product UI changes.
 

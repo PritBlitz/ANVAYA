@@ -152,6 +152,36 @@ describe('GitHub App integration', () => {
       expect(res.body.error.code).toBe('REPOSITORY_ALREADY_CONNECTED');
     });
 
+    it('moves a repository to another workspace only after it is disconnected (B-10)', async () => {
+      const otherInstId = uid();
+      gh.installations.set(otherInstId, { ...gh.installations.get(instId)!, id: otherInstId, repos: [repoId] });
+      const inst = await db(app)
+        .insertInto('git_installations')
+        .values({ organization_id: otherWs, provider: 'github', external_installation_id: otherInstId, account_login: 'acme' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const connect = () => as(outsider, 'post', '/repositories').send({ workspace_id: otherWs, installation_id: inst.id, external_repository_id: repoId, index: false });
+
+      const held = await connect().expect(409);
+      expect(held.body.error.code).toBe('REPOSITORY_ALREADY_CONNECTED');
+
+      await db(app).updateTable('repositories').set({ status: 'disabled' }).where('id', '=', repositoryUuid).execute();
+      await connect().expect(409); // a disabled repository still belongs to its workspace
+
+      await db(app).updateTable('repositories').set({ status: 'disconnected' }).where('id', '=', repositoryUuid).execute();
+      const moved = await connect().expect(201);
+      expect(moved.body.data.id).not.toBe(repositoryUuid);
+      expect(moved.body.data).toMatchObject({ workspace_id: otherWs, status: 'connected' });
+      const old = await db(app).selectFrom('repositories').select(['status', 'organization_id']).where('id', '=', repositoryUuid).executeTakeFirstOrThrow();
+      expect(old).toEqual({ status: 'disconnected', organization_id: ws }); // history stays behind
+
+      // The database refuses two attached rows even if a code path forgets to check.
+      await expect(db(app).updateTable('repositories').set({ status: 'connected' }).where('id', '=', repositoryUuid).execute()).rejects.toThrow(/uq_repositories_external_attached/);
+
+      await db(app).deleteFrom('repositories').where('id', '=', moved.body.data.id).execute();
+      await db(app).updateTable('repositories').set({ status: 'connected' }).where('id', '=', repositoryUuid).execute();
+    });
+
     it('refuses an installation from another workspace (no cross-tenant linking)', async () => {
       await as(outsider, 'post', '/repositories').send({ workspace_id: otherWs, installation_id: installationUuid, external_repository_id: repo2Id }).expect(404);
     });

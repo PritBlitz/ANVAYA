@@ -16,8 +16,6 @@ Kept honest and current; each item says what would close it.
 
 ## Product scope
 - **GitLab and Bitbucket** are out of V1 (`releases/V1.md`).
-- **Reconnecting a repository in another workspace** is impossible once it was connected elsewhere
-  (backend tracker B-10); deleting the old record is the workaround.
 - **PR and failing-check tasks** run against the latest indexed default-branch snapshot, not the PR
   head; check-run webhooks are not consumed (tasks are created through the API/UI).
 - **Quotas**: runs waiting at approval gates count as active; one model call can overshoot the token

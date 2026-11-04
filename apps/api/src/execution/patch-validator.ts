@@ -98,7 +98,7 @@ export function validatePatch(
       if (c.content.includes('\0')) problems.push(`binary content for ${path}`);
       if (c.action === 'create' && before !== null) problems.push(`file already exists: ${path}`);
       if (c.action === 'modify' && before === null) problems.push(`cannot modify missing file: ${path}`);
-      after = c.content;
+      after = keepFinalNewline(before, c.content);
       bytes += Buffer.byteLength(after);
     }
     if (before === after) continue; // no-op change
@@ -116,6 +116,50 @@ export function validatePatch(
   if (changes.length > opts.maxChangedFiles) throw new PatchRejected('PATCH_TOO_LARGE', `The patch changes ${changes.length} files; the limit is ${opts.maxChangedFiles}.`);
   if (bytes > MAX_PATCH_BYTES) throw new PatchRejected('PATCH_TOO_LARGE', 'The patch exceeds the size limit.');
   return assemblePatch(proposal.summary, changes);
+}
+
+/** Models often drop the last newline of a file they rewrite; that is never the intended change. */
+function keepFinalNewline(before: string | null, content: string): string {
+  const wanted = before === null || before.endsWith('\n');
+  return wanted && content.length > 0 && !content.endsWith('\n') ? `${content}\n` : content;
+}
+
+const REWORDED_LINE_SIMILARITY = 0.5;
+const words = (line: string) => new Set(line.match(/\w+/g) ?? []);
+
+function similarity(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared / (a.size + b.size - shared);
+}
+
+export interface RemovedLine {
+  /** Line in the new file where the removal happened. */
+  line: number;
+  text: string;
+}
+
+/**
+ * Lines of existing code a change dropped rather than edited or moved. A model
+ * rewrites whole files, so it can lose code nobody asked it to touch, and the checks
+ * still pass when no test covers that code. A removed line counts unless it survives
+ * somewhere in the new file or an added line looks like a reworded version of it.
+ */
+export function removedCode(before: string, after: string): RemovedLine[] {
+  const surviving = new Set(after.split('\n').map((l) => l.trim()));
+  const hunks = structuredPatch('a', 'b', before, after, '', '', { context: 0 }).hunks;
+  const added = hunks.flatMap((h) => h.lines.filter((l) => l.startsWith('+')).map((l) => words(l.slice(1))));
+  const removed: RemovedLine[] = [];
+  for (const h of hunks) {
+    for (const raw of h.lines) {
+      if (!raw.startsWith('-')) continue;
+      const text = raw.slice(1).trim();
+      const tokens = words(text);
+      if (tokens.size === 0 || surviving.has(text)) continue;
+      if (added.some((a) => similarity(tokens, a) >= REWORDED_LINE_SIMILARITY)) continue;
+      removed.push({ line: Math.max(h.newStart, 1), text });
+    }
+  }
+  return removed;
 }
 
 /** A file change from an earlier attempt, relative to the base commit. */
