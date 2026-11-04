@@ -142,9 +142,8 @@ describe('GitHub App integration', () => {
     });
 
     it('refuses repositories the installation does not grant', async () => {
-      await as(owner, 'post', '/repositories').send({ workspace_id: ws, installation_id: installationUuid, external_repository_id: foreignRepoId }).expect((r) => {
-        expect([403, 502]).toContain(r.status);
-      });
+      const res = await as(owner, 'post', '/repositories').send({ workspace_id: ws, installation_id: installationUuid, external_repository_id: foreignRepoId }).expect(403);
+      expect(res.body.error.message).toContain('accept them in the installation');
     });
 
     it('refuses to connect the same repository twice', async () => {
