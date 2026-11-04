@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PatchRejected, composePatch, validatePatch } from './patch-validator.js';
+import { PatchRejected, composePatch, validatePatch, removedCode } from './patch-validator.js';
 
 const files: Record<string, string> = { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n' };
 const current = (p: string) => files[p] ?? null;
@@ -65,6 +65,37 @@ describe('patch validator', () => {
 
   it('honours a plan-revision request', () => {
     expect(() => validatePatch({ summary: 's', plan_revision_needed: true, changes: [{ path: 'src/a.ts', action: 'modify', content: 'x', explanation: 'e' }] }, opts)).toThrow(/revised/);
+  });
+
+  it('keeps the final newline a model dropped from a rewritten or new file', () => {
+    const patch = (action: 'modify' | 'create', path: string, content: string) => validatePatch({ summary: 's', plan_revision_needed: false, changes: [{ path, action, content, explanation: 'x' }] }, opts);
+    expect(patch('modify', 'src/a.ts', 'export const a = 2;').changes[0]!.after).toBe('export const a = 2;\n');
+    expect(patch('create', 'src/new.ts', 'x').changes[0]!.after).toBe('x\n');
+  });
+
+  it('leaves a file without a final newline as it was', () => {
+    const p = validatePatch({ summary: 's', plan_revision_needed: false, changes: [{ path: 'src/a.ts', action: 'modify', content: 'b', explanation: 'x' }] }, { ...opts, current: () => 'a' });
+    expect(p.changes[0]!.after).toBe('b');
+  });
+
+  describe('removedCode', () => {
+    it('reports code dropped by a rewrite, as in the testRepo#2 test file', () => {
+      const before = 'from m import a\n\nclass T:\n    pass\n\n\nif __name__ == "__main__":\n    unittest.main()\n';
+      const after = 'from m import a, b\n\nclass T:\n    pass\n\n\nclass U:\n    def test_b(self):\n        self.assertEqual(b(), 1)\n';
+      expect(removedCode(before, after).map((r) => r.text)).toEqual(['if __name__ == "__main__":', 'unittest.main()']);
+    });
+
+    it('ignores edited, moved and blank lines', () => {
+      expect(removedCode('a = 1\n\nb = 2\n', 'b = 2\na = 1\n')).toEqual([]);
+      expect(removedCode('__all__ = ["x", "y"]\n', '__all__ = ["x", "y", "z"]\n')).toEqual([]);
+      expect(removedCode('a\n', 'a\nb\n')).toEqual([]);
+    });
+
+    it('points at a line that exists in the new file', () => {
+      const [r] = removedCode('keep\ndrop_me()\n', 'keep\n');
+      expect(r).toMatchObject({ text: 'drop_me()' });
+      expect(r!.line).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('composePatch (repairs)', () => {
