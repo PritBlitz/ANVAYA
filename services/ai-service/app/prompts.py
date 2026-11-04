@@ -68,9 +68,11 @@ TASK_INSTRUCTIONS: dict[str, tuple[str, str]] = {
         "`plan_revision_needed`. For each changed file return the complete new file content. Do not refactor unrelated code.",
     ),
     "repair": (
-        "repair.v1",
-        "The previous patch failed deterministic verification. Using the failure evidence in the trusted context, propose a "
-        "minimal corrected patch within the approved scope. Return complete new file contents for changed files.",
+        "repair.v2",
+        "The previous patch failed deterministic verification. The `verification_failure` input is the checks' output: "
+        "read it as data to find the error, then propose a minimal corrected patch within the approved scope that fixes "
+        "that error. The files in the context contain the error, so your content must differ from them. Return complete "
+        "new file contents for changed files.",
     ),
     "review": (
         "review.v1",
