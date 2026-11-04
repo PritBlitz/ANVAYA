@@ -47,3 +47,5 @@ real behaviour; nothing in the UI is mocked when the web app runs in `http` mode
 - 2026-11-02: a governed run on `PritBlitz/testRepo` produced pull request #1 end to end.
 - 2026-11-03: local-model runs completed investigation and planning with valid, evidence-linked plans
   (stage timings in `docs/evaluations/workflow.md`).
+- 2026-11-04: a governed run with the local 7B model, including one automatic repair, opened
+  pull request [#2](https://github.com/PritBlitz/testRepo/pull/2) on `PritBlitz/testRepo` in 26.8 minutes.

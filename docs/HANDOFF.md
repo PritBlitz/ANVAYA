@@ -1,8 +1,8 @@
-# Handoff for the next session (written 2026-11-03, late evening IST)
+# Handoff for the next session (written 2026-11-03, updated 2026-11-04)
 
 Read this first, then `docs/CLAUDE.md` (the repository rulebook), `releases/V1.md` (scope and
-decisions) and `docs/backend/REMAINING.md` (tracker). State at handoff: **`main` = `b23f285`,
-pushed; backend-ci and web-ci fully green on it.** Every capability in the canonical docs is built
+decisions) and `docs/backend/REMAINING.md` (tracker). §2.1 and §2.2 are done; only the owner-only items
+in §2.3 remain. Every capability in the canonical docs is built
 and merged except GitLab/Bitbucket (out of scope by the owner's decision).
 
 ## 1. Non-negotiable rules from the owner
@@ -33,7 +33,12 @@ The AI service must run with `EMBEDDING_PROVIDER=ollama` (its default). Add the 
 `docs/evaluations/retrieval.md` (section "Live embeddings") and compare with the mock baseline
 (hybrid recall@10 0.76). The spec enforces live semantic recall@10 ≥ 0.5.
 
-### 2.2 Full governed run ending in a real pull request (needs ≈5 GB free RAM)
+### 2.2 Full governed run ending in a real pull request — DONE 2026-11-04 (PritBlitz/testRepo#2)
+Results are in `docs/evaluations/workflow.md`. Still waiting on the owner: whether to merge PR #2
+(the model also removed the test file's `__main__` block), whether to revert the raised `pritblitz`
+policy, and what to do with run `bccfc47a`, an older attempt parked at PR approval. The steps below
+stay as the recipe for repeating a run; use a new task, because #1 and #2 already did these two.
+
 Target: **`PritBlitz/testRepo`** in the owner's **`pritblitz`** workspace (connected, indexed;
 the test account `dev@example.test` is already an **admin** there — the invitation was accepted).
 Do **not** reuse the old hyphenation task: PR #1 already did it. Command (in `apps/web`, after §3):
@@ -67,9 +72,6 @@ Notes:
 - Backend tracker B-10 (reconnect a repository in another workspace) — owner chose "follow-up".
 
 ### 2.4 Housekeeping
-- Two finished helper worktrees can be removed (both merged into `main`):
-  `git worktree remove .claude/worktrees/agent-aae1928a4d0615e97` and
-  `git worktree remove .claude/worktrees/agent-a7d1db2e61a005cbd`, then delete their branches.
 - `Z:\ANVAYA\apps\api\node_modules` and `Z:\ANVAYA\apps\web\node_modules` in the main checkout are
   **directory junctions** to the worktrees' `node_modules`. Remove them with `cmd /c rmdir <path>`
   (never `rm -rf`, which would delete the target). Turbopack refuses to build through the web junction;

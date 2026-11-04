@@ -23,6 +23,37 @@ Next.js (http mode) → NestJS API and worker → FastAPI AI service → Ollama 
 A full run on CPU therefore needs roughly 15–25 minutes of model time; the default 15-minute run
 budget is too small for CPU-only local models (see the defaults below).
 
+## Full run to a pull request (2026-11-04)
+
+Run `81cad19c` on `PritBlitz/testRepo` (`unique_word_count`) passed the live spec in 26.8 minutes and
+opened [PritBlitz/testRepo#2](https://github.com/PritBlitz/testRepo/pull/2). 5 model calls, 9,200
+input and 2,301 output tokens. This is the first run to reach a pull request after the 2026-11-04
+fixes, and it exercised all three: patches carried file content, the repair stayed cumulative
+(attempt 2: 3 files, +14/−5, against the base commit), and PR approval was enabled although
+attempt 1 had failed checks.
+
+| Stage | Duration | Notes |
+|---|---|---|
+| Context retrieval | 3 s | |
+| Investigation | 6 min 52 s | |
+| Planning | 6 min 4 s | |
+| Plan approval → workspace | 4 s | Human gate, driven by the spec |
+| Patch, attempt 1 | 5 min 24 s | |
+| Verification, attempt 1 | 4 s | Failed: `compileall` and `unittest` exit 1; the repair's summary reports a syntax error in the test |
+| Repair, attempt 2 | 4 min 26 s | |
+| Verification, attempt 2 | 4 s | Passed: `compileall` and `unittest discover` |
+| Review | 3 min 32 s | Two low-severity findings |
+| PR approval → PR opened | 12 s | Human gate, driven by the spec |
+
+Free RAM was 6.2 GB before the run and fell to 1.4 GB during it, with no memory failure.
+
+Quality observed in the patch: the function, export and tests are correct, but the model also removed
+the `if __name__ == "__main__": unittest.main()` block from `tests/test_core.py`, which the task did
+not ask for, and left two files without a final newline. Verification still passed because it uses
+`unittest discover`. The review stage did not report the removal; its two low-severity findings
+were about documentation (although the function has a docstring) and a redundant empty-string test.
+Human review of the diff remains necessary.
+
 ## Failure modes found and fixed
 
 Each was found by these runs, fixed with a regression test, and the run repeated:

@@ -35,7 +35,7 @@ There is no `releases/V1.md` yet. The frontend targets ROADMAP phases 1–6 (ide
 | Lint                        | `npm run lint` (max-warnings 0) | ✅ pass                                                                                                                                        |
 | Unit / component / contract | `npm test`                      | ✅ 120 tests, 10 files                                                                                                                         |
 | E2E + accessibility         | `npm run test:e2e`              | ✅ 20 passed, 1 skipped by design (desktop journeys, homepage on desktop and mobile, mobile layout, CSP); axe WCAG 2.1 AA scans on 14 screens  |
-| Live stack (I-9)            | `npm run test:live`             | ✅ sign-in, repository intelligence (code, symbols, dependencies, search), Q&A with saved history; governed run verified through plan approval |
+| Live stack (I-9)            | `npm run test:live`             | ✅ sign-in, repository intelligence (code, symbols, dependencies, search), Q&A with saved history; governed run verified through to a real PR (`PritBlitz/testRepo#2`, 2026-11-04) |
 | Build                       | `npm run build`                 | ✅ 34 routes (`/` and `/app` static)                                                                                                           |
 
 What the tests cover:
@@ -81,7 +81,7 @@ Problems found and fixed while building the homepage:
 
 - Homepage screenshots must be regenerated (`npm run screenshots` with the dev server running) whenever the product UI changes.
 
-1. Live API checks cover sign-in, repository health, lazy code tree, file view, search, Q&A (mock and real local model), SSE through to the plan gate, plan view with resolved evidence, settings, usage, members, and audit. One governed run went all the way to a real pull request on 2026-11-02 (`PritBlitz/testRepo#1`). `npm run test:live` skips its own PR step unless `LIVE_RUN=1`, because it opens a real PR.
+1. Live API checks cover sign-in, repository health, lazy code tree, file view, search, Q&A (mock and real local model), SSE through to the plan gate, plan view with resolved evidence, settings, usage, members, and audit. Governed runs went all the way to real pull requests on 2026-11-02 (`PritBlitz/testRepo#1`) and 2026-11-04 (`#2`, local 7B model). `npm run test:live` skips its own PR step unless `LIVE_RUN=1`, because it opens a real PR.
 2. The CSP is static, so scripts need `'unsafe-inline'` (Next's inline bootstrap). Nonces would force every page dynamic and break the static homepage (M11). Everything else is same-origin-only, framing is denied, and E2E asserts zero violations.
 3. Syntax highlighting is a small built-in lexer (TS/JS family, Python, JSON, shell). Other languages render plain.
 4. The dependency map is a navigable list rather than a drawn graph, because it has to scale to 2,000 files and stay keyboard and screen-reader friendly.
