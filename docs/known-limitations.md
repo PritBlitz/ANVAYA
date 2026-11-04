@@ -17,7 +17,10 @@ Kept honest and current; each item says what would close it.
 ## Product scope
 - **GitLab and Bitbucket** are out of V1 (`releases/V1.md`).
 - **PR and failing-check tasks** run against the latest indexed default-branch snapshot, not the PR
-  head; check-run webhooks are not consumed (tasks are created through the API/UI).
+  head or the failing commit, so a failure that exists only on another branch cannot be reproduced
+  by the run. Check-run webhooks are not consumed (tasks are created through the API/UI).
+- **Failing-check tasks from GitHub Actions** need the App's optional `actions:read` permission to
+  include the job log; without it the task has only the check's metadata and annotations.
 - **Quotas**: runs waiting at approval gates count as active; one model call can overshoot the token
   quota by its own budget because the check runs before the call.
 - **Imported titles** become part of the run's objective text; they are redacted and bounded but are

@@ -11,6 +11,8 @@ export interface FakeRepo {
   private: boolean;
   /** branch → sha */
   branches: Record<string, string>;
+  /** job id → raw Actions log */
+  jobLogs?: Record<number, string>;
   /** sha → gzipped tarball */
   tarballs?: Record<string, Buffer>;
   issues?: Record<number, { title: string; body: string; labels?: string[]; pull_request?: boolean }>;
@@ -197,7 +199,7 @@ export class FakeGithub {
     });
 
     /** Read routes need a token covering the repository and granting `perm` (read or write). */
-    const readGrant = (req: Request, repo: FakeRepo | undefined, perm: 'pull_requests' | 'checks') => {
+    const readGrant = (req: Request, repo: FakeRepo | undefined, perm: 'actions' | 'pull_requests' | 'checks') => {
       const grant = this.installationTokens.get(tokenAuth(req) ?? '');
       if (!repo || !grant || !this.grantCovers(grant, repo.id)) return null;
       return grant.permissions[perm] === 'read' || grant.permissions[perm] === 'write' ? grant : null;
@@ -262,6 +264,13 @@ export class FakeGithub {
       const c = repo!.checkRuns?.[id];
       if (!c) return void res.status(404).json({ message: 'Not Found' });
       res.json(checkJson(repo!, id, c));
+    });
+    app.get('/repos/:owner/:name/actions/jobs/:id/logs', (req, res) => {
+      const repo = this.findRepo(req.params.owner, req.params.name);
+      if (!readGrant(req, repo, 'actions')) return void res.status(404).json({ message: 'Not Found' });
+      const log = repo!.jobLogs?.[Number(req.params.id)];
+      if (log === undefined) return void res.status(404).json({ message: 'Not Found' });
+      res.type('text/plain').send(log);
     });
     app.get('/repos/:owner/:name/check-runs/:id/annotations', (req, res) => {
       const repo = this.findRepo(req.params.owner, req.params.name);

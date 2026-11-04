@@ -8,7 +8,7 @@ import { AppConfig } from '../config/config.js';
 const log = logger('github-app');
 
 export type GithubPermissionLevel = 'read' | 'write';
-export type GithubPermissions = Partial<Record<'contents' | 'metadata' | 'pull_requests' | 'issues' | 'checks', GithubPermissionLevel>>;
+export type GithubPermissions = Partial<Record<'actions' | 'contents' | 'metadata' | 'pull_requests' | 'issues' | 'checks', GithubPermissionLevel>>;
 
 /** Least-privilege permission sets requested per operation (SECURITY §6). */
 export const PERMISSION_SETS = {
@@ -17,6 +17,7 @@ export const PERMISSION_SETS = {
   readIssue: { metadata: 'read', issues: 'read' },
   readPullRequest: { metadata: 'read', pull_requests: 'read' },
   readChecks: { metadata: 'read', checks: 'read' },
+  readJobLogs: { metadata: 'read', actions: 'read' },
   writePullRequest: { contents: 'write', metadata: 'read', pull_requests: 'write' },
 } as const satisfies Record<string, GithubPermissions>;
 
@@ -115,6 +116,8 @@ export type GithubCheckAnnotation = z.infer<typeof githubCheckAnnotation>;
 const checkRunList = z.object({ total_count: z.number().int(), check_runs: z.array(githubCheckRun) });
 
 /** Bounds on what is read from GitHub for one task import (CLAUDE.md §9). */
+const MAX_JOB_LOG_BYTES = 1024 * 1024;
+
 export const IMPORT_LIMITS = { prFiles: 100, reviewComments: 30, annotations: 50, checkRuns: 50 } as const;
 
 const pullRequestSchema = z.object({ id: z.number().int(), number: z.number().int(), html_url: z.string(), head: z.object({ sha: z.string(), ref: z.string() }) });
@@ -244,6 +247,27 @@ export class GithubAppService {
     const check = await this.call(base, githubCheckRun, { auth });
     const annotations = check.output.annotations_count > 0 ? await this.call(`${base}/annotations?per_page=${IMPORT_LIMITS.annotations}`, z.array(githubCheckAnnotation), { auth }) : [];
     return { check, annotations: annotations.slice(0, IMPORT_LIMITS.annotations) };
+  }
+
+  /**
+   * The end of a GitHub Actions job's log, or null when it cannot be read. Actions keeps test
+   * output in the log and not on the check run, whose id is the job id. `actions:read` is
+   * optional: without it a failing-check task simply has less to go on. Untrusted content.
+   */
+  async getJobLog(installationId: number, repositoryId: number, fullName: string, jobId: number): Promise<string | null> {
+    try {
+      const token = await this.installationToken(installationId, PERMISSION_SETS.readJobLogs, [repositoryId]);
+      const res = await this.raw(`/repos/${encodePath(fullName)}/actions/jobs/${jobId}/logs`, { auth: `token ${token}`, redirect: 'follow', timeoutMs: 30_000 });
+      let tail = Buffer.alloc(0);
+      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        tail = Buffer.concat([tail, chunk]);
+        if (tail.byteLength > MAX_JOB_LOG_BYTES) tail = tail.subarray(tail.byteLength - MAX_JOB_LOG_BYTES);
+      }
+      return tail.toString('utf8');
+    } catch (err) {
+      if (err instanceof GithubApiError && [403, 404, 410].includes(err.status)) return null;
+      throw err;
+    }
   }
 
   /** Latest completed check runs for a branch or commit (to pick a failing one). */

@@ -18,6 +18,7 @@ const COMMENTS_TOTAL_MAX = 16_000;
 const ANNOTATION_MAX = 1_000;
 const CHECK_SUMMARY_MAX = 4_000;
 const CHECK_TEXT_MAX = 8_000;
+const CHECK_LOG_MAX = 6_000;
 const BRANCH_MAX = 255;
 
 /** Check conclusions that count as a failure worth a task. */
@@ -111,7 +112,17 @@ export interface CheckFailureContext {
   annotations_truncated: boolean;
 }
 
-export function importCheckFailure(check: GithubCheckRun, annotations: GithubCheckAnnotation[], limits: { annotations: number }): ImportedTask {
+/** The part of an Actions log that explains the failure: up to the last error, without timestamps. */
+export function failureLogTail(log: string): string {
+  const lines = log
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/^\S*\d{4}-\d{2}-\d{2}T[\d:.]+Z /, ''));
+  const lastError = lines.findLastIndex((l) => l.includes('##[error]'));
+  return (lastError >= 0 ? lines.slice(0, lastError + 1) : lines).join('\n').trim().slice(-CHECK_LOG_MAX);
+}
+
+export function importCheckFailure(check: GithubCheckRun, annotations: GithubCheckAnnotation[], limits: { annotations: number }, jobLog: string | null = null): ImportedTask {
   const context: CheckFailureContext = {
     check_name: clean(check.name, 200),
     app: check.app?.slug?.slice(0, 100) ?? check.app?.name?.slice(0, 100) ?? null,
@@ -136,6 +147,7 @@ export function importCheckFailure(check: GithubCheckRun, annotations: GithubChe
     context.output_title ?? '',
     clean(check.output.summary, CHECK_SUMMARY_MAX),
     clean(check.output.text, CHECK_TEXT_MAX),
+    jobLog ? `End of the job log:\n${clean(failureLogTail(jobLog), CHECK_LOG_MAX)}` : '',
   ].filter(Boolean);
   const description = boundChars(parts.join('\n\n'), TASK_DESCRIPTION_MAX) || `The check "${context.check_name}" concluded ${context.conclusion} with no output.`;
   return {
