@@ -54,6 +54,15 @@ interface Failure {
 }
 
 /**
+ * What the next repair is told. A rejected repair changed nothing, so the failure it was meant
+ * to fix still stands: without it the model is asked to repair an error it can no longer see.
+ */
+export function failureForRepair(earlier: Failure | null, failure: Failure): Failure {
+  if (failure.kind !== 'patch_validation' || !earlier) return failure;
+  return { ...earlier, detail: `${earlier.detail}\n\nThe previous repair was rejected: ${failure.detail}`.slice(0, 2 * FAILURE_TAIL_BYTES) };
+}
+
+/**
  * Post-approval stages (AI_WORKFLOW §3): isolated workspace → patch developer →
  * patch validation → sandboxed deterministic verification → bounded repair →
  * review + deterministic security checks → human PR approval.
@@ -563,7 +572,7 @@ export class ExecutionPipeline extends ExecutionStages {
     await this.kit.database.transaction(async (tx) => {
       const current = await this.kit.guard(tx, run);
       if (used < budget.max_repair_attempts) {
-        const patch: JsonObject = { repair_attempts: used + 1, last_failure: failure };
+        const patch: JsonObject = { repair_attempts: used + 1, last_failure: failureForRepair((run.checkpoint.last_failure ?? null) as Failure | null, failure) };
         if (current.status === 'implementing') {
           // Stay in implementing for another bounded attempt (no state change, but checkpoint + version bump via no-op guard).
           await tx.updateTable('workflow_runs').set({ checkpoint: json({ ...current.checkpoint, ...patch }) }).where('id', '=', run.id).where('state_version', '=', current.state_version).execute();

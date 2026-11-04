@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { failureForRepair } from './execution-pipeline.js';
 import { PatchRejected, composePatch, validatePatch, removedCode } from './patch-validator.js';
 
 const files: Record<string, string> = { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n' };
@@ -76,6 +77,31 @@ describe('patch validator', () => {
   it('leaves a file without a final newline as it was', () => {
     const p = validatePatch({ summary: 's', plan_revision_needed: false, changes: [{ path: 'src/a.ts', action: 'modify', content: 'b', explanation: 'x' }] }, { ...opts, current: () => 'a' });
     expect(p.changes[0]!.after).toBe('b');
+  });
+
+  describe('failureForRepair', () => {
+    const verification = { kind: 'verification' as const, detail: "SyntaxError: '(' was never closed" };
+    const rejected = { kind: 'patch_validation' as const, detail: 'The patch does not change anything.' };
+
+    it('keeps the failure being repaired when a repair is rejected', () => {
+      const next = failureForRepair(verification, rejected);
+      expect(next.kind).toBe('verification');
+      expect(next.detail).toContain('was never closed');
+      expect(next.detail).toContain('does not change anything');
+    });
+
+    it('stays bounded over repeated rejections', () => {
+      let f = failureForRepair(verification, rejected);
+      for (let i = 0; i < 5; i++) f = failureForRepair(f, { ...rejected, detail: 'x'.repeat(4096) });
+      expect(f.detail.length).toBeLessThanOrEqual(8192);
+      expect(f.detail).toContain('was never closed');
+    });
+
+    it('uses a new failure as it is', () => {
+      expect(failureForRepair(null, rejected)).toEqual(rejected);
+      const later = { kind: 'verification' as const, detail: 'AssertionError' };
+      expect(failureForRepair(verification, later)).toEqual(later);
+    });
   });
 
   describe('removedCode', () => {
