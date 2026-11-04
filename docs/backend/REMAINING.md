@@ -22,7 +22,7 @@ frontend needed. B = backend side, F = frontend side.
 | I-6 | Auth (GAP-01) | `/auth/github/login?return_to=` (same-origin paths only), `/auth/providers`, `/auth/dev-login`, `/auth/logout`, CSRF cookie + header | B ☑ · F ☑ |
 | I-7 | Task list (R2), daily usage (R3), unavailable checks (R4), AI finding `confidence`/`suggested_action` (R5), documented shapes (R6) | See `API_CONTRACT_NOTES.md` | B ☑ · F ☑ |
 | I-8 | Response schemas in `openapi.json` (R7) | Zod response schemas so the frontend can generate types | ☑ every JSON route, enforced in tests; frontend typechecks against it |
-| I-9 | Real end-to-end run (frontend M10) | Frontend Playwright suite in `http` mode against API + worker + AI service (mock) | ☑ `npm run test:live` green (sign-in, code intelligence, Q&A); a governed run opened `PritBlitz/testRepo#1` on 2026-11-02 |
+| I-9 | Real end-to-end run (frontend M10) | Frontend Playwright suite in `http` mode against API + worker + AI service (mock) | ☑ `npm run test:live` green (sign-in, code intelligence, Q&A); governed runs opened `PritBlitz/testRepo#1` on 2026-11-02 and, with the local 7B model, `#2` on 2026-11-04 |
 | I-10 | Deployment wiring | Next rewrites `/api/v1/*` → `http://localhost:3001`; set backend `PUBLIC_API_URL=http://localhost:3000` so the OAuth callback and cookies land on the web origin | ☑ rewrite and SSE verified; proxy timeout raised from Next's 30s default to 660s so local-model calls don't fail with a bare 500 |
 
 ## 2. Needs external access or credentials (owner: user)
